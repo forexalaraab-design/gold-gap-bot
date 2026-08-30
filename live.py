@@ -53,6 +53,15 @@ def live_loop():
             try:
                 account = yield sess.authenticate(t)
                 auth_err = None
+                if os.environ.get("CBOT_TOKEN_SYNC") == "1":
+                    try:
+                        import json
+                        rf = config.CBOT_REFRESH_TOKEN
+                        if not rf and os.path.exists(config.TOKEN_FILE):
+                            rf = json.load(open(config.TOKEN_FILE, encoding="utf-8")).get("refreshToken", "")
+                        main.sync_tokens(t, rf)
+                    except Exception as exc:
+                        print("early token sync failed:", exc)
                 break
             except Exception as exc:
                 auth_err = exc

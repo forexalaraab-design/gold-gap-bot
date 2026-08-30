@@ -51,7 +51,25 @@ def refresh_token():
             json.dump(res, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+    if os.environ.get("CBOT_TOKEN_SYNC") == "1":
+        try:
+            sync_tokens(new_access, res.get("refreshToken") or res.get("refresh_token") or refresh)
+        except Exception as exc:
+            print("token sync failed:", exc)
     return new_access
+
+
+def sync_tokens(access, refresh):
+    import subprocess
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    gh = os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
+    if not repo or not gh:
+        return
+    env = dict(os.environ, GH_TOKEN=gh)
+    for name, value in (("CBOT_ACCESS_TOKEN", access), ("CBOT_REFRESH_TOKEN", refresh)):
+        subprocess.run(["gh", "secret", "set", name, "-b", value,
+                        "-R", repo], env=env, capture_output=True)
+    print("token secrets updated in actions repo")
 
 
 def load_history():

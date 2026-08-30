@@ -42,6 +42,8 @@ jobs:
           CBOT_MODE: ${{ secrets.CBOT_MODE }}
           CBOT_ENVIRONMENT: ${{ secrets.CBOT_ENVIRONMENT }}
           CBOT_DURATION_MIN: "4.5"
+          CBOT_TOKEN_SYNC: "1"
+          GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
           PYTHONIOENCODING: utf-8
 
       - name: Persist gap log

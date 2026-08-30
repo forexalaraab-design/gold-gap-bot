@@ -1,0 +1,203 @@
+import time
+
+import config
+from ctrader_open_api import Client, EndPoints, Protobuf, TcpProtocol
+from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+    ProtoOAApplicationAuthReq,
+    ProtoOAGetAccountListByAccessTokenReq,
+    ProtoOAAccountAuthReq,
+    ProtoOASymbolsListReq,
+    ProtoOASymbolByIdReq,
+    ProtoOASubscribeSpotsReq,
+    ProtoOAUnsubscribeSpotsReq,
+    ProtoOANewOrderReq,
+    ProtoOAClosePositionReq,
+    ProtoOAReconcileReq,
+    ProtoOATraderReq,
+)
+from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
+from twisted.internet import reactor, defer
+
+
+def _side(v):
+    return Models.ProtoOATradeSide.DESCRIPTOR.values_by_name[v].number
+
+
+def _unwrap(message):
+    return Protobuf.extract(message)
+
+
+class CtraderSession:
+    def __init__(self):
+        self.client = None
+        self.account_id = None
+        self.waiter = None
+
+    # ---------------------------------------------------------------- messaging
+    def _on_received(self, client, message):
+        if self.waiter is None or self.waiter.deferred.called:
+            return
+        try:
+            inner = _unwrap(message)
+        except Exception:
+            return
+        if hasattr(inner, "symbolId") and inner.symbolId == self.waiter.symbol_id:
+            self.waiter.deferred.callback(inner)
+
+    # ---------------------------------------------------------------- connect
+    @defer.inlineCallbacks
+    def connect(self):
+        host = (
+            EndPoints.PROTOBUF_LIVE_HOST
+            if config.ENVIRONMENT.strip().lower() == "live"
+            else EndPoints.PROTOBUF_DEMO_HOST
+        )
+        self.client = Client(host, EndPoints.PROTOBUF_PORT, TcpProtocol)
+        self.client.setMessageReceivedCallback(self._on_received)
+        self.client.setConnectedCallback(lambda c: None)
+        self.client.startService()
+        conn = self.client.whenConnected(failAfterFailures=1)
+        yield conn.addTimeout(config.CONNECT_TIMEOUT, reactor)
+        defer.returnValue(host)
+
+    # ---------------------------------------------------------------- auth
+    @defer.inlineCallbacks
+    def authenticate(self, access_token):
+        res = _unwrap((yield self.client.send(ProtoOAApplicationAuthReq(
+            clientId=config.APP_CLIENT_ID.strip(),
+            clientSecret=config.APP_CLIENT_SECRET.strip()), responseTimeoutInSeconds=15)))
+        _check_error(res, "app auth")
+
+        res = _unwrap((yield self.client.send(ProtoOAGetAccountListByAccessTokenReq(
+            accessToken=access_token), responseTimeoutInSeconds=15)))
+        _check_error(res, "account list")
+        accounts = list(res.ctidTraderAccount)
+        if not accounts:
+            raise RuntimeError("no accounts linked to this token")
+
+        want_live = config.ENVIRONMENT.strip().lower() == "live"
+        match = [a for a in accounts if bool(a.isLive) == want_live]
+        if not match:
+            match = accounts
+        target = match[0]
+
+        res = _unwrap((yield self.client.send(ProtoOAAccountAuthReq(
+            ctidTraderAccountId=target.ctidTraderAccountId,
+            accessToken=access_token), responseTimeoutInSeconds=15)))
+        _check_error(res, "account auth")
+        self.account_id = res.ctidTraderAccountId
+        defer.returnValue(self.account_id)
+
+    # ---------------------------------------------------------------- account info
+    @defer.inlineCallbacks
+    def get_trader(self):
+        res = _unwrap((yield self.client.send(ProtoOATraderReq(
+            ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=15)))
+        defer.returnValue(res.trader)
+
+    # ---------------------------------------------------------------- symbol
+    @defer.inlineCallbacks
+    def find_symbol(self, name):
+        res = _unwrap((yield self.client.send(ProtoOASymbolsListReq(
+            ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=15)))
+        for sym in res.symbol:
+            if sym.symbolName == name:
+                defer.returnValue(sym.symbolId)
+        raise RuntimeError("symbol not found: " + name)
+
+    @defer.inlineCallbacks
+    def symbol_info(self, symbol_id):
+        req = ProtoOASymbolByIdReq()
+        req.ctidTraderAccountId = self.account_id
+        req.symbolId.append(symbol_id)  # repeated field in this schema
+        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
+        for sym in res.symbol:
+            if sym.symbolId == symbol_id:
+                defer.returnValue({
+                    "digits": sym.digits,
+                    "lotSize": sym.lotSize,
+                    "minVolume": sym.minVolume,
+                    "stepVolume": sym.stepVolume,
+                })
+        raise RuntimeError("symbol details not returned for id " + str(symbol_id))
+
+    # ---------------------------------------------------------------- price
+    @defer.inlineCallbacks
+    def get_spot(self, symbol_id, timeout=12):
+        self.waiter = _WsWaiter(symbol_id)
+        req = ProtoOASubscribeSpotsReq()
+        req.ctidTraderAccountId = self.account_id
+        req.symbolId.append(symbol_id)  # repeated field in this schema
+        req.subscribeToSpotTimestamp = int(time.time() * 1000)
+        yield self.client.send(req, responseTimeoutInSeconds=10)
+        ev = yield self.waiter.deferred.addTimeout(timeout, reactor)
+        self.waiter = None
+        try:
+            unsub = ProtoOAUnsubscribeSpotsReq()
+            unsub.ctidTraderAccountId = self.account_id
+            unsub.symbolId.append(symbol_id)
+            yield self.client.send(unsub, responseTimeoutInSeconds=5)
+        except Exception:
+            pass
+        defer.returnValue((ev.bid, ev.ask, ev.timestamp))
+
+    # ---------------------------------------------------------------- positions
+    @defer.inlineCallbacks
+    def open_positions(self, symbol_id):
+        res = _unwrap((yield self.client.send(ProtoOAReconcileReq(
+            ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=15)))
+        open_flags = (
+            Models.ProtoOAPositionStatus.POSITION_STATUS_OPEN,
+            Models.ProtoOAPositionStatus.POSITION_STATUS_CREATED,
+        )
+        found = [p for p in res.position
+                 if p.tradeData.symbolId == symbol_id and p.positionStatus in open_flags]
+        defer.returnValue(found)
+
+    @defer.inlineCallbacks
+    def open_market(self, symbol_id, side, volume, sl=None, tp=None, label="GAPBOT", comment="gap bot"):
+        req = ProtoOANewOrderReq()
+        req.ctidTraderAccountId = self.account_id
+        req.symbolId = symbol_id
+        req.orderType = Models.ProtoOAOrderType.MARKET
+        req.tradeSide = _side(side)
+        req.volume = volume
+        req.timeInForce = Models.ProtoOATimeInForce.IMMEDIATE_OR_CANCEL
+        req.label = label
+        req.comment = comment
+        if sl is not None:
+            req.stopLoss = sl
+        if tp is not None:
+            req.takeProfit = tp
+        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
+        _check_error(res, "new order")
+        defer.returnValue(res)
+
+    @defer.inlineCallbacks
+    def close_position(self, position_id, volume=None):
+        req = ProtoOAClosePositionReq(ctidTraderAccountId=self.account_id, positionId=position_id)
+        if volume is not None:
+            req.volume = volume
+        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
+        _check_error(res, "close position")
+        defer.returnValue(res)
+
+    def stop(self):
+        try:
+            self.client.stopService()
+        except Exception:
+            pass
+
+
+def _check_error(res, where):
+    if res.DESCRIPTOR.fields_by_name.get("errorCode") is None:
+        return
+    code = getattr(res, "errorCode", None)
+    if code:
+        raise RuntimeError(f"{where} rejected by server: errorCode={code}")
+
+
+class _WsWaiter:
+    def __init__(self, symbol_id):
+        self.symbol_id = symbol_id
+        self.deferred = defer.Deferred()

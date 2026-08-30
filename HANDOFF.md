@@ -196,18 +196,26 @@
 
 ---
 
-## 8) خطة النشر النهائية (مرحلة لاحقة)
+## 8) خطة النشر النهائية
 
 - **تم إنشاء** `.github/workflows/goldgap.yml` بجدولة `*/5 * * * *` + `workflow_dispatch`.
-- الخطوات المتبقية (تحتاج المالك):
-  1. رفع المشروع إلى GitHub (مستودع **عام** لدقائق غير محدودة؛ لا ترتفع `token.json` أبداً).
-  2. وضع الأسرار في **Settings → Secrets and variables → Actions**:
-     `CBOT_APP_CLIENT_ID`, `CBOT_APP_CLIENT_SECRET`, `CBOT_ACCESS_TOKEN`, `CBOT_REFRESH_TOKEN`,
-     `CBOT_MODE=log` (يبدأ تسجيلاً) , `CBOT_ENVIRONMENT=demo`.
-  3. أول تشغيل مجدول سوف **يطلب** رخصة cron على GitHub (تمكّنها من صفحة الإنذارات).
-  4. البوت يكتب `data/` في نهاية كل تشغيل ويدفعها بنفسه (git push بـ GITHUB_TOKEN) —
-     هذه هي الذاكرة الدائمة عبر الجدولة لأنه لا يوجد قرص دائم على Actions.
-  5. حوّل `CBOT_MODE=trade` لاحقاً بعد التدفئة وثبات الانحراف.
+- **تم الإنجاز الفعلي على GitHub:**
+  - المستودع العمومي: `https://github.com/forexalaraab-design/gold-gap-bot`
+  - أول تشغيل عبر Actions **نجح كاملاً** (run 33330421217):
+    اتصال ديمو (48473755، $1000) ← سعر المنصة 4456.36 ← العالمي 4456.40 ← gap=-0.04 ←
+    حفظ في `data/gap_history.csv` ← دفع تلقائي (commit `bb48a44`).
+  - الأسرار الستة مثبتة في Settings: `CBOT_APP_CLIENT_ID`, `CBOT_APP_CLIENT_SECRET`,
+    `CBOT_ACCESS_TOKEN`, `CBOT_REFRESH_TOKEN`, `CBOT_MODE=log`, `CBOT_ENVIRONMENT=demo`.
+  - الأسرار الحقيقية ليست في الملفات المرفوعة: `config.py` بلا قيم (يقرأ env) و
+    `config_local.py` (قيم حقيقية) و`token.json` في `.gitignore`.
+  - انتبه: لتجنّب كشف السر، لا ترفع `config_local.py` أبداً؛ وعند تجديد `token.json`
+    حدّث سر `CBOT_ACCESS_TOKEN`/`CBOT_REFRESH_TOKEN`.
+- متبقٍ بعد النشر:
+  1. إن أظهر GitHub إشعار "scheduled workflows disabled" فعّل الجدولة من
+     Settings → Actions → General (أول مرة فقط).
+  2. اختبار فتح/إغلاق الصفقة على الديمو **أول افتتاح السوق** (كان `MARKET_CLOSED` يوم الأحد):
+     `$env:CBOT_MODE='trade'; python main.py` (من المجلد المحلي).
+  3. بعد تدفئة كافية والتحقق من تباين الفجوة لدى السوق، حوّل سر `CBOT_MODE` إلى `trade`.
 
 ---
 

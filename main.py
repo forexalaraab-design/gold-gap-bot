@@ -1,11 +1,12 @@
 import csv
 import json
 import os
-import sys
+import time
 from datetime import datetime, timezone
 
 import config
 import gold_price
+import cbot
 from cbot import CtraderSession
 from ctrader_open_api import Auth
 from twisted.internet import reactor
@@ -103,19 +104,94 @@ def compute_stats(rows, verbose=True):
         print(f"stats: valid samples in window = {len(valid)}")
     if len(valid) < config.MIN_SAMPLES:
         return None
-    gaps = [r["gap"] for r in valid]
+    gaps = sorted(r["gap"] for r in valid)
     n = len(gaps)
     mean = sum(gaps) / n
     if n > 1:
         var = sum((g - mean) ** 2 for g in gaps) / (n - 1)
     else:
         var = 0.0
-    sd = var ** 0.5
-    return {"n": n, "mean": mean, "sd": sd}
+    median = gaps[n // 2] if n % 2 else (gaps[n // 2 - 1] + gaps[n // 2]) / 2
+    mad = sorted(abs(g - median) for g in gaps)[n // 2] * 1.4826 if n else 0.0
+    return {"n": n, "mean": mean, "sd": var ** 0.5, "median": median, "mad": mad}
 
 
 def _to_int(price):
     return int(round(price * config.SPOT_SCALE))
+
+
+def in_session(dt):
+    if not config.SESSION_GUARD:
+        return True
+    wd = dt.weekday()
+    if wd >= 5:          # Sat / Sun
+        return False
+    if wd == 4:          # Friday: no entries after 22:20 UTC
+        return dt.hour < 22 or (dt.hour == 22 and dt.minute <= 20)
+    if wd == 0:          # Monday: skip the first 10 min after reopen
+        return not (dt.hour == 0 and dt.minute < 10)
+    return True
+
+
+def _record_close(state, rec):
+    trades = state.setdefault("closed_trades", [])
+    trades.append(rec)
+    if len(trades) > config.MAX_CLOSED_TRADES:
+        state["closed_trades"] = trades[-config.MAX_CLOSED_TRADES:]
+    try:
+        os.makedirs(os.path.dirname(config.TRADES_FILE), exist_ok=True)
+        new = not os.path.exists(config.TRADES_FILE)
+        with open(config.TRADES_FILE, "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(["ts_open", "ts_close", "side", "entry_gap", "close_gap",
+                            "entry_price", "close_price", "pnl_units", "pnl_usd", "reason"])
+            w.writerow([rec.get("ts_open"), rec.get("ts_close"), rec.get("side"),
+                        _fmt(rec.get("entry_gap")), _fmt(rec.get("close_gap")),
+                        _fmt(rec.get("entry_price")), _fmt(rec.get("close_price")),
+                        rec.get("pnl_units"), _fmt(rec.get("pnl_usd")), rec.get("reason")])
+    except Exception as exc:
+        print("trades.csv write failed:", exc)
+    _write_performance(state)
+
+
+def _fmt(v):
+    return "" if v is None else (f"{v:.3f}" if isinstance(v, float) else str(v))
+
+
+def _write_performance(state):
+    trades = state.get("closed_trades") or []
+    if not trades:
+        return
+    pnls = [t.get("pnl_usd", 0.0) for t in trades]
+    n = len(pnls)
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    eq = 0.0
+    peaks = 0.0
+    dd = 0.0
+    for p in pnls:
+        eq += p
+        peaks = max(peaks, eq)
+        dd = min(dd, eq - peaks)
+    perf = {
+        "trades": n,
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": round(100.0 * len(wins) / n, 2),
+        "total_pnl_usd": round(sum(pnls), 2),
+        "avg_pnl_usd": round(sum(pnls) / n, 3),
+        "best_usd": round(max(pnls), 2),
+        "worst_usd": round(min(pnls), 2),
+        "max_drawdown_usd": round(dd, 2),
+        "updated": utcnow_iso(),
+    }
+    try:
+        os.makedirs(os.path.dirname(config.PERF_FILE), exist_ok=True)
+        with open(config.PERF_FILE, "w", encoding="utf-8") as f:
+            json.dump(perf, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        print("performance write failed:", exc)
 
 
 # ============================================================================
@@ -131,8 +207,18 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
     gap = mid - global_price
     result["gap"] = gap
     result["z"] = None
-    if stats and stats["sd"] > 0:
-        result["z"] = (gap - stats["mean"]) / stats["sd"]
+    if stats:
+        scale = (stats.get("mad") if config.USE_MAD and stats.get("mad") else 0) or stats["sd"]
+        centre = stats["median"] if config.USE_MAD and stats.get("mad") else stats["mean"]
+        if scale > 0:
+            result["z"] = (gap - centre) / scale
+
+    now_ts = time.time()
+    md = state.get("money_digits")
+    if not md:
+        md = result.get("money_digits") or 2
+        state["money_digits"] = md
+    entry_units = state.get("entry_balance_units")
 
     side = None
     action = "none"
@@ -147,12 +233,58 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
         }
         if result["z"] is not None and abs(result["z"]) <= config.Z_EXIT:
             yield sess.close_position(pos.positionId)
+            try:
+                trad_end = yield sess.get_trader()
+                pnl_units = (trad_end.balance - entry_units) / (10 ** md) if entry_units is not None else None
+            except Exception:
+                pnl_units = None
+            close_gap = mid - global_price
+            _record_close(state, {
+                "ts_open": state.get("position", {}).get("opened_at"),
+                "ts_close": utcnow_iso(),
+                "side": result["position"]["side"],
+                "entry_gap": state.get("position", {}).get("entry_gap"),
+                "close_gap": close_gap,
+                "entry_price": state.get("position", {}).get("entry_price"),
+                "close_price": mid,
+                "pnl_units": pnl_units,
+                "pnl_usd": pnl_units,
+                "reason": "mean_revert",
+            })
+            result["close_pnl_usd"] = pnl_units
             result["action"] = "close"
             state["position"] = None
+            state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
         else:
             result["action"] = "hold"
     else:
+        if state.get("position") is not None and entry_units is not None:
+            try:
+                trad = yield sess.get_trader()
+                pnl_units = (trad.balance - entry_units) / (10 ** md)
+                _record_close(state, {
+                    "ts_open": state["position"].get("opened_at"),
+                    "ts_close": utcnow_iso(),
+                    "side": state["position"].get("side"),
+                    "entry_gap": state["position"].get("entry_gap"),
+                    "close_gap": gap,
+                    "entry_price": state["position"].get("entry_price"),
+                    "close_price": mid,
+                    "pnl_units": pnl_units,
+                    "pnl_usd": pnl_units,
+                    "reason": "stopped_or_external",
+                })
+                result["close_pnl_usd"] = pnl_units
+                result["action"] = "external_close"
+            except Exception as exc:
+                result["action"] = "external_close(no_pnl: " + repr(exc) + ")"
+            state["position"] = None
+            state.setdefault("closed_trades", [])
         state["position"] = None
+
+        cooldown_left = state.get("cooldown_until", 0) - now_ts
+        in_session_now = in_session(datetime.now(timezone.utc))
+
         can_trade = (
             config.MODE == "trade"
             and stats is not None
@@ -160,22 +292,30 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
             and abs(result["z"]) >= config.Z_ENTRY
             and abs(gap) <= config.MAX_ENTRY_GAP_USD
             and result.get("balance_usd", 0) >= config.MIN_BALANCE_TO_TRADE
+            and cooldown_left <= 0
+            and in_session_now
         )
         if can_trade:
             side = "SELL" if gap > 0 else "BUY"
-            sl_dist = max(config.SL_AFTER_ENTRY_USD, (config.Z_STOP - config.Z_ENTRY) * stats["sd"]) if stats["sd"] > 0 else config.SL_AFTER_ENTRY_USD
+            sl_dist = max(config.SL_AFTER_ENTRY_USD, (config.Z_STOP - config.Z_ENTRY)
+                          * (stats.get("mad") or stats["sd"])) if stats["sd"] or stats.get("mad") else config.SL_AFTER_ENTRY_USD
             if side == "SELL":
                 tp = mid - 0.9 * gap
                 sl = mid + sl_dist
             else:
                 tp = mid - 0.9 * gap
                 sl = mid - sl_dist
+            try:
+                trad_pre = yield sess.get_trader()
+            except Exception:
+                trad_pre = None
             vol = result["volume"]
             res = yield sess.open_market(
                 symbol_id, side, vol,
                 sl=_to_int(sl),
                 tp=_to_int(tp),
-                label="GAPBOT", comment="gap=" + format(gap, ".2f"))
+                label=cbot.random_label(),
+                comment="")
             order = res.order
             result["action"] = "open:" + side
             result["order"] = {
@@ -188,20 +328,27 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
                 "positionId": res.position.positionId if res.position else None,
                 "side": side,
                 "entry_gap": gap,
+                "entry_price": (order.executionPrice / config.SPOT_SCALE) if order.executionPrice else None,
                 "opened_at": utcnow_iso(),
             }
+            state["entry_balance_units"] = trad_pre.balance if trad_pre is not None else None
+            state["cooldown_until"] = 0
         else:
             reason = "no_signal"
             if config.MODE != "trade":
                 reason = "mode!=trade"
             elif stats is None:
-                reason = "warmup(not enough samples)"
+                reason = "warmup"
             elif result["z"] is not None and abs(result["z"]) < config.Z_ENTRY:
                 reason = "z_below_entry"
             elif abs(gap) > config.MAX_ENTRY_GAP_USD:
                 reason = "gap_above_cap"
             elif result.get("balance_usd", 0) < config.MIN_BALANCE_TO_TRADE:
                 reason = "balance_low"
+            elif cooldown_left > 0:
+                reason = "cooldown_min"
+            elif not in_session_now:
+                reason = "session_closed"
             result["action"] = "none:" + reason
     return action
 
@@ -261,6 +408,7 @@ def main():
             trader = yield sess.get_trader()
             result["balance"] = trader.balance
             result["money_digits"] = trader.moneyDigits
+            state["money_digits"] = trader.moneyDigits
             result["balance_usd"] = (
                 trader.balance / (10 ** trader.moneyDigits) if trader.moneyDigits else trader.balance
             )
@@ -310,7 +458,7 @@ def main():
 
 def _print_report(result, state):
     print("=" * 50)
-    print("GOLD GAP BOT - run report")
+    print("OPERATIONS REPORT")
     print("=" * 50)
     for k in ("ts", "account_id", "balance", "balance_usd", "deposit_asset",
               "symbol_id", "digits", "bid", "ask", "platform_price",
@@ -319,7 +467,22 @@ def _print_report(result, state):
             print(f"  {k:16s}: {result[k]}")
     if result.get("stats"):
         st = result["stats"]
-        print(f"  mean/sd           : {st['mean']:.2f} / {st['sd']:.2f}")
+        print(f"  centre/scale      : {st['mean']:.2f} / {st['sd']:.2f}")
+        if "mad" in st:
+            print(f"  median/mad        : {st['median']:.2f} / {st['mad']:.2f}")
+    if result.get("close_pnl_usd") is not None:
+        print(f"  close_pnl_usd     : {result['close_pnl_usd']:.3f}")
+    trades = state.get("closed_trades") or []
+    if trades:
+        print(f"  closed_trades     : {len(trades)} (last pnl={trades[-1].get('pnl_usd')})")
+        import os as _os
+        if _os.path.exists(config.PERF_FILE):
+            try:
+                with open(config.PERF_FILE, encoding="utf-8") as f:
+                    perf = json.load(f)
+                print("  perf              :", json.dumps(perf, ensure_ascii=False))
+            except Exception:
+                pass
     if result.get("error"):
         print("  ERROR             :", result["error"])
     if result.get("order"):

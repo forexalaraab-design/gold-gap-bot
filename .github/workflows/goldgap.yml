@@ -71,7 +71,14 @@ jobs:
           OTHER=$(printf '%s\n' "$ACTIVE" | sed '/^$/d' | grep -vx "$GITHUB_RUN_ID" || true)
           if [ -z "$OTHER" ]; then
             echo "no overlapping run -> dispatching next"
-            gh workflow run goldgap.yml --ref "${{ github.ref_name }}"
+            for i in 1 2 3; do
+              if gh workflow run goldgap.yml --ref "${{ github.ref_name }}" 2>/dev/null; then
+                echo "self-dispatch attempt $i OK"
+                break
+              fi
+              echo "self-dispatch attempt $i failed, retrying"
+              sleep 6
+            done
           else
             echo "overlap detected ($OTHER); skipping self-dispatch"
           fi

@@ -38,14 +38,28 @@ def live_loop():
                 if attempt == 4:
                     raise
                 yield deferLater(reactor, 5, lambda: None)
-        try:
-            account = yield sess.authenticate(token)
-        except Exception:
-            refreshed = main.refresh_token()
-            if not refreshed:
-                raise
-            yield sess.connect()
-            account = yield sess.authenticate(refreshed)
+        account = None
+        auth_err = None
+        for attempt in (1, 2, 3, 4):
+            t = token
+            if attempt > 1:
+                t = main.refresh_token()
+                if not t:
+                    break
+                try:
+                    yield sess.connect()
+                except Exception as exc:
+                    print(f"reconnect before auth {attempt} failed: {exc!r}")
+            try:
+                account = yield sess.authenticate(t)
+                auth_err = None
+                break
+            except Exception as exc:
+                auth_err = exc
+                print(f"auth attempt {attempt} failed: {exc!r}")
+                yield deferLater(reactor, 5, lambda: None)
+        if account is None:
+            raise auth_err or RuntimeError("authentication failed after retries")
         result["account_id"] = account
         trader = yield sess.get_trader()
         result["balance"] = trader.balance
@@ -66,6 +80,7 @@ def live_loop():
         end = time.time() + config.DURATION_MIN * 60
         last_save = time.time()
         last_append = 0.0
+        last_bal = time.time()
         last_gap = None
         tick_count = 0
         tick_result = {}   # set on first processed tick
@@ -108,6 +123,14 @@ def live_loop():
                 last_gap = gap
 
             stats = main.compute_stats(rows[:-1], verbose=False)
+            if time.time() - last_bal >= 15:
+                try:
+                    trad_f = yield sess.get_trader()
+                    result["balance"] = trad_f.balance
+                    result["balance_usd"] = trad_f.balance / (10 ** result["money_digits"])
+                    last_bal = time.time()
+                except Exception:
+                    pass
             tick_result = {"ts": utcnow_iso(), "symbol_id": symbol_id,
                            "volume": result["volume"],
                            "balance_usd": result["balance_usd"],

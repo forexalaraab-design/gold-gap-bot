@@ -1,3 +1,5 @@
+import random
+import string
 import time
 
 import config
@@ -21,6 +23,10 @@ from twisted.internet import reactor, defer
 
 def _side(v):
     return Models.ProtoOATradeSide.DESCRIPTOR.values_by_name[v].number
+
+
+def random_label(n=6):
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
 
 
 def _unwrap(message):
@@ -169,7 +175,7 @@ class CtraderSession:
         defer.returnValue(found)
 
     @defer.inlineCallbacks
-    def open_market(self, symbol_id, side, volume, sl=None, tp=None, label="GAPBOT", comment="gap bot"):
+    def open_market(self, symbol_id, side, volume, sl=None, tp=None, label=None, comment=""):
         req = ProtoOANewOrderReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId = symbol_id
@@ -177,7 +183,7 @@ class CtraderSession:
         req.tradeSide = _side(side)
         req.volume = volume
         req.timeInForce = Models.ProtoOATimeInForce.IMMEDIATE_OR_CANCEL
-        req.label = label
+        req.label = label if label else random_label()
         req.comment = comment
         if sl is not None:
             req.stopLoss = sl

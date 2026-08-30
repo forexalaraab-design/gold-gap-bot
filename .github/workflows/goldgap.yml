@@ -53,3 +53,25 @@ jobs:
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Self-dispatch (keep chain alive)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "DISPATCH_PAT not set; relying on cron schedule only"
+            exit 0
+          fi
+          ACTIVE=$(
+            gh api "repos/${{ github.repository }}/actions/runs?per_page=20" \
+              --jq '[.workflow_runs[] | select(.status == "in_progress" or .status == "queued") | .id]' \
+              2>/dev/null | tr -d '[]'
+          )
+          OTHER=$(printf '%s\n' "$ACTIVE" | sed '/^$/d' | grep -vx "$GITHUB_RUN_ID" || true)
+          if [ -z "$OTHER" ]; then
+            echo "no overlapping run -> dispatching next"
+            gh workflow run goldgap.yml --ref "${{ github.ref_name }}"
+          else
+            echo "overlap detected ($OTHER); skipping self-dispatch"
+          fi

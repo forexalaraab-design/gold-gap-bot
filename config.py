@@ -53,6 +53,21 @@ MIN_BALANCE_TO_TRADE = 200.0  # below this, always behave like "log"
 HISTORY_FILE = os.path.join(BASE_DIR, "data", "gap_history.csv")
 STATE_FILE = os.path.join(BASE_DIR, "data", "bot_state.json")
 
+# ===== Live loop (live.py) — near real-time coverage =====
+# Each GitHub scheduled job (every 5 min) runs a continuous loop for DURATION_MIN
+# minutes, polling the global price and reacting to streamed ticks ~immediately.
+def _env_float(name, default):
+    try:
+        return float(os.environ.get(name)) if os.environ.get(name) else default
+    except (TypeError, ValueError):
+        return default
+
+DURATION_MIN = _env_float("CBOT_DURATION_MIN", 4.5)
+GLOBAL_POLL_SEC = _env_float("CBOT_GLOBAL_POLL_SEC", 3)
+APPEND_EVERY_SEC = 60.0          # cap history rows: 1 per minute unless fast move
+APPEND_TOLERANCE = 0.02          # force an extra row if |gap changed| beyond this
+MAX_HISTORY_ROWS = 2000
+
 # ===== Misc =====
 VERSION_REQ = True
 CONNECT_TIMEOUT = 30          # seconds for the TCP/SSL connection attempt

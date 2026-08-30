@@ -96,10 +96,11 @@ def save_state(state):
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-def compute_stats(rows):
+def compute_stats(rows, verbose=True):
     valid = [r for r in rows if abs(r["gap"]) <= config.MAX_GAP_USD]
     valid = valid[-config.ROLLING_WINDOW:]
-    print(f"stats: valid samples in window = {len(valid)}")
+    if verbose:
+        print(f"stats: valid samples in window = {len(valid)}")
     if len(valid) < config.MIN_SAMPLES:
         return None
     gaps = [r["gap"] for r in valid]

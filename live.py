@@ -1,0 +1,164 @@
+import time
+from datetime import datetime, timezone
+
+import config
+import gold_price
+import main
+from cbot import CtraderSession
+from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
+from twisted.internet.task import deferLater
+from twisted.internet.threads import deferToThread
+
+
+def utcnow_iso():
+    return main.utcnow_iso()
+
+
+def _ts_hhmmss(epoch):
+    return datetime.fromtimestamp(epoch, timezone.utc).strftime("%H:%M:%S")
+
+
+@inlineCallbacks
+def live_loop():
+    token = main.resolve_token()
+    state = main.load_state()
+    rows = main.load_history()
+    print(f"live: starting loop for {config.DURATION_MIN} min "
+          f"(global poll every {config.GLOBAL_POLL_SEC}s), mode={config.MODE}")
+
+    sess = CtraderSession()
+    result = {"ts": utcnow_iso()}
+    try:
+        for attempt in (1, 2, 3, 4):
+            try:
+                yield sess.connect()
+                break
+            except Exception:
+                if attempt == 4:
+                    raise
+                yield deferLater(reactor, 5, lambda: None)
+        try:
+            account = yield sess.authenticate(token)
+        except Exception:
+            refreshed = main.refresh_token()
+            if not refreshed:
+                raise
+            yield sess.connect()
+            account = yield sess.authenticate(refreshed)
+        result["account_id"] = account
+        trader = yield sess.get_trader()
+        result["balance"] = trader.balance
+        result["money_digits"] = trader.moneyDigits
+        result["balance_usd"] = (
+            trader.balance / (10 ** trader.moneyDigits) if trader.moneyDigits else trader.balance
+        )
+        symbol_id = yield sess.find_symbol(config.SYMBOL)
+        info = yield sess.symbol_info(symbol_id)
+        result["symbol_id"] = symbol_id
+        result["lot_size"] = info["lotSize"]
+        result["volume"] = int(round(config.LOT * info["lotSize"]))
+
+        sess.subscribe_persistent(symbol_id)
+        print(f"live: subscribed to symbol {symbol_id}, "
+              f"volume={result['volume']}, balance_usd={result['balance_usd']}")
+
+        end = time.time() + config.DURATION_MIN * 60
+        last_save = time.time()
+        last_append = 0.0
+        last_gap = None
+        tick_count = 0
+        tick_result = {}   # set on first processed tick
+
+        while time.time() < end:
+            try:
+                global_price, source, source_ts = yield deferToThread(
+                    gold_price.get_global_gold_price)
+            except Exception as exc:
+                print(f"{_ts_hhmmss(time.time())}  global source error: {exc!r}")
+                yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+                continue
+
+            spot = sess.latest_spot(symbol_id)
+            if spot is None:
+                print(f"{_ts_hhmmss(time.time())}  no spot tick yet "
+                      f"(global={global_price:.2f})")
+                yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+                continue
+
+            bid, ask, sp_ts = spot
+            sp_s = sp_ts / 1000 if sp_ts else 0
+            if sp_s and abs(sp_s - time.time()) > 3 * 3600:
+                print(f"{_ts_hhmmss(time.time())}  market idle (last tick "
+                      f"{_ts_hhmmss(sp_s)})")
+                yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+                continue
+
+            mid = (bid + ask) / 2 / config.SPOT_SCALE
+            gap = mid - global_price
+
+            now = time.time()
+            changed = last_gap is None or abs(gap - last_gap) >= config.APPEND_TOLERANCE
+            if now - last_append >= config.APPEND_EVERY_SEC or changed:
+                rows.append({"ts": utcnow_iso(), "global": global_price,
+                             "platform": mid, "gap": gap})
+                last_append = now
+                if len(rows) > config.MAX_HISTORY_ROWS:
+                    rows = rows[-config.MAX_HISTORY_ROWS:]
+                last_gap = gap
+
+            stats = main.compute_stats(rows[:-1], verbose=False)
+            tick_result = {"ts": utcnow_iso(), "symbol_id": symbol_id,
+                           "volume": result["volume"],
+                           "balance_usd": result["balance_usd"],
+                           "global_price": global_price, "source": source,
+                           "platform_price": mid, "gap": gap, "stats": stats}
+            try:
+                yield main.run_trade_cycle(sess, mid, global_price, stats, state,
+                                           tick_result)
+            except Exception as exc:
+                tick_result["error"] = repr(exc)
+            tick_count += 1
+            z = tick_result.get("z")
+            zs = f"{z:.2f}" if z is not None else "-"
+            if tick_result.get("order"):
+                extra = " order=" + json_dumps(tick_result["order"])
+            elif tick_result.get("position"):
+                extra = " pos=" + json_dumps(tick_result["position"])
+            else:
+                extra = ""
+            print(f"{_ts_hhmmss(now)}  mid={mid:.2f} global={global_price:.2f} "
+                  f"gap={gap:.2f} z={zs} action={tick_result['action']}{extra}")
+
+            if now - last_save >= 30:
+                main.save_history(rows)
+                state["stats"] = stats
+                state["last_run"] = tick_result["ts"]
+                main.save_state(state)
+                last_save = now
+
+            yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+
+        if tick_result:
+            result.update({k: v for k, v in tick_result.items() if v is not None})
+    except Exception:
+        import traceback
+        result["error"] = traceback.format_exc(limit=25)
+    finally:
+        main.save_history(rows)
+        state["last_run"] = utcnow_iso()
+        main.save_state(state)
+        sess.stop()
+        main._print_report(result, state)
+        reactor.stop()
+
+
+def json_dumps(obj):
+    import json
+    return json.dumps(obj)
+
+
+if __name__ == "__main__":
+    d = live_loop()
+    d.addErrback(lambda f: print("FATAL", f.getTraceback()))
+    reactor.run()

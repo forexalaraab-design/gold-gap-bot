@@ -32,17 +32,31 @@ class CtraderSession:
         self.client = None
         self.account_id = None
         self.waiter = None
+        self.spot_cache = {}
 
     # ---------------------------------------------------------------- messaging
     def _on_received(self, client, message):
-        if self.waiter is None or self.waiter.deferred.called:
-            return
         try:
             inner = _unwrap(message)
         except Exception:
             return
-        if hasattr(inner, "symbolId") and inner.symbolId == self.waiter.symbol_id:
-            self.waiter.deferred.callback(inner)
+        # always cache latest live tick for spot symbols
+        if hasattr(inner, "symbolId") and hasattr(inner, "bid") and hasattr(inner, "ask"):
+            self.spot_cache[inner.symbolId] = (inner.bid, inner.ask, inner.timestamp)
+        # resolve a pending one-shot price wait if it matches
+        if self.waiter is not None and not self.waiter.deferred.called:
+            if hasattr(inner, "symbolId") and inner.symbolId == self.waiter.symbol_id:
+                self.waiter.deferred.callback(inner)
+
+    def latest_spot(self, symbol_id):
+        return self.spot_cache.get(symbol_id)
+
+    def subscribe_persistent(self, symbol_id):
+        req = ProtoOASubscribeSpotsReq()
+        req.ctidTraderAccountId = self.account_id
+        req.symbolId.append(symbol_id)
+        req.subscribeToSpotTimestamp = int(time.time() * 1000)
+        self.client.send(req, responseTimeoutInSeconds=10)
 
     # ---------------------------------------------------------------- connect
     @defer.inlineCallbacks

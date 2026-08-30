@@ -3,6 +3,7 @@ name: gold-gap-bot
 on:
   schedule:
     # Every 5 minutes around the clock (public repo: unlimited minutes)
+    # keep-alive round: 2026-08-30 20:10Z (re-register scheduler)
     - cron: "*/5 * * * *"
   workflow_dispatch:
 

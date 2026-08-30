@@ -211,6 +211,22 @@
   - **صيانة**: PAT ينتهي بعد 90 يوماً — جدّد في Settings→Tokens ثم حدّث سر
     `DISPATCH_PAT` وإلا توقفت السلسلة (راقبها بفحص `gh run list` كل وقت).
     ألغِ المفتاح `fine-grained` السابق إن أردت.
+  - خطوة `Persist gap log` أصبحت **مقاومة للتعارض**: إن فشل الدفع تلقائياً
+    `git pull --rebase`` ثم يعيد الدفع (يتجاهل السباقات مع دفع يدوي).
+- **مزامنة التوكن ذاتياً (Rotation-Proof) — حماية الاستمرارية بلا توقف:**
+  - توكنات cTrader تنتهي/تُدوَّر؛ الحل: داخل كل مهنة بعد أول مصادقة ناجحة
+    (وفي خطوة refresh أيضاً) تُكتب قيمة التوكن الحالية الصالحة إلى أسرار المستودع
+    `CBOT_ACCESS_TOKEN` / `CBOT_REFRESH_TOKEN` عبر `gh secret set` (باستخدام
+    `DISPATCH_PAT` و `GH_TOKEN` في خطوة `Run bot` مع `CBOT_TOKEN_SYNC=1`).
+  - النتيجة: أي دوران/انتهاء يعيد ضبط نفسه بنفسه من التشغيلة التالية **بدون أي
+    دخول يدوي**، طالما refresh token الأصلي حي.
+  - **دليل إعادة إصدار التوكن (عند وفاة الزوج كاملاً** — حدث مرة واحدة**):**
+    1. شغّل: `.venv\Scripts\python.exe auth_tool.py` واكملها كمطالَبٌ بذلك، أو
+       استخرج رابطاً جديداً عبر `getAuthUri()` وأرسله للمالك ليحدّث الأذون.
+    2. بعد الصاق `code=...`، يُخزَّن `token.json`، ثم: `gh secret set CBOT_ACCESS_TOKEN -b <access> -R forexalaraab-design/gold-gap-bot` ونفسه للـ `CBOT_REFRESH_TOKEN`.
+    3. التشغيلة التالية ستبدأ بالزوج الجديد وستحافظ عليه ذاتياً.
+  - راقب الأعراض: ظهور `auth attempt N failed: ... CH_ACCESS_TOKEN_INVALID` في
+    السجلات المتتالية = إعادة إصدار فورية.
 - **معمارية شبه لحظية (بدلاً من فحص كل 5 دقائق):** كل مهنة مجدولة تشغّل `live.py`
   (وليس main.py) — اتصال واحد + اشتراك بث مباشر (ProtoOASubscribeSpotsReq) +
   استطلاع السعر العالمي كل 3 ثوانٍ داخل حلقة؛ يُحسب كل فرصة وتُتّخذ القرارات فوراً.
@@ -225,18 +241,37 @@
     حفظ في `data/gap_history.csv` ← دفع تلقائي (commit `bb48a44`).
   - أول تشغيل للحلقة المستمرة (run 33330923285): حلقة 4.5 دقيقة كاملة بفحص كل 3 ثوانٍ
     (سوق مقفل → idles هادئ) وانتهت بنجاح ودفعت البيانات تلقائياً (commit `4b0acd5`).
-  - الأسرار الستة مثبتة في Settings: `CBOT_APP_CLIENT_ID`, `CBOT_APP_CLIENT_SECRET`,
-    `CBOT_ACCESS_TOKEN`, `CBOT_REFRESH_TOKEN`, `CBOT_MODE=log`, `CBOT_ENVIRONMENT=demo`.
+  - الأسرار الحالية مثبتة في Settings:
+    `CBOT_APP_CLIENT_ID`, `CBOT_APP_CLIENT_SECRET`, `CBOT_ACCESS_TOKEN`,
+    `CBOT_REFRESH_TOKEN`, `CBOT_MODE=trade` (تفعيل التداول على الديمو),
+    `CBOT_ENVIRONMENT=demo`, `DISPATCH_PAT`, `STRAT_COOLDOWN_MIN=20`.
+  - **إخفاء الاستراتيجية والهوية عن الوسيط** (مطبَّق):
+    - ملصقات الأوامر `label` عشوائية، و`comment` فارغ — لا تظهر أسماء "gold
+      gap bot"/"GAPBOT" في سجل التداول.
+    - التقرير الدوري يسمى `OPERATIONS REPORT`.
+    - المعاملات الحساسة للاستراتيجية تأتي من أسرار `STRAT_*` (`STRAT_Z_ENTRY`,
+      `STRAT_Z_EXIT`, `STRAT_Z_STOP`, `STRAT_SL_AFTER_ENTRY_USD`,
+      `STRAT_MAX_ENTRY_GAP_USD`, `STRAT_MAX_GAP_USD`, `STRAT_COOLDOWN_MINUTES`,
+      `STRAT_SESSION_GUARD`, `STRAT_USE_MAD`, `STRAT_WINDOW`,
+      `STRAT_MIN_SAMPLES`) كي لا تظهر قيمها في الكود العام.
+    - الوسيط ما زال يرى الأوامر (حجم/سعر/توقيت/IP سحابي) — استحالة إخفاء تام،
+      وهذا متفق عليه صراحة مع المالك.
+  - تتبع الأداء: `data/trades.csv` + `data/performance.json`
+    (wins/losses/win_rate/total_pnl_usd/max_drawdown) تُحدَّث عند كل إغلاق،
+    مع كشف الإغلاق الخارجي (فرق رصيد) وتحديد سبب الإغلاق.
+  - `watchdog.ps1` (محلي اختياري): يراقب كل 300 ثانية عمر آخر تشغيلة؛ إن تجاوزت
+    15 دقيقة وليست قيد التنفيذ يطلق تشغيلة فوراً — حزام أمان إضافي إذا تفعّل.
   - الأسرار الحقيقية ليست في الملفات المرفوعة: `config.py` بلا قيم (يقرأ env) و
     `config_local.py` (قيم حقيقية) و`token.json` في `.gitignore`.
   - انتبه: لتجنّب كشف السر، لا ترفع `config_local.py` أبداً؛ وعند تجديد `token.json`
     حدّث سر `CBOT_ACCESS_TOKEN`/`CBOT_REFRESH_TOKEN`.
 - متبقٍ بعد النشر:
-  1. اختبار فتح/إغلاق الصفقة على الديمو **أول افتتاح السوق** (كان `MARKET_CLOSED` يوم الأحد):
-     `$env:CBOT_MODE='trade'; .venv\Scripts\python.exe live.py` (من المجلد المحلي) —
-     عندها ستظهر أول ticks جديدة ~22:00Z ويبدأ التداول الفعلي.
-  2. بعد نجاح الفتح/الإغلاق على الديمو: مراقبة أن السلسلة السحابية تفتح صفقات وتغلقها
-     وتدعم البيانات؛ ثم قرار الترقية إلى حساب Real بموافقة صريحة من المالك.
+  1. التداول على الديمو **مفعّل الآن** (`CBOT_MODE=trade`): عند فتح السوق 22:00 UTC
+     ستستقبل السلسلة أول ticks وستفتح/تغلق صفقات تلقائياً (بعد تدفئة 48 قياساً).
+     راقب `OPERATIONS REPORT` و`close` في السجلات، وافتح cTrader (حساب 1121509)
+     لرؤية الصفقات بأعينك.
+  2. بعد نجاح الفتح/الإغلاق على الديمو ببضعة أيام: مراجعة `performance.json`،
+     ثم قرار الترقية إلى حساب حقيقي **بموافقة صريحة من المالك فقط**. `config_local.py` يتحكم بالوسيط الحقيقي والتحقق المزدوج واجب.
 
 ---
 

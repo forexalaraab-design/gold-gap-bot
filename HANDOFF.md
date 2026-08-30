@@ -199,11 +199,20 @@
 ## 8) خطة النشر النهائية
 
 - **تم إنشاء** `.github/workflows/goldgap.yml` بجدولة `*/5 * * * *` + `workflow_dispatch`.
+- **معمارية شبه لحظية (بدلاً من فحص كل 5 دقائق):** كل مهنة مجدولة تشغّل `live.py`
+  (وليس main.py) — اتصال واحد + اشتراك بث مباشر (ProtoOASubscribeSpotsReq) +
+  استطلاع السعر العالمي كل 3 ثوانٍ داخل حلقة؛ يُحسب كل فرصة وتُتّخذ القرارات فوراً.
+  المدة الافتراضية 4.5 دقيقة لكل مهنة (أقصر من فرق الجدولة 5 دقائق) =
+  تغطية شبه متصلة ~2-3 ثوانٍ على مدار الساعة بدون VPS.
+  - ضبط السرعة: `CBOT_DURATION_MIN` / `CBOT_GLOBAL_POLL_SEC` (بيئة أو متغيّر).
+  - يمكن أصلاً تشغيل `python live.py` محلياً بثَّاً lazhiy حقيقياً طالما جهازك مفتوح.
 - **تم الإنجاز الفعلي على GitHub:**
   - المستودع العمومي: `https://github.com/forexalaraab-design/gold-gap-bot`
   - أول تشغيل عبر Actions **نجح كاملاً** (run 33330421217):
     اتصال ديمو (48473755، $1000) ← سعر المنصة 4456.36 ← العالمي 4456.40 ← gap=-0.04 ←
     حفظ في `data/gap_history.csv` ← دفع تلقائي (commit `bb48a44`).
+  - أول تشغيل للحلقة المستمرة (run 33330923285): حلقة 4.5 دقيقة كاملة بفحص كل 3 ثوانٍ
+    (سوق مقفل → idles هادئ) وانتهت بنجاح ودفعت البيانات تلقائياً (commit `4b0acd5`).
   - الأسرار الستة مثبتة في Settings: `CBOT_APP_CLIENT_ID`, `CBOT_APP_CLIENT_SECRET`,
     `CBOT_ACCESS_TOKEN`, `CBOT_REFRESH_TOKEN`, `CBOT_MODE=log`, `CBOT_ENVIRONMENT=demo`.
   - الأسرار الحقيقية ليست في الملفات المرفوعة: `config.py` بلا قيم (يقرأ env) و
@@ -214,7 +223,8 @@
   1. إن أظهر GitHub إشعار "scheduled workflows disabled" فعّل الجدولة من
      Settings → Actions → General (أول مرة فقط).
   2. اختبار فتح/إغلاق الصفقة على الديمو **أول افتتاح السوق** (كان `MARKET_CLOSED` يوم الأحد):
-     `$env:CBOT_MODE='trade'; python main.py` (من المجلد المحلي).
+     `$env:CBOT_MODE='trade'; .venv\Scripts\python.exe live.py` (من المجلد المحلي) —
+     عندها ستظهر أول ticks جديدة ~22:00Z ويبدأ التداول الفعلي.
   3. بعد تدفئة كافية والتحقق من تباين الفجوة لدى السوق، حوّل سر `CBOT_MODE` إلى `trade`.
 
 ---

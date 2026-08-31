@@ -334,9 +334,13 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
         result["pnl_peak_usd"] = round(peak, 2)
         result["profit_floor_usd"] = round(profit_floor, 2)
 
-        # once trailing is armed we let profit ride protected by the pull-back
-        # guard instead of locking in at the small static floor immediately.
-        close_now = z_exit_hit or (profit_hit and not trailing_armed) or trailing_hit
+        # Mean Reversion Close: Close when gap normalizes (z-score near 0)
+        # This avoids TRADING_BAD_STOPS issues and works with the gap strategy logic
+        mean_revert_close = st_pos is not None and abs(z) < 0.5
+        close_now = mean_revert_close
+        
+        # Legacy trailing/profit logic disabled to avoid conflict; can be re-enabled later
+        # close_now = z_exit_hit or (profit_hit and not trailing_armed) or trailing_hit
         if close_now:
             try:
                 yield sess.close_position(pos.positionId)
@@ -352,10 +356,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
                 except Exception:
                     pnl_units = None
                 close_gap = mid - global_price
-                if trailing_hit:
-                    reason = "trailing"
-                else:
-                    reason = "profit_target" if profit_hit else "mean_revert"
+                reason = "mean_revert"  # using the new mean reversion close method
                 _record_close(state, {
                     "ts_open": st_pos.get("opened_at"),
                     "ts_close": utcnow_iso(),

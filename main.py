@@ -163,11 +163,14 @@ def _record_close(state, rec):
             w = csv.writer(f)
             if new:
                 w.writerow(["ts_open", "ts_close", "side", "entry_gap", "close_gap",
-                            "entry_price", "close_price", "pnl_units", "pnl_usd", "reason"])
+                            "entry_price", "close_price", "pnl_units", "pnl_usd",
+                            "fees_usd", "pnl_net_usd", "reason"])
             w.writerow([rec.get("ts_open"), rec.get("ts_close"), rec.get("side"),
                         _fmt(rec.get("entry_gap")), _fmt(rec.get("close_gap")),
                         _fmt(rec.get("entry_price")), _fmt(rec.get("close_price")),
-                        rec.get("pnl_units"), _fmt(rec.get("pnl_usd")), rec.get("reason")])
+                        rec.get("pnl_units"), _fmt(rec.get("pnl_usd")),
+                        _fmt(rec.get("fees_usd")), _fmt(rec.get("pnl_net_usd")),
+                        rec.get("reason")])
     except Exception as exc:
         print("trades.csv write failed:", exc)
     _write_performance(state)
@@ -216,6 +219,32 @@ def _write_performance(state):
 # trade logic (lives inside the reactor / session)
 # ============================================================================
 
+def position_fees_usd(pos, md):
+    """Estimate total cost (commission + swap + spread) for an open position in USD."""
+    commission = getattr(pos, "commission", None) or 0
+    swap = getattr(pos, "swap", None) or 0
+    if md:
+        commission = commission / (10 ** md)
+        swap = swap / (10 ** md)
+    vol_lots = pos.tradeData.volume / 10000.0 if pos.tradeData.volume else 0
+    spread_est = config.TRADING_FEES_PER_TRADE_LOT * max(vol_lots, 0.01)
+    return commission + swap + spread_est
+
+
+def dynamic_pnl_usd(pos, mid, sp_scale, md):
+    """Live float PnL (dollars), net of fees, at the given mid.
+
+    pos.price is in scaled units (SPOT_SCALE); the dollar value of one unit of
+    volume equals one dollar per price-point, and volume counts in base units
+    (100 == 0.01 lot == one unit of gold). So PnL in USD = (mid - entry) * volume.
+    """
+    entry = pos.price / sp_scale
+    gross = (mid - entry) * pos.tradeData.volume
+    if _side_name(pos.tradeData.tradeSide) == "SELL":
+        gross = -gross
+    fees = position_fees_usd(pos, md)
+    return gross - fees, gross, fees
+
 @inlineCallbacks
 def run_trade_cycle(sess, mid, global_price, stats, state, result):
     symbol_id = result["symbol_id"]
@@ -243,13 +272,30 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
 
     if positions:
         pos = positions[0]
+        side_name = _side_name(pos.tradeData.tradeSide)
+        sp_scale = config.SPOT_SCALE
+        net_pnl, gross_pnl, fees = dynamic_pnl_usd(pos, mid, sp_scale, md)
         result["position"] = {
             "positionId": pos.positionId,
-            "side": _side_name(pos.tradeData.tradeSide),
-            "price": pos.price,
+            "side": side_name,
+            "price": pos.price / sp_scale,
             "label": pos.tradeData.label,
+            "commission_usd": (pos.commission / (10 ** md)) if pos.commission else 0,
+            "swap_usd": (pos.swap / (10 ** md)) if pos.swap else 0,
+            "pnl_net_usd": round(net_pnl, 2),
+            "pnl_gross_usd": round(gross_pnl, 2),
+            "fees_usd": round(fees, 2),
         }
-        if result["z"] is not None and abs(result["z"]) <= config.Z_EXIT:
+        profit_floor = config.DYNAMIC_PROFIT_FLOOR_USD + \
+            config.PROFIT_FLOOR_PER_OLOT_USD * (pos.tradeData.volume / 10000.0)
+        z_exit_hit = result["z"] is not None and abs(result["z"]) <= config.Z_EXIT
+        profit_hit = (
+            net_pnl >= profit_floor
+            and gross_pnl > 0
+            and state.get("position", {}).get("entry_gap") is not None
+        )
+        result["profit_floor_usd"] = round(profit_floor, 2)
+        if z_exit_hit or profit_hit:
             yield sess.close_position(pos.positionId)
             try:
                 trad_end = yield sess.get_trader()
@@ -257,20 +303,23 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
             except Exception:
                 pnl_units = None
             close_gap = mid - global_price
+            reason = "profit_target" if profit_hit else "mean_revert"
             _record_close(state, {
                 "ts_open": state.get("position", {}).get("opened_at"),
                 "ts_close": utcnow_iso(),
-                "side": result["position"]["side"],
+                "side": side_name,
                 "entry_gap": state.get("position", {}).get("entry_gap"),
                 "close_gap": close_gap,
                 "entry_price": state.get("position", {}).get("entry_price"),
                 "close_price": mid,
                 "pnl_units": pnl_units,
                 "pnl_usd": pnl_units,
-                "reason": "mean_revert",
+                "reason": reason,
+                "pnl_net_usd": round(net_pnl, 2),
+                "fees_usd": round(fees, 2),
             })
             result["close_pnl_usd"] = pnl_units
-            result["action"] = "close"
+            result["action"] = "close:" + reason
             state["position"] = None
             state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
         else:

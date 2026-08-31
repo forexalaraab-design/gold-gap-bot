@@ -315,14 +315,18 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
         )
         if can_trade:
             side = "SELL" if gap > 0 else "BUY"
-            sl_dist = max(config.SL_AFTER_ENTRY_USD, (config.Z_STOP - config.Z_ENTRY)
-                          * (stats.get("mad") or stats["sd"])) if stats["sd"] or stats.get("mad") else config.SL_AFTER_ENTRY_USD
+            sd = stats.get("mad") if config.USE_MAD else stats["sd"]
+            sd = sd or stats["sd"]
+            sl_dist = max(config.SL_AFTER_ENTRY_USD, (config.Z_STOP - config.Z_ENTRY) * sd)
+            min_tp_dist = max(0.3 * sd, 1.0)
             if side == "SELL":
-                tp = mid - 0.9 * gap
                 sl = mid + sl_dist
+                tp = min(mid - min_tp_dist, mid - 0.9 * abs(gap))
             else:
-                tp = mid - 0.9 * gap
                 sl = mid - sl_dist
+                tp = max(mid + min_tp_dist, mid + 0.9 * abs(gap))
+            print(f"order-request side={side} mid={mid:.2f} sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "
+                  f"gap={gap:.2f} tp_dist={(mid - tp) if side == 'SELL' else (tp - mid):.2f}")
             try:
                 trad_pre = yield sess.get_trader()
             except Exception:

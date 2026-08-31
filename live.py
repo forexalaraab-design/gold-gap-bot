@@ -145,11 +145,13 @@ def live_loop():
                            "volume": result["volume"],
                            "balance_usd": result["balance_usd"],
                            "global_price": global_price, "source": source,
-                           "platform_price": mid, "gap": gap, "stats": stats}
+                           "platform_price": mid, "gap": gap, "stats": stats,
+                           "action": "no-op"}
             try:
                 yield main.run_trade_cycle(sess, mid, global_price, stats, state,
                                            tick_result)
             except Exception as exc:
+                tick_result["action"] = "error"
                 tick_result["error"] = repr(exc)
             tick_count += 1
             z = tick_result.get("z")
@@ -161,7 +163,7 @@ def live_loop():
             else:
                 extra = ""
             print(f"{_ts_hhmmss(now)}  mid={mid:.2f} global={global_price:.2f} "
-                  f"gap={gap:.2f} z={zs} action={tick_result['action']}{extra}")
+                  f"gap={gap:.2f} z={zs} action={tick_result.get('action')}{extra}")
 
             if now - last_save >= 30:
                 main.save_history(rows)

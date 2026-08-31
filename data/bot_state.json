@@ -1,19 +1,13 @@
 {
-  "position": {
-    "positionId": 41138750,
-    "side": "BUY",
-    "entry_gap": -0.07990200000040204,
-    "entry_price": null,
-    "opened_at": "2026-08-31T17:10:43Z"
-  },
+  "position": null,
   "stats": {
     "n": 48,
-    "mean": -0.7478166458333627,
-    "sd": 1.1174477157430716,
-    "median": -1.0474510000003647,
-    "mad": 1.1821555578012446
+    "mean": -1.0668136458333493,
+    "sd": 0.6893606110916757,
+    "median": -1.0150000000003274,
+    "mad": 0.7189157052002184
   },
-  "last_run": "2026-08-31T17:49:29Z",
+  "last_run": "2026-08-31T17:54:31Z",
   "money_digits": 2,
   "entry_balance_units": 100642,
   "cooldown_until": 0,
@@ -64,6 +58,18 @@
       "close_price": 4431.17,
       "pnl_units": -3.16,
       "pnl_usd": -3.16,
+      "reason": "stopped_or_external"
+    },
+    {
+      "ts_open": "2026-08-31T17:10:43Z",
+      "ts_close": "2026-08-31T17:52:55Z",
+      "side": "BUY",
+      "entry_gap": -0.07990200000040204,
+      "close_gap": -2.100194999999985,
+      "entry_price": null,
+      "close_price": 4438.6,
+      "pnl_units": 5.56,
+      "pnl_usd": 5.56,
       "reason": "stopped_or_external"
     }
   ]

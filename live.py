@@ -163,7 +163,8 @@ def live_loop():
             else:
                 extra = ""
             print(f"{_ts_hhmmss(now)}  mid={mid:.2f} global={global_price:.2f} "
-                  f"gap={gap:.2f} z={zs} action={tick_result.get('action')}{extra}")
+                  f"gap={gap:.2f} z={zs} action={tick_result.get('action')}"
+                  f"{(' err=' + tick_result['error']) if tick_result.get('error') else ''}{extra}")
 
             if now - last_save >= 30:
                 main.save_history(rows)

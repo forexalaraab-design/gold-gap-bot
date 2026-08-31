@@ -44,12 +44,12 @@ class CtraderSession:
         self._send_lock = defer.DeferredLock()
 
     @defer.inlineCallbacks
-    def _send(self, req, timeout=30):
+    def _send(self, req, responseTimeoutInSeconds=30):
         # Serialize all request/response pairs through a lock. The client fetch
         # (getWaiter/matchResponse) is not safe under concurrent sends, which
         # caused requests (close_position, reconcile) to hang 30s then TimeoutError.
         d = self._send_lock.acquire()
-        d.addCallback(lambda _: self.client.send(req, responseTimeoutInSeconds=timeout))
+        d.addCallback(lambda _: self.client.send(req, responseTimeoutInSeconds=responseTimeoutInSeconds))
         d.addBoth(lambda r: (self._send_lock.release(), r)[1])
         res = yield d
         defer.returnValue(res)

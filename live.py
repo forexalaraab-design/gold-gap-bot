@@ -94,21 +94,26 @@ def live_loop():
                 vol = result["volume"]
                 res = yield sess.open_market(
                     symbol_id, "BUY", vol,
-                    sl=int(round((mid0 - 5.0) * config.SPOT_SCALE)),
-                    tp=int(round((mid0 + 5.0) * config.SPOT_SCALE)),
                     label=random_label(), comment="")
                 print(f"FORCE-TEST OPEN OK orderId={res.order.orderId} "
                       f"positionId={res.position.positionId if res.position else None}")
                 if res.position:
+                    pid = res.position.positionId
+                    entry0 = res.position.price / config.SPOT_SCALE
+                    for dist in (50.0, 0.5, 5.0, 20.0):
+                        try:
+                            yield sess.set_sltp(pid,
+                                                int(round((entry0 - dist) * config.SPOT_SCALE)),
+                                                int(round((entry0 + dist) * config.SPOT_SCALE)))
+                            print(f"FORCE-TEST SETSLTP OK at dist={dist}")
+                            break
+                        except Exception as exc:
+                            print(f"FORCE-TEST SETSLTP FAIL dist={dist}: {exc!r}")
                     try:
-                        yield sess.set_sltp(res.position.positionId,
-                                            int(round((mid0 - 5.0) * config.SPOT_SCALE)),
-                                            int(round((mid0 + 5.0) * config.SPOT_SCALE)))
-                        print("FORCE-TEST SETSLTP OK")
+                        yield sess.close_position(pid)
+                        print("FORCE-TEST CLOSE OK")
                     except Exception as exc:
-                        print("FORCE-TEST SETSLTP FAIL:", repr(exc))
-                    yield sess.close_position(res.position.positionId)
-                    print("FORCE-TEST CLOSE OK")
+                        print("FORCE-TEST CLOSE FAIL:", repr(exc))
             except Exception as exc:
                 print("FORCE-TEST FAIL:", repr(exc))
 

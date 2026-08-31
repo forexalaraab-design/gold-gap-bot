@@ -1,12 +1,20 @@
 {
-  "position": null,
+  "position": {
+    "positionId": 41126223,
+    "side": "BUY",
+    "entry_gap": -3.5649999999996,
+    "entry_price": null,
+    "opened_at": "2026-08-31T15:38:37Z"
+  },
   "stats": {
     "n": 48,
-    "mean": -1.7145366249999558,
-    "sd": 1.9257713439379063,
-    "median": -1.7950000000000728,
-    "mad": 2.468674294799242
+    "mean": -1.3329370416666773,
+    "sd": 1.3611716510903582,
+    "median": -1.4475489999999809,
+    "mad": 1.530711852599381
   },
-  "last_run": "2026-08-31T15:36:14Z",
-  "money_digits": 2
+  "last_run": "2026-08-31T15:41:10Z",
+  "money_digits": 2,
+  "entry_balance_units": 100000,
+  "cooldown_until": 0
 }

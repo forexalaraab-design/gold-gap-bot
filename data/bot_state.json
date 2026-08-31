@@ -1,7 +1,12 @@
 {
   "position": {
-    "pnl_peak_usd": 7.88,
-    "pnl_last_usd": 7.83,
+    "positionId": 41150368,
+    "side": "BUY",
+    "entry_gap": -2.6399019999998927,
+    "entry_price": null,
+    "opened_at": "2026-08-31T19:56:43Z",
+    "pnl_peak_usd": -0.08,
+    "pnl_last_usd": -0.08,
     "pnl_track": [
       -0.08,
       -0.08,
@@ -17,39 +22,19 @@
       -0.08,
       -0.08,
       -0.08,
-      -0.08,
-      -0.08,
-      -0.08,
-      4.7,
-      5.86,
-      5.61,
-      5.01,
-      4.28,
-      2.8,
-      4.38,
-      4.69,
-      6.87,
-      6.94,
-      7.12,
-      6.82,
-      6.25,
-      6.29,
-      6.65,
-      7.37,
-      7.88,
-      7.83
+      -0.08
     ]
   },
   "stats": {
     "n": 48,
-    "mean": 0.17480183333331448,
-    "sd": 1.1326312673651637,
-    "median": 0.40509800000018004,
-    "mad": 1.5935044103997897
+    "mean": -0.2943728541667383,
+    "sd": 1.5632724750224094,
+    "median": -0.3501464999999371,
+    "mad": 2.0682989061007184
   },
-  "last_run": "2026-08-31T19:53:41Z",
+  "last_run": "2026-08-31T19:59:08Z",
   "money_digits": 2,
-  "entry_balance_units": 100413,
+  "entry_balance_units": 100967,
   "cooldown_until": 0,
   "closed_trades": [
     {
@@ -146,6 +131,18 @@
       "close_price": 4433.63,
       "pnl_units": 1.05,
       "pnl_usd": 1.05,
+      "reason": "stopped_or_external"
+    },
+    {
+      "ts_open": null,
+      "ts_close": "2026-08-31T19:56:26Z",
+      "side": null,
+      "entry_gap": null,
+      "close_gap": -1.9399020000000746,
+      "entry_price": null,
+      "close_price": 4448.96,
+      "pnl_units": 5.54,
+      "pnl_usd": 5.54,
       "reason": "stopped_or_external"
     }
   ]

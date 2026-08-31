@@ -7,3 +7,4 @@ ts_open,ts_close,side,entry_gap,close_gap,entry_price,close_price,pnl_units,pnl_
 2026-08-31T18:29:50Z,2026-08-31T18:33:29Z,BUY,-2.610,-2214.970,,2213.430,-3.41,-3.410,,,stopped_or_external
 ,2026-08-31T18:40:21Z,,,0.010,,4429.010,-2.88,-2.880,,,stopped_or_external
 ,2026-08-31T18:54:52Z,,,-1.570,,4433.630,1.05,1.050,,,stopped_or_external
+,2026-08-31T19:56:26Z,,,-1.940,,4448.960,5.54,5.540,,,stopped_or_external

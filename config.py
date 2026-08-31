@@ -64,6 +64,8 @@ FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)  # open+close one di
 TRADING_FEES_PER_TRADE_LOT = _env_float("STRAT_FEES_PER_LOT", 8.0)  # est. commission+swap per 1.0 lot in USD
 DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)    # min net profit (after fees+spread) to bank via dynamic exit
 PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)  # extra per 0.01 lot above the gross floor
+TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 3.0)   # arm trailing once net pnl >= this
+TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 1.0) # close if profit pulls back this much from peak (when armed)
 SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"  # trade only in XAU sessions
 USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"  # robust median/MAD scale for z
 

@@ -190,6 +190,10 @@ class CtraderSession:
         self._pos_cache = (_t.time(), list(found))
         defer.returnValue(found)
 
+    @property
+    def last_positions(self):
+        return list(getattr(self, "_pos_cache", (0, []))[1])
+
     @defer.inlineCallbacks
     def open_market(self, symbol_id, side, volume, sl=None, tp=None, label=None, comment=""):
         req = ProtoOANewOrderReq()

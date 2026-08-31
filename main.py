@@ -254,7 +254,12 @@ def dynamic_pnl_usd(pos, mid, digits, md):
 @inlineCallbacks
 def run_trade_cycle(sess, mid, global_price, stats, state, result):
     symbol_id = result["symbol_id"]
-    positions = yield sess.open_positions(symbol_id, max_age=6.0)
+    try:
+        positions = yield sess.open_positions(symbol_id, max_age=120.0)
+    except Exception as exc:
+        positions = sess.last_positions
+        result["open_positions_warn"] = "reconcile-failed:" + repr(exc)
+        print("open_positions failed, using cache:", repr(exc))
     result["open_positions"] = len(positions)
 
     gap = mid - global_price
@@ -300,8 +305,33 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
             and gross_pnl > 0
             and state.get("position", {}).get("entry_gap") is not None
         )
+
+        # --- dynamic profit tracking for the open position -------------------
+        st_pos = state.setdefault("position", {})
+        peak = float(st_pos.get("pnl_peak_usd") or net_pnl)
+        peak = max(peak, net_pnl)
+        st_pos["pnl_peak_usd"] = round(peak, 2)
+        st_pos["pnl_last_usd"] = round(net_pnl, 2)
+        track = st_pos.setdefault("pnl_track", [])
+        track.append(round(net_pnl, 2))
+        if len(track) > 120:
+            del track[:-120]
+        # trailing guard only arms once profit has run up enough, then locks in
+        # close when the profit pulls back from its peak by TRAILING_BACK_USD.
+        trailing_armed = (
+            config.TRAILING_ARM_USD > 0
+            and peak >= config.TRAILING_ARM_USD
+            and config.TRAILING_BACK_USD > 0
+        )
+        trailing_hit = trailing_armed and (peak - net_pnl) >= config.TRAILING_BACK_USD
+        result["trailing_armed"] = bool(trailing_armed)
+        result["pnl_peak_usd"] = round(peak, 2)
         result["profit_floor_usd"] = round(profit_floor, 2)
-        if z_exit_hit or profit_hit:
+
+        # once trailing is armed we let profit ride protected by the pull-back
+        # guard instead of locking in at the small static floor immediately.
+        close_now = z_exit_hit or (profit_hit and not trailing_armed) or trailing_hit
+        if close_now:
             yield sess.close_position(pos.positionId)
             try:
                 trad_end = yield sess.get_trader()
@@ -309,20 +339,24 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
             except Exception:
                 pnl_units = None
             close_gap = mid - global_price
-            reason = "profit_target" if profit_hit else "mean_revert"
+            if trailing_hit:
+                reason = "trailing"
+            else:
+                reason = "profit_target" if profit_hit else "mean_revert"
             _record_close(state, {
-                "ts_open": state.get("position", {}).get("opened_at"),
+                "ts_open": st_pos.get("opened_at"),
                 "ts_close": utcnow_iso(),
                 "side": side_name,
-                "entry_gap": state.get("position", {}).get("entry_gap"),
+                "entry_gap": st_pos.get("entry_gap"),
                 "close_gap": close_gap,
-                "entry_price": state.get("position", {}).get("entry_price"),
+                "entry_price": st_pos.get("entry_price"),
                 "close_price": mid,
                 "pnl_units": pnl_units,
                 "pnl_usd": pnl_units,
                 "reason": reason,
                 "pnl_net_usd": round(net_pnl, 2),
                 "fees_usd": round(fees, 2),
+                "pnl_peak_usd": round(peak, 2),
             })
             result["close_pnl_usd"] = pnl_units
             result["action"] = "close:" + reason
@@ -369,15 +403,14 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
             and in_session_now
         )
         if can_trade:
-            # hard guard: never double-open. Re-verify with a fresh reconcile
-            # (not the cached one) that there really is no open position.
-            try:
-                fresh = yield sess.open_positions(symbol_id, max_age=0.0)
-            except Exception:
-                fresh = positions
-            if fresh:
+            # hard guard: never double-open. The `positions`/last_positions
+            # cache is kept truthful (updated on our own open/close), so we
+            # never send a fresh (slow, blocking) reconcile here just to
+            # confirm emptiness — a timeout there is what froze the loop and
+            # stopped closes entirely.
+            if positions:
                 result["action"] = "hold:already_open"
-                result["open_positions"] = len(fresh)
+                result["open_positions"] = len(positions)
             else:
                 side = "SELL" if gap > 0 else "BUY"
                 sd = stats.get("mad") if config.USE_MAD else stats["sd"]
@@ -578,6 +611,9 @@ def _print_report(result, state):
         print("  position          :", json.dumps(result["position"]))
     if state.get("position"):
         print("  state.position    :", json.dumps(state["position"], ensure_ascii=False))
+    if result.get("trailing_armed"):
+        print(f"  trailing armed    : peak={result.get('pnl_peak_usd')} "
+              f"back={config.TRAILING_BACK_USD}")
     print("=" * 50)
 
 

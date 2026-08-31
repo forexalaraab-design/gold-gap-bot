@@ -231,14 +231,17 @@ def position_fees_usd(pos, md):
     return commission + swap + spread_est
 
 
-def dynamic_pnl_usd(pos, mid, sp_scale, md):
+def dynamic_pnl_usd(pos, mid, digits, md):
     """Live float PnL (dollars), net of fees, at the given mid.
 
-    pos.price is in scaled units (SPOT_SCALE); the dollar value of one unit of
-    volume equals one dollar per price-point, and volume counts in base units
-    (100 == 0.01 lot == one unit of gold). So PnL in USD = (mid - entry) * volume.
+    pos.price arrives in the instrument-price scale (10^digits, e.g. XAUUSD
+    digits=2 -> divide by 100), while `mid` is already in real dollars from the
+    spot bid/ask (SPOT_SCALE path). volume is in base units (100 == 0.01 lot).
+    So PnL in dollars = (mid - entry_dollars) * volume. Fees scale with account
+    moneyDigits (md).
     """
-    entry = pos.price / sp_scale
+    price_scale = 10.0 ** (digits or 2)
+    entry = pos.price / price_scale
     gross = (mid - entry) * pos.tradeData.volume
     if _side_name(pos.tradeData.tradeSide) == "SELL":
         gross = -gross
@@ -273,12 +276,12 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
     if positions:
         pos = positions[0]
         side_name = _side_name(pos.tradeData.tradeSide)
-        sp_scale = config.SPOT_SCALE
-        net_pnl, gross_pnl, fees = dynamic_pnl_usd(pos, mid, sp_scale, md)
+        digits = result.get("digits") or 2
+        net_pnl, gross_pnl, fees = dynamic_pnl_usd(pos, mid, digits, md)
         result["position"] = {
             "positionId": pos.positionId,
             "side": side_name,
-            "price": pos.price / sp_scale,
+            "price": pos.price / (10 ** digits),
             "label": pos.tradeData.label,
             "commission_usd": (pos.commission / (10 ** md)) if pos.commission else 0,
             "swap_usd": (pos.swap / (10 ** md)) if pos.swap else 0,

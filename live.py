@@ -82,6 +82,7 @@ def live_loop():
         result["symbol_id"] = symbol_id
         result["lot_size"] = info["lotSize"]
         result["volume"] = int(round(config.LOT * info["lotSize"]))
+        result["digits"] = info["digits"]
 
         sess.subscribe_persistent(symbol_id)
         print(f"live: subscribed to symbol {symbol_id}, "

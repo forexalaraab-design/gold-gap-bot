@@ -16,6 +16,7 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAClosePositionReq,
     ProtoOAReconcileReq,
     ProtoOATraderReq,
+    ProtoOAAmendPositionSLTPReq,
 )
 from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
 from twisted.internet import reactor, defer
@@ -185,12 +186,25 @@ class CtraderSession:
         req.timeInForce = Models.ProtoOATimeInForce.IMMEDIATE_OR_CANCEL
         req.label = label if label else random_label()
         req.comment = comment
-        if sl is not None:
-            req.stopLoss = sl
-        if tp is not None:
-            req.takeProfit = tp
         res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
         _check_error(res, "new order")
+        if sl is not None or tp is not None:
+            try:
+                yield self.set_sltp(res.position.positionId, sl, tp)
+            except Exception as exc:
+                print("WARN: could not set SL/TP after open:", repr(exc))
+        defer.returnValue(res)
+
+    @defer.inlineCallbacks
+    def set_sltp(self, position_id, sl=None, tp=None):
+        req = ProtoOAAmendPositionSLTPReq(
+            ctidTraderAccountId=self.account_id,
+            positionId=position_id,
+            stopLoss=sl,
+            takeProfit=tp,
+        )
+        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
+        _check_error(res, "amend sl/tp")
         defer.returnValue(res)
 
     @defer.inlineCallbacks

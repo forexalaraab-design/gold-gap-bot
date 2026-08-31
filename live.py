@@ -90,8 +90,12 @@ def live_loop():
 
         if config.FORCE_TEST_OPEN and config.ENVIRONMENT.strip().lower() == "demo":
             try:
-                bid0, ask0, _ = yield sess.get_spot(symbol_id)
-                mid0 = (bid0 + ask0) / 2 / config.SPOT_SCALE
+                spot0 = sess.latest_spot(symbol_id)
+                if spot0:
+                    mid0 = (spot0["bid"] + spot0["ask"]) / 2 / config.SPOT_SCALE
+                else:
+                    bid0, ask0, _ = yield sess.get_spot(symbol_id)
+                    mid0 = (bid0 + ask0) / 2 / config.SPOT_SCALE
                 vol = result["volume"]
                 res = yield sess.open_market(
                     symbol_id, "BUY", vol,
@@ -100,11 +104,10 @@ def live_loop():
                       f"positionId={res.position.positionId if res.position else None}")
                 if res.position:
                     pid = res.position.positionId
-                    entry0 = res.position.price / (10 ** (info["digits"] or 2))
-                    print(f"FORCE-TEST entry0={entry0:.2f} digits={info.get('digits')}")
-                    pts_scale = 10.0 ** (info.get("digits") or 2)
-                    for dist, scale in ((5.0, config.SPOT_SCALE), (5.0, pts_scale),
-                                        (0.5, pts_scale), (20.0, pts_scale), (50.0, pts_scale)):
+                    entry0 = float(res.position.price)
+                    print(f"FORCE-TEST entry0={entry0:.2f}")
+                    for dist, scale in ((5.0, config.SPOT_SCALE), (5.0, 100.0),
+                                        (0.5, 100.0), (20.0, 100.0), (50.0, 100.0)):
                         try:
                             yield sess.set_sltp(
                                 pid,

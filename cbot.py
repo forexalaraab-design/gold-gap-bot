@@ -113,7 +113,7 @@ class CtraderSession:
     @defer.inlineCallbacks
     def get_trader(self):
         res = _unwrap((yield self.client.send(ProtoOATraderReq(
-            ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=15)))
+            ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=30)))
         defer.returnValue(res.trader)
 
     # ---------------------------------------------------------------- symbol
@@ -172,15 +172,21 @@ class CtraderSession:
 
     # ---------------------------------------------------------------- positions
     @defer.inlineCallbacks
-    def open_positions(self, symbol_id):
+    def open_positions(self, symbol_id, max_age=0.0):
+        import time as _t
+        now = _t.time()
+        ctx = getattr(self, "_pos_cache", None)
+        if max_age and ctx and (now - ctx[0]) < max_age:
+            defer.returnValue(list(ctx[1]))
         res = _unwrap((yield self.client.send(ProtoOAReconcileReq(
-            ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=15)))
+            ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=30)))
         open_flags = (
             Models.ProtoOAPositionStatus.POSITION_STATUS_OPEN,
             Models.ProtoOAPositionStatus.POSITION_STATUS_CREATED,
         )
         found = [p for p in res.position
                  if p.tradeData.symbolId == symbol_id and p.positionStatus in open_flags]
+        self._pos_cache = (_t.time(), list(found))
         defer.returnValue(found)
 
     @defer.inlineCallbacks

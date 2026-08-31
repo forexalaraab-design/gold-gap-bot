@@ -41,8 +41,19 @@ class CtraderSession:
         self.waiter = None
         self.spot_cache = {}
         self._pos_cache = None
+        self._send_lock = defer.DeferredLock()
 
-    # ---------------------------------------------------------------- messaging
+    @defer.inlineCallbacks
+    def _send(self, req, timeout=30):
+        # Serialize all request/response pairs through a lock. The client fetch
+        # (getWaiter/matchResponse) is not safe under concurrent sends, which
+        # caused requests (close_position, reconcile) to hang 30s then TimeoutError.
+        d = self._send_lock.acquire()
+        d.addCallback(lambda _: self.client.send(req, responseTimeoutInSeconds=timeout))
+        d.addBoth(lambda r: (self._send_lock.release(), r)[1])
+        res = yield d
+        defer.returnValue(res)
+
     def _on_received(self, client, message):
         try:
             inner = _unwrap(message)
@@ -85,12 +96,12 @@ class CtraderSession:
     # ---------------------------------------------------------------- auth
     @defer.inlineCallbacks
     def authenticate(self, access_token):
-        res = _unwrap((yield self.client.send(ProtoOAApplicationAuthReq(
+        res = _unwrap((yield self._send(ProtoOAApplicationAuthReq(
             clientId=config.APP_CLIENT_ID.strip(),
             clientSecret=config.APP_CLIENT_SECRET.strip()), responseTimeoutInSeconds=15)))
         _check_error(res, "app auth")
 
-        res = _unwrap((yield self.client.send(ProtoOAGetAccountListByAccessTokenReq(
+        res = _unwrap((yield self._send(ProtoOAGetAccountListByAccessTokenReq(
             accessToken=access_token), responseTimeoutInSeconds=15)))
         _check_error(res, "account list")
         accounts = list(res.ctidTraderAccount)
@@ -103,7 +114,7 @@ class CtraderSession:
             match = accounts
         target = match[0]
 
-        res = _unwrap((yield self.client.send(ProtoOAAccountAuthReq(
+        res = _unwrap((yield self._send(ProtoOAAccountAuthReq(
             ctidTraderAccountId=target.ctidTraderAccountId,
             accessToken=access_token), responseTimeoutInSeconds=15)))
         _check_error(res, "account auth")
@@ -113,14 +124,14 @@ class CtraderSession:
     # ---------------------------------------------------------------- account info
     @defer.inlineCallbacks
     def get_trader(self):
-        res = _unwrap((yield self.client.send(ProtoOATraderReq(
+        res = _unwrap((yield self._send(ProtoOATraderReq(
             ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=30)))
         defer.returnValue(res.trader)
 
     # ---------------------------------------------------------------- symbol
     @defer.inlineCallbacks
     def find_symbol(self, name):
-        res = _unwrap((yield self.client.send(ProtoOASymbolsListReq(
+        res = _unwrap((yield self._send(ProtoOASymbolsListReq(
             ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=15)))
         for sym in res.symbol:
             if sym.symbolName == name:
@@ -132,7 +143,7 @@ class CtraderSession:
         req = ProtoOASymbolByIdReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId.append(symbol_id)  # repeated field in this schema
-        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
+        res = _unwrap((yield self._send(req, 15)))
         for sym in res.symbol:
             if sym.symbolId == symbol_id:
                 def _g(name, default=0):
@@ -179,7 +190,7 @@ class CtraderSession:
         ctx = getattr(self, "_pos_cache", None)
         if max_age and ctx and (now - ctx[0]) < max_age:
             defer.returnValue(list(ctx[1]))
-        res = _unwrap((yield self.client.send(ProtoOAReconcileReq(
+        res = _unwrap((yield self._send(ProtoOAReconcileReq(
             ctidTraderAccountId=self.account_id), responseTimeoutInSeconds=30)))
         open_flags = (
             Models.ProtoOAPositionStatus.POSITION_STATUS_OPEN,
@@ -205,7 +216,7 @@ class CtraderSession:
         req.timeInForce = Models.ProtoOATimeInForce.IMMEDIATE_OR_CANCEL
         req.label = label if label else random_label()
         req.comment = comment
-        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
+        res = _unwrap((yield self._send(req, 15)))
         _check_error(res, "new order")
         if sl is not None or tp is not None:
             try:
@@ -231,7 +242,7 @@ class CtraderSession:
             stopLoss=sl,
             takeProfit=tp,
         )
-        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
+        res = _unwrap((yield self._send(req, 15)))
         _check_error(res, "amend sl/tp")
         defer.returnValue(res)
 
@@ -240,7 +251,7 @@ class CtraderSession:
         req = ProtoOAClosePositionReq(ctidTraderAccountId=self.account_id, positionId=position_id)
         if volume is not None:
             req.volume = volume
-        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=30)))
+        res = _unwrap((yield self._send(req, 30)))
         _check_error(res, "close position")
         # drop the closed position from the cache so it cannot block a new open.
         import time as _t

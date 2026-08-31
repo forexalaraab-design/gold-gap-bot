@@ -338,36 +338,45 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
         # guard instead of locking in at the small static floor immediately.
         close_now = z_exit_hit or (profit_hit and not trailing_armed) or trailing_hit
         if close_now:
-            yield sess.close_position(pos.positionId)
             try:
-                trad_end = yield sess.get_trader()
-                pnl_units = (trad_end.balance - entry_units) / (10 ** md) if entry_units is not None else None
-            except Exception:
-                pnl_units = None
-            close_gap = mid - global_price
-            if trailing_hit:
-                reason = "trailing"
+                yield sess.close_position(pos.positionId)
+                close_ok = True
+            except Exception as exc:
+                close_ok = False
+                result["close_failed"] = repr(exc)
+                print("close_position failed (will retry next tick):", repr(exc))
+            if close_ok:
+                try:
+                    trad_end = yield sess.get_trader()
+                    pnl_units = (trad_end.balance - entry_units) / (10 ** md) if entry_units is not None else None
+                except Exception:
+                    pnl_units = None
+                close_gap = mid - global_price
+                if trailing_hit:
+                    reason = "trailing"
+                else:
+                    reason = "profit_target" if profit_hit else "mean_revert"
+                _record_close(state, {
+                    "ts_open": st_pos.get("opened_at"),
+                    "ts_close": utcnow_iso(),
+                    "side": side_name,
+                    "entry_gap": st_pos.get("entry_gap"),
+                    "close_gap": close_gap,
+                    "entry_price": st_pos.get("entry_price"),
+                    "close_price": mid,
+                    "pnl_units": pnl_units,
+                    "pnl_usd": pnl_units,
+                    "reason": reason,
+                    "pnl_net_usd": round(net_pnl, 2),
+                    "fees_usd": round(fees, 2),
+                    "pnl_peak_usd": round(peak, 2),
+                })
+                result["close_pnl_usd"] = pnl_units
+                result["action"] = "close:" + reason
+                state["position"] = None
+                state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
             else:
-                reason = "profit_target" if profit_hit else "mean_revert"
-            _record_close(state, {
-                "ts_open": st_pos.get("opened_at"),
-                "ts_close": utcnow_iso(),
-                "side": side_name,
-                "entry_gap": st_pos.get("entry_gap"),
-                "close_gap": close_gap,
-                "entry_price": st_pos.get("entry_price"),
-                "close_price": mid,
-                "pnl_units": pnl_units,
-                "pnl_usd": pnl_units,
-                "reason": reason,
-                "pnl_net_usd": round(net_pnl, 2),
-                "fees_usd": round(fees, 2),
-                "pnl_peak_usd": round(peak, 2),
-            })
-            result["close_pnl_usd"] = pnl_units
-            result["action"] = "close:" + reason
-            state["position"] = None
-            state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
+                result["action"] = "close_pending"
         else:
             result["action"] = "hold"
     else:

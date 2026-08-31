@@ -90,12 +90,6 @@ def live_loop():
 
         if config.FORCE_TEST_OPEN and config.ENVIRONMENT.strip().lower() == "demo":
             try:
-                spot0 = sess.latest_spot(symbol_id)
-                if spot0:
-                    mid0 = (spot0["bid"] + spot0["ask"]) / 2 / config.SPOT_SCALE
-                else:
-                    bid0, ask0, _ = yield sess.get_spot(symbol_id)
-                    mid0 = (bid0 + ask0) / 2 / config.SPOT_SCALE
                 vol = result["volume"]
                 res = yield sess.open_market(
                     symbol_id, "BUY", vol,

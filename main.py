@@ -239,12 +239,15 @@ def dynamic_pnl_usd(pos, mid, digits, md):
     """Live float PnL (dollars), net of fees, at the given mid.
 
     pos.price arrives as a real dollar float (e.g. 4428.76). volume is in base
-    units (100 == 0.01 lot). So PnL dollars = (mid - pos.price) * volume.
+    internal units (100 == 0.01 lot). The raw (mid - entry) * volume comes out
+    scaled by 10^md (account moneyDigits), same scale as commission, so we
+    divide by 10^md to express PnL in real dollars.
     """
     entry = pos.price
-    gross = (mid - entry) * pos.tradeData.volume
+    raw = (mid - entry) * pos.tradeData.volume
     if _side_name(pos.tradeData.tradeSide) == "SELL":
-        gross = -gross
+        raw = -raw
+    gross = raw / (10.0 ** (md or 2))
     fees = position_fees_usd(pos, md)
     return gross - fees, gross, fees
 

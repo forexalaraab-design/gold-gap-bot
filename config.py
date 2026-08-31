@@ -9,6 +9,13 @@ def _env_float(name, default):
     except (TypeError, ValueError):
         return default
 
+
+def _env_bool(name, default=False):
+    v = os.environ.get(name)
+    if v is None:
+        return default
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
 # ===== cTrader / FP Markets =====
 ENVIRONMENT = os.environ.get("CBOT_ENVIRONMENT", "demo")  # demo | live
 APP_CLIENT_ID = os.environ.get("CBOT_APP_CLIENT_ID", "")
@@ -53,6 +60,7 @@ SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past ent
 MAX_ENTRY_GAP_USD = _env_float("STRAT_MAX_ENTRY_GAP", 50.0)  # reject phantom/news spikes
 MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)    # reject/strip observations beyond this
 COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 15.0)  # pause re-entry after a close
+FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)  # open+close one diagnostic trade on start
 SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"  # trade only in XAU sessions
 USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"  # robust median/MAD scale for z
 

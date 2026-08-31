@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import config
 import gold_price
 import main
-from cbot import CtraderSession
+from cbot import CtraderSession, random_label
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.task import deferLater
@@ -86,6 +86,31 @@ def live_loop():
         sess.subscribe_persistent(symbol_id)
         print(f"live: subscribed to symbol {symbol_id}, "
               f"volume={result['volume']}, balance_usd={result['balance_usd']}")
+
+        if config.FORCE_TEST_OPEN and config.ENVIRONMENT.strip().lower() == "demo":
+            try:
+                bid0, ask0, _ = yield sess.get_spot(symbol_id)
+                mid0 = (bid0 + ask0) / 2 / config.SPOT_SCALE
+                vol = result["volume"]
+                res = yield sess.open_market(
+                    symbol_id, "BUY", vol,
+                    sl=int(round((mid0 - 5.0) * config.SPOT_SCALE)),
+                    tp=int(round((mid0 + 5.0) * config.SPOT_SCALE)),
+                    label=random_label(), comment="")
+                print(f"FORCE-TEST OPEN OK orderId={res.order.orderId} "
+                      f"positionId={res.position.positionId if res.position else None}")
+                if res.position:
+                    try:
+                        yield sess.set_sltp(res.position.positionId,
+                                            int(round((mid0 - 5.0) * config.SPOT_SCALE)),
+                                            int(round((mid0 + 5.0) * config.SPOT_SCALE)))
+                        print("FORCE-TEST SETSLTP OK")
+                    except Exception as exc:
+                        print("FORCE-TEST SETSLTP FAIL:", repr(exc))
+                    yield sess.close_position(res.position.positionId)
+                    print("FORCE-TEST CLOSE OK")
+            except Exception as exc:
+                print("FORCE-TEST FAIL:", repr(exc))
 
         end = time.time() + config.DURATION_MIN * 60
         last_save = time.time()

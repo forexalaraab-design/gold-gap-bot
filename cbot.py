@@ -40,6 +40,7 @@ class CtraderSession:
         self.account_id = None
         self.waiter = None
         self.spot_cache = {}
+        self._pos_cache = None
 
     # ---------------------------------------------------------------- messaging
     def _on_received(self, client, message):
@@ -207,6 +208,15 @@ class CtraderSession:
                 yield self.set_sltp(res.position.positionId, sl, tp)
             except Exception as exc:
                 print("WARN: could not set SL/TP after open:", repr(exc))
+        # keep the open-position cache truthful so the strategy never thinks
+        # there is no open position right after WE opened one (would double-open).
+        import time as _t
+        if res.position is not None:
+            symid = res.position.tradeData.symbolId
+            lst = list(getattr(self, "_pos_cache", (0, []))[1])
+            lst = [p for p in lst if p.positionId != res.position.positionId]
+            lst.append(res.position)
+            self._pos_cache = (_t.time(), lst)
         defer.returnValue(res)
 
     @defer.inlineCallbacks
@@ -226,8 +236,13 @@ class CtraderSession:
         req = ProtoOAClosePositionReq(ctidTraderAccountId=self.account_id, positionId=position_id)
         if volume is not None:
             req.volume = volume
-        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
+        res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=30)))
         _check_error(res, "close position")
+        # drop the closed position from the cache so it cannot block a new open.
+        import time as _t
+        lst = list(getattr(self, "_pos_cache", (0, []))[1])
+        lst = [p for p in lst if p.positionId != position_id]
+        self._pos_cache = (_t.time(), lst)
         defer.returnValue(res)
 
     def stop(self):

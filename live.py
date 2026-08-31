@@ -90,32 +90,37 @@ def live_loop():
 
         if config.FORCE_TEST_OPEN and config.ENVIRONMENT.strip().lower() == "demo":
             try:
-                vol = result["volume"]
-                res = yield sess.open_market(
-                    symbol_id, "BUY", vol,
-                    label=random_label(), comment="")
-                print(f"FORCE-TEST OPEN OK orderId={res.order.orderId} "
-                      f"positionId={res.position.positionId if res.position else None}")
-                if res.position:
-                    pid = res.position.positionId
-                    entry0 = float(res.position.price)
-                    print(f"FORCE-TEST entry0={entry0:.2f}")
-                    for dist, scale in ((5.0, config.SPOT_SCALE), (5.0, 100.0),
-                                        (0.5, 100.0), (20.0, 100.0), (50.0, 100.0)):
+                existing = yield sess.open_positions(symbol_id)
+                if existing:
+                    print(f"FORCE-TEST SKIP (already open): "
+                          f"{[(p.positionId, float(p.price)) for p in existing]}")
+                else:
+                    vol = result["volume"]
+                    res = yield sess.open_market(
+                        symbol_id, "BUY", vol,
+                        label=random_label(), comment="")
+                    print(f"FORCE-TEST OPEN OK orderId={res.order.orderId} "
+                          f"positionId={res.position.positionId if res.position else None}")
+                    if res.position:
+                        pid = res.position.positionId
+                        entry0 = float(res.position.price)
+                        print(f"FORCE-TEST entry0={entry0:.2f}")
+                        for dist, scale in ((5.0, config.SPOT_SCALE), (5.0, 100.0),
+                                            (0.5, 100.0), (20.0, 100.0), (50.0, 100.0)):
+                            try:
+                                yield sess.set_sltp(
+                                    pid,
+                                    int(round((entry0 - dist) * scale)),
+                                    int(round((entry0 + dist) * scale)))
+                                print(f"FORCE-TEST SETSLTP OK dist={dist} scale={int(scale)}")
+                                break
+                            except Exception as exc:
+                                print(f"FORCE-TEST SETSLTP FAIL dist={dist} scale={int(scale)}: {exc!r}")
                         try:
-                            yield sess.set_sltp(
-                                pid,
-                                int(round((entry0 - dist) * scale)),
-                                int(round((entry0 + dist) * scale)))
-                            print(f"FORCE-TEST SETSLTP OK dist={dist} scale={int(scale)}")
-                            break
+                            yield sess.close_position(pid)
+                            print("FORCE-TEST CLOSE OK")
                         except Exception as exc:
-                            print(f"FORCE-TEST SETSLTP FAIL dist={dist} scale={int(scale)}: {exc!r}")
-                    try:
-                        yield sess.close_position(pid)
-                        print("FORCE-TEST CLOSE OK")
-                    except Exception as exc:
-                        print("FORCE-TEST CLOSE FAIL:", repr(exc))
+                            print("FORCE-TEST CLOSE FAIL:", repr(exc))
             except Exception as exc:
                 print("FORCE-TEST FAIL:", repr(exc))
 

@@ -369,47 +369,57 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
             and in_session_now
         )
         if can_trade:
-            side = "SELL" if gap > 0 else "BUY"
-            sd = stats.get("mad") if config.USE_MAD else stats["sd"]
-            sd = sd or stats["sd"]
-            sl_dist = max(config.SL_AFTER_ENTRY_USD, (config.Z_STOP - config.Z_ENTRY) * sd)
-            min_tp_dist = max(0.3 * sd, 1.0)
-            if side == "SELL":
-                sl = mid + sl_dist
-                tp = min(mid - min_tp_dist, mid - 0.9 * abs(gap))
-            else:
-                sl = mid - sl_dist
-                tp = max(mid + min_tp_dist, mid + 0.9 * abs(gap))
-            print(f"order-request side={side} mid={mid:.2f} sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "
-                  f"gap={gap:.2f} tp_dist={(mid - tp) if side == 'SELL' else (tp - mid):.2f}")
+            # hard guard: never double-open. Re-verify with a fresh reconcile
+            # (not the cached one) that there really is no open position.
             try:
-                trad_pre = yield sess.get_trader()
+                fresh = yield sess.open_positions(symbol_id, max_age=0.0)
             except Exception:
-                trad_pre = None
-            vol = result["volume"]
-            res = yield sess.open_market(
-                symbol_id, side, vol,
-                sl=_to_int(sl),
-                tp=_to_int(tp),
-                label=cbot.random_label(),
-                comment="")
-            order = res.order
-            result["action"] = "open:" + side
-            result["order"] = {
-                "orderId": order.orderId,
-                "side": side,
-                "executionPrice": order.executionPrice if order.executionPrice else None,
-                "tradeData": {"volume": order.tradeData.volume, "label": order.tradeData.label},
-            }
-            state["position"] = {
-                "positionId": res.position.positionId if res.position else None,
-                "side": side,
-                "entry_gap": gap,
-                "entry_price": (order.executionPrice / config.SPOT_SCALE) if order.executionPrice else None,
-                "opened_at": utcnow_iso(),
-            }
-            state["entry_balance_units"] = trad_pre.balance if trad_pre is not None else None
-            state["cooldown_until"] = 0
+                fresh = positions
+            if fresh:
+                result["action"] = "hold:already_open"
+                result["open_positions"] = len(fresh)
+            else:
+                side = "SELL" if gap > 0 else "BUY"
+                sd = stats.get("mad") if config.USE_MAD else stats["sd"]
+                sd = sd or stats["sd"]
+                sl_dist = max(config.SL_AFTER_ENTRY_USD, (config.Z_STOP - config.Z_ENTRY) * sd)
+                min_tp_dist = max(0.3 * sd, 1.0)
+                if side == "SELL":
+                    sl = mid + sl_dist
+                    tp = min(mid - min_tp_dist, mid - 0.9 * abs(gap))
+                else:
+                    sl = mid - sl_dist
+                    tp = max(mid + min_tp_dist, mid + 0.9 * abs(gap))
+                print(f"order-request side={side} mid={mid:.2f} sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "
+                      f"gap={gap:.2f} tp_dist={(mid - tp) if side == 'SELL' else (tp - mid):.2f}")
+                try:
+                    trad_pre = yield sess.get_trader()
+                except Exception:
+                    trad_pre = None
+                vol = result["volume"]
+                res = yield sess.open_market(
+                    symbol_id, side, vol,
+                    sl=_to_int(sl),
+                    tp=_to_int(tp),
+                    label=cbot.random_label(),
+                    comment="")
+                order = res.order
+                result["action"] = "open:" + side
+                result["order"] = {
+                    "orderId": order.orderId,
+                    "side": side,
+                    "executionPrice": order.executionPrice if order.executionPrice else None,
+                    "tradeData": {"volume": order.tradeData.volume, "label": order.tradeData.label},
+                }
+                state["position"] = {
+                    "positionId": res.position.positionId if res.position else None,
+                    "side": side,
+                    "entry_gap": gap,
+                    "entry_price": (order.executionPrice / config.SPOT_SCALE) if order.executionPrice else None,
+                    "opened_at": utcnow_iso(),
+                }
+                state["entry_balance_units"] = trad_pre.balance if trad_pre is not None else None
+                state["cooldown_until"] = 0
         else:
             reason = "no_signal"
             if config.MODE != "trade":

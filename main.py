@@ -300,14 +300,20 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
         profit_floor = config.DYNAMIC_PROFIT_FLOOR_USD + \
             config.PROFIT_FLOOR_PER_OLOT_USD * (pos.tradeData.volume / 10000.0)
         z_exit_hit = result["z"] is not None and abs(result["z"]) <= config.Z_EXIT
+
+        # --- dynamic profit tracking for the open position -------------------
+        # define the persistent position state FIRST so it is never None when we
+        # call .get() on it below (this was the NoneType.get crash).
+        st_pos = state.setdefault("position", {})
+        if not isinstance(st_pos, dict):
+            st_pos = {}
+            state["position"] = st_pos
         profit_hit = (
             net_pnl >= profit_floor
             and gross_pnl > 0
-            and state.get("position", {}).get("entry_gap") is not None
+            and st_pos.get("entry_gap") is not None
         )
 
-        # --- dynamic profit tracking for the open position -------------------
-        st_pos = state.setdefault("position", {})
         peak = float(st_pos.get("pnl_peak_usd") or net_pnl)
         peak = max(peak, net_pnl)
         st_pos["pnl_peak_usd"] = round(peak, 2)

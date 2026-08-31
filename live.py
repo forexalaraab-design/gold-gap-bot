@@ -190,7 +190,7 @@ def live_loop():
             except Exception as exc:
                 tick_result["action"] = "error"
                 import traceback as _tb
-                tick_result["error"] = "TB::" + repr(exc) + "::" + _tb.format_exc(limit=6).replace("\n", " | ")
+                tick_result["error"] = "TB::" + repr(exc) + "::" + _tb.format_exc(limit=30).replace("\n", " | ")
             tick_count += 1
             z = tick_result.get("z")
             zs = f"{z:.2f}" if z is not None else "-"

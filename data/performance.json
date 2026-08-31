@@ -1,0 +1,12 @@
+{
+  "trades": 1,
+  "wins": 1,
+  "losses": 0,
+  "win_rate": 100.0,
+  "total_pnl_usd": 0.4,
+  "avg_pnl_usd": 0.4,
+  "best_usd": 0.4,
+  "worst_usd": 0.4,
+  "max_drawdown_usd": 0.0,
+  "updated": "2026-08-31T15:42:56Z"
+}

@@ -134,11 +134,19 @@ class CtraderSession:
         res = _unwrap((yield self.client.send(req, responseTimeoutInSeconds=15)))
         for sym in res.symbol:
             if sym.symbolId == symbol_id:
+                def _g(name, default=0):
+                    f = sym.DESCRIPTOR.fields_by_name.get(name)
+                    return getattr(sym, name, 0) if f is not None else default
                 defer.returnValue({
                     "digits": sym.digits,
                     "lotSize": sym.lotSize,
                     "minVolume": sym.minVolume,
                     "stepVolume": sym.stepVolume,
+                    "pipSize": _g("pipSize"),
+                    "pipPosition": _g("pipPosition"),
+                    "minDistance": _g("minDistance"),
+                    "minStopLossDistance": _g("minStopLossDistance"),
+                    "minTakeProfitDistance": _g("minTakeProfitDistance"),
                 })
         raise RuntimeError("symbol details not returned for id " + str(symbol_id))
 

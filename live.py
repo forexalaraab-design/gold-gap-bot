@@ -100,16 +100,20 @@ def live_loop():
                       f"positionId={res.position.positionId if res.position else None}")
                 if res.position:
                     pid = res.position.positionId
-                    entry0 = res.position.price / config.SPOT_SCALE
-                    for dist in (50.0, 0.5, 5.0, 20.0):
+                    entry0 = res.position.price / (10 ** (info["digits"] or 2))
+                    print(f"FORCE-TEST entry0={entry0:.2f} digits={info.get('digits')}")
+                    pts_scale = 10.0 ** (info.get("digits") or 2)
+                    for dist, scale in ((5.0, config.SPOT_SCALE), (5.0, pts_scale),
+                                        (0.5, pts_scale), (20.0, pts_scale), (50.0, pts_scale)):
                         try:
-                            yield sess.set_sltp(pid,
-                                                int(round((entry0 - dist) * config.SPOT_SCALE)),
-                                                int(round((entry0 + dist) * config.SPOT_SCALE)))
-                            print(f"FORCE-TEST SETSLTP OK at dist={dist}")
+                            yield sess.set_sltp(
+                                pid,
+                                int(round((entry0 - dist) * scale)),
+                                int(round((entry0 + dist) * scale)))
+                            print(f"FORCE-TEST SETSLTP OK dist={dist} scale={int(scale)}")
                             break
                         except Exception as exc:
-                            print(f"FORCE-TEST SETSLTP FAIL dist={dist}: {exc!r}")
+                            print(f"FORCE-TEST SETSLTP FAIL dist={dist} scale={int(scale)}: {exc!r}")
                     try:
                         yield sess.close_position(pid)
                         print("FORCE-TEST CLOSE OK")

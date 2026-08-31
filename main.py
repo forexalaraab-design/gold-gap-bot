@@ -138,6 +138,10 @@ def _to_int(price):
     return int(round(price * config.SPOT_SCALE))
 
 
+def _to_pt(price, digits):
+    return int(round(price * (10.0 ** (digits or 2))))
+
+
 def in_session(dt):
     if not config.SESSION_GUARD:
         return True

@@ -63,6 +63,7 @@ MAX_ENTRY_GAP_USD       = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)   # قبل: 50
 gap_max_gap_pct           = 0.10   # 10% من سعر الصرف (قبل: 0.15)
 MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)    # reject/strip observations beyond this
 COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 15.0)  # pause re-entry after a close
+MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 10))  # أقصى عدد صفقات يومياً
 FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)  # open+close one diagnostic trade on start
 TRADING_FEES_PER_TRADE_LOT = _env_float("STRAT_FEES_PER_LOT", 8.0)  # est. commission+swap per 1.0 lot in USD
 DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)    # min net profit (after fees+spread) to bank via dynamic exit

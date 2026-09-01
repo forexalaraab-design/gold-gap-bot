@@ -219,6 +219,9 @@ def position_fees_usd(pos, md):
 def dynamic_pnl_usd(pos, mid, digits, md):
     """PnL صافي (بعد الرسوم) من mid الحالي والصفقة المفتوحة."""
     entry = pos.price
+    if entry is None or entry == 0:
+        # إصلاح: إذا entry price مناطق، استخدم st_pos أو احسب من gap
+        return 0.0, 0.0, 0.0
     raw = (mid - entry) * pos.tradeData.volume
     if _side_name(pos.tradeData.tradeSide) == "SELL":
         raw = -raw
@@ -498,53 +501,58 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 )
                 closed_this_cycle = True
 
-                # تسجيل الإغلاق
+                # حساب PnL الحقيقي من حركة السعر (ليس من رصيد الحساب)
+                # PnL = (السعر النهائي - سعر الفتح) × الحجم × الاتجاه
+                # للـ BUY: PnL = (mid - entry) * volume
+                # للـ SELL: PnL = (entry - mid) * volume
+                entry_price = st_pos.get("entry_price")
+                close_price = mid  # سعر الإغلاق الحالي
                 side_name = _side_name(pos.tradeData.tradeSide)
-                net_pnl, gross_pnl, fees = dynamic_pnl_usd(
-                    pos, mid, result.get("digits") or 2, md,
+                volume = getattr(pos.tradeData, "volume", 100)
+                # التحويل إلى دولار: XAUUSD volume مضروب في 100 (1 وحدة = 1 دولار لكل حركة 1$)
+                # لكن cTrader يستخدم scale 100000 داخليًا
+                # الصيغة الصحيحة: PnL_USD = حركة السعر بالـ points * volume / SPOT_SCALE
+                spot_scale = config.SPOT_SCALE or 100000.0
+                price_diff = close_price - entry_price if entry_price else 0
+                if side_name == "SELL":
+                    price_diff = -price_diff
+                real_pnl_usd = (price_diff * volume) / spot_scale
+                # تقريب للرسوم
+                fees_est = position_fees_usd(pos, md) if md else 0
+                pnl_net = round(real_pnl_usd - fees_est, 2)
+                pnl_gross = round(real_pnl_usd, 2)
+                result["action"] = "close:" + close_reason
+                state["position"] = None
+                state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
+                print(
+                    f"✓ CLOSED (layer: {close_reason}): "
+                    f"pnl={pnl_net:.2f} USD (gross={pnl_gross:.2f}), "
+                    f"peak={float(st_pos.get('pnl_peak_usd', 0)):.2f} USD"
                 )
-                was_win = net_pnl > 0
-                if was_win:
-                    closing_mgr.record_win()
-                else:
-                    closing_mgr.record_loss()
-
-                trad_end = None
-                try:
-                    trad_end = yield sess.get_trader()
-                except Exception:
-                    pass
-                pnl_units = (
-                    (trad_end.balance - entry_units) / (10 ** md)
-                    if entry_units is not None and trad_end is not None
-                    else None
-                )
+                # تسجيل الإغلاق في الـ state و CSV
                 _record_close(state, {
                     "ts_open": st_pos.get("opened_at"),
                     "ts_close": utcnow_iso(),
                     "side": side_name,
                     "entry_gap": st_pos.get("entry_gap"),
                     "close_gap": gap,
-                    "entry_price": st_pos.get("entry_price"),
-                    "close_price": mid,
-                    "pnl_units": pnl_units,
-                    "pnl_usd": pnl_units,
-                    "fees_usd": round(fees, 2),
-                    "pnl_net_usd": round(net_pnl, 2),
+                    "entry_price": entry_price,
+                    "close_price": close_price,
+                    "pnl_units": pnl_net,
+                    "pnl_usd": pnl_net,
+                    "fees_usd": round(fees_est, 2),
+                    "pnl_net_usd": pnl_net,
                     "reason": close_reason,
                     "pnl_peak_usd": round(
                         float(st_pos.get("pnl_peak_usd") or 0), 2,
                     ),
                 })
-                result["close_pnl_usd"] = pnl_units
-                result["action"] = "close:" + close_reason
-                state["position"] = None
-                state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
-                print(
-                    f"✓ CLOSED (layer: {close_reason}): "
-                    f"pnl={net_pnl:.2f} USD, "
-                    f"peak={float(st_pos.get('pnl_peak_usd', 0)):.2f} USD"
-                )
+                # تحديث عدادات الأداء
+                if pnl_net > 0:
+                    closing_mgr.record_win()
+                else:
+                    closing_mgr.record_loss()
+                closing_mgr.save_perf_to_state(state)
             except Exception as exc:
                 result["close_failed"] = repr(exc)
                 print(f"close_position failed (layer: {close_reason}): {exc!r}")

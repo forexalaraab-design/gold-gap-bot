@@ -1,21 +1,21 @@
 {
   "position": {
-    "positionId": 41213778,
-    "side": "SELL",
-    "entry_gap": 2.5650980000000345,
+    "positionId": 41213798,
+    "side": "BUY",
+    "entry_gap": -0.0049019999996744446,
     "entry_price": 0.0,
-    "opened_at": "2026-09-01T22:01:05Z",
+    "opened_at": "2026-09-01T22:03:35Z",
     "pnl_peak_usd": 0.0,
     "pnl_track": []
   },
   "stats": {
     "n": 48,
-    "mean": -1.3901949999999488,
-    "sd": 0.0,
+    "mean": -1.5854791250000062,
+    "sd": 0.8885456005740483,
     "median": -1.3901949999999488,
     "mad": 0.0
   },
-  "last_run": "2026-09-01T22:01:05Z",
+  "last_run": "2026-09-01T22:03:35Z",
   "money_digits": 2,
   "entry_balance_units": 88262,
   "cooldown_until": 1788291115.1469474,
@@ -189,7 +189,7 @@
   "perf": {
     "running_daily_pnl": 0.0,
     "consecutive_losses": 0,
-    "trades_today": 1,
-    "last_updated": "2026-09-01T22:01:05Z"
+    "trades_today": 2,
+    "last_updated": "2026-09-01T22:03:35Z"
   }
 }

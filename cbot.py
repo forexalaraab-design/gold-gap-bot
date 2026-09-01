@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-cbot.py — غلاف cTrader Open API المت 강화된 (إغلاق + reconcile + متابعة)
+cbot.py — غلاف cTrader Open API المت 강화 (إغلاق + reconcile + متابعة)
 يدعم: اتصال، مصادقة، رمز، أسعار، صفقات، إغلاق مع volume حتمي، reconcile.
 """
 

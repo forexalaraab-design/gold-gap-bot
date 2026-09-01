@@ -636,11 +636,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     if res.position else None,
                     "side": side,
                     "entry_gap": gap,
-                    "entry_price": (
-                        order.executionPrice / config.SPOT_SCALE
-                        if order.executionPrice
-                        else None
-                    ),
+                    "entry_price": float(res.position.price)
+                    if res.position and res.position.price else None,
                     "opened_at": utcnow_iso(),
                     "pnl_peak_usd": 0.0,
                     "pnl_track": [],

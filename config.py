@@ -53,7 +53,7 @@ MODE = os.environ.get("CBOT_MODE", "log")
 # Self-built thresholds (statistical), replaced by measured scale after warmup.
 # Tunables can be overridden via repo secrets (STRAT_*) so the effective
 # configuration is never visible in the public repository.
-Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.0)          # enter when |z| >= Z_ENTRY
+Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.5)          # enter when |z| >= Z_ENTRY (was 2.0)
 Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)            # exit when |z| <= Z_EXIT (reverted)
 Z_STOP = _env_float("STRAT_Z_STOP", 3.5)            # hard stop for the gap itself (sanity)
 SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past entry (gap units)

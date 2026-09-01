@@ -1,3 +1,17 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+main.py — استراتيجية احترافية مع إغلاق متعدد الطبقات
+تغييرات رئيسية:
+  1. تحسين حساب PnL مع اعتبار البحر темпераيا (CFDs)
+  2. الطبقة 1: إغلاق عند الوصول للذروة المطلقة + تراجع (Trailing)
+  3. الطبقة 2: إغلاق عند وصول الخسارة للحد الأقصى (Max Loss)
+  4. الطبقة 3: إغلاق عند تجاوز المدة القصوى (Max Hold Time)
+  5. الطبقة 4: دائرة أمان Daily Loss ومتتالية الخسائر
+  6. الطبقة 5: إغلاق عند عودة الفجوة لـ Z_EXIT أو تجاوز Z_STOP
+  7. حفظ state شمولي يشمل كل الطبقات وبيانات الأداء
+"""
+
 import csv
 import json
 import os
@@ -17,6 +31,7 @@ from twisted.internet.defer import inlineCallbacks
 # helpers
 # ============================================================================
 
+
 def utcnow_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -26,22 +41,28 @@ def resolve_token():
         token = config.CBOT_ACCESS_TOKEN.strip()
     else:
         if not os.path.exists(config.TOKEN_FILE):
-            sys.exit("No token found: set CBOT_ACCESS_TOKEN or run auth_tool.py first")
+            raise RuntimeError(
+                "No token found: set CBOT_ACCESS_TOKEN or run auth_tool.py first"
+            )
         with open(config.TOKEN_FILE, encoding="utf-8") as f:
             token = json.load(f).get("accessToken", "")
         if not token:
-            sys.exit("token.json has no accessToken")
+            raise RuntimeError("token.json has no accessToken")
     return token
 
 
 def refresh_token():
     refresh = config.CBOT_REFRESH_TOKEN
     if not refresh and os.path.exists(config.TOKEN_FILE):
-        refresh = json.load(open(config.TOKEN_FILE, encoding="utf-8")).get("refreshToken", "")
+        refresh = json.load(open(config.TOKEN_FILE, encoding="utf-8")).get(
+            "refreshToken", ""
+        )
     if not refresh:
         return None
-    res = Auth(config.APP_CLIENT_ID.strip(), config.APP_CLIENT_SECRET.strip(),
-               config.APP_REDIRECT_URI).refreshToken(refresh)
+    res = Auth(
+        config.APP_CLIENT_ID.strip(), config.APP_CLIENT_SECRET.strip(),
+        config.APP_REDIRECT_URI
+    ).refreshToken(refresh)
     new_access = res.get("accessToken") or res.get("access_token")
     if not new_access:
         return None
@@ -53,7 +74,10 @@ def refresh_token():
         pass
     if os.environ.get("CBOT_TOKEN_SYNC") == "1":
         try:
-            sync_tokens(new_access, res.get("refreshToken") or res.get("refresh_token") or refresh)
+            sync_tokens(
+                new_access,
+                res.get("refreshToken") or res.get("refresh_token") or refresh,
+            )
         except Exception as exc:
             print("token sync failed:", exc)
     return new_access
@@ -61,14 +85,20 @@ def refresh_token():
 
 def sync_tokens(access, refresh):
     import subprocess
+
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     gh = os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
     if not repo or not gh:
         return
     env = dict(os.environ, GH_TOKEN=gh)
-    for name, value in (("CBOT_ACCESS_TOKEN", access), ("CBOT_REFRESH_TOKEN", refresh)):
-        subprocess.run(["gh", "secret", "set", name, "-b", value,
-                        "-R", repo], env=env, capture_output=True)
+    for name, value in (
+        ("CBOT_ACCESS_TOKEN", access),
+        ("CBOT_REFRESH_TOKEN", refresh),
+    ):
+        subprocess.run(
+            ["gh", "secret", "set", name, "-b", value, "-R", repo],
+            env=env, capture_output=True,
+        )
     print("token secrets updated in actions repo")
 
 
@@ -96,7 +126,9 @@ def save_history(rows):
         writer = csv.writer(f)
         writer.writerow(["ts", "global", "platform", "gap"])
         for r in rows:
-            writer.writerow([r["ts"], r["global"], r["platform"], r["gap"]])
+            writer.writerow(
+                [r["ts"], r["global"], r["platform"], r["gap"]]
+            )
 
 
 def load_state():
@@ -129,9 +161,18 @@ def compute_stats(rows, verbose=True):
         var = sum((g - mean) ** 2 for g in gaps) / (n - 1)
     else:
         var = 0.0
-    median = gaps[n // 2] if n % 2 else (gaps[n // 2 - 1] + gaps[n // 2]) / 2
-    mad = sorted(abs(g - median) for g in gaps)[n // 2] * 1.4826 if n else 0.0
-    return {"n": n, "mean": mean, "sd": var ** 0.5, "median": median, "mad": mad}
+    median = (
+        gaps[n // 2]
+        if n % 2
+        else (gaps[n // 2 - 1] + gaps[n // 2]) / 2
+    )
+    mad = (
+        sorted(abs(g - median) for g in gaps)[n // 2] * 1.4826
+        if n
+        else 0.0
+    )
+    return {"n": n, "mean": mean, "sd": var ** 0.5,
+            "median": median, "mad": mad}
 
 
 def _to_int(price):
@@ -146,13 +187,174 @@ def in_session(dt):
     if not config.SESSION_GUARD:
         return True
     wd = dt.weekday()
-    if wd >= 5:          # Sat / Sun
+    if wd >= 5:  # Sat / Sun
         return False
-    if wd == 4:          # Friday: no entries after 22:20 UTC
+    if wd == 4:  # Friday: no entries after 22:20 UTC
         return dt.hour < 22 or (dt.hour == 22 and dt.minute <= 20)
-    if wd == 0:          # Monday: skip the first 10 min after reopen
+    if wd == 0:  # Monday: skip the first 10 min after reopen
         return not (dt.hour == 0 and dt.minute < 10)
     return True
+
+
+def _side_name(trade_side):
+    from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
+    for name, num in Models.ProtoOATradeSide.DESCRIPTOR.values_by_name.items():
+        if num == trade_side:
+            return name
+    return str(trade_side)
+
+
+def position_fees_usd(pos, md):
+    """تكلفة الصفقة الإجمالية (عمولة + س왑 + spread مقدر)."""
+    commission = getattr(pos, "commission", None) or 0
+    swap = getattr(pos, "swap", None) or 0
+    if md:
+        commission = commission / (10 ** md)
+        swap = swap / (10 ** md)
+    vol_lots = pos.tradeData.volume / 10000.0 if pos.tradeData.volume else 0
+    spread_est = config.TRADING_FEES_PER_TRADE_LOT * max(vol_lots, 0.01)
+    return commission + swap + spread_est
+
+
+def dynamic_pnl_usd(pos, mid, digits, md):
+    """PnL صافي (بعد الرسوم) من mid الحالي والصفقة المفتوحة."""
+    entry = pos.price
+    raw = (mid - entry) * pos.tradeData.volume
+    if _side_name(pos.tradeData.tradeSide) == "SELL":
+        raw = -raw
+    gross = raw / (10.0 ** (md or 2))
+    fees = position_fees_usd(pos, md)
+    return gross - fees, gross, fees
+
+
+# ============================================================================
+# قنوات إغلاق متعددة الطبقات
+# ============================================================================
+
+
+class ClosingManager:
+    """يدير 5 طبقات إغلاق ويتخذ القرار النهائي."""
+
+    def __init__(self, state, config_obj):
+        self.state = state
+        self.cfg = config_obj
+        # إحصائيات الأداء المتراكمة
+        self.daily_pnl = 0.0
+        self.consecutive_losses = 0
+        self.trade_count_today = 0
+
+    def init_from_state(self, state):
+        """استعادة إحصائيات الأداء من state."""
+        perf = state.get("perf", {})
+        self.daily_pnl = perf.get("running_daily_pnl", 0.0)
+        self.consecutive_losses = perf.get("consecutive_losses", 0)
+        self.trade_count_today = perf.get("trades_today", 0)
+
+    def save_perf_to_state(self, state):
+        """حفظ إحصائيات الأداء في state."""
+        state["perf"] = {
+            "running_daily_pnl": round(self.daily_pnl, 2),
+            "consecutive_losses": self.consecutive_losses,
+            "trades_today": self.trade_count_today,
+            "last_updated": utcnow_iso(),
+        }
+
+    def can_trade_today(self):
+        """التحقق مما إذا كان يمكن فتح صفقة اليوم (دائرة أمان Daily Loss)."""
+        if self.daily_pnl <= -self.cfg.MAX_DAILY_LOSS_USD:
+            return False
+        if self.consecutive_losses >= self.cfg.MAX_CONSECUTIVE_LOSSES:
+            return False
+        return True
+
+    def record_loss(self):
+        """تسجيل خسارة وتحديث العدادات."""
+        self.consecutive_losses += 1
+        self.trade_count_today += 1
+        self.daily_pnl -= 1  # تقريب
+
+    def record_win(self):
+        """تسجيل ربح وإعادة تعيين عداد الخسائر."""
+        self.consecutive_losses = 0
+        self.trade_count_today += 1
+        self.daily_pnl += 1  # تقريب
+
+    def check_close(self, position, mid, global_price, stats,
+                    st_pos, now, money_digits):
+        """فحص جميع طبقات الإغلاق واقتراح الإغلاق إن لزم.
+
+        يُرجع (should_close: bool, reason: str or None)
+        """
+        side_name = _side_name(position.tradeData.tradeSide)
+        digits = getattr(position, "digits", 2) or 2
+        net_pnl, gross_pnl, fees = dynamic_pnl_usd(position, mid,
+                                                     digits, money_digits)
+        entry_gap = st_pos.get("entry_gap")
+        entry_price = st_pos.get("entry_price")
+        opened_at = st_pos.get("opened_at")
+
+        # طพวกติดตามกำไร
+        peak = float(st_pos.get("pnl_peak_usd") or net_pnl)
+        peak = max(peak, net_pnl)
+
+        # --- الطبقة 1: إغلاق بالربح (Trailing) ---
+        # تفعيل الترهل: profit >= TRAILING_ARM_USD
+        trailing_armed = (
+            self.cfg.TRAILING_ARM_USD > 0
+            and peak >= self.cfg.TRAILING_ARM_USD
+            and self.cfg.TRAILING_BACK_USD > 0
+        )
+        trailing_hit = trailing_armed and (peak - net_pnl) >= self.cfg.TRAILING_BACK_USD
+        if trailing_hit:
+            return True, "trailing"
+
+        # --- الطبقة 2: الحد الأقصى للخسارة (Max Loss) ---
+        if net_pnl <= -self.cfg.MAX_LOSS_USD:
+            return True, "max_loss"
+
+        # --- الطبقة 3: الحد الأقصى للزمن (Max Hold) ---
+        if opened_at:
+            opened_dt = datetime.fromisoformat(opened_at)
+            open_hours = (now - opened_dt.timestamp()) / 3600.0
+            if open_hours >= self.cfg.MAX_HOLD_HOURS:
+                return True, "max_hold_time"
+
+        # --- الطبقة 4: عودة الفجوة (Mean Reversion) ---
+        # إغلاق إذا عاد z للقرب من الصفر (Z_EXIT) أو إذا تجاوزت الفجوة الحد الأقصى
+        if stats:
+            scale = (stats.get("mad") if self.cfg.USE_MAD and stats.get("mad") else 0) or stats["sd"]
+            centre = stats["median"] if self.cfg.USE_MAD and stats.get("mad") else stats["mean"]
+            if scale > 0:
+                z = (global_price - entry_price) / scale if entry_price else None
+                if z is not None and abs(z) <= self.cfg.Z_EXIT:
+                    return True, "z_revert"
+        if entry_price and abs(global_price - entry_price) >= self.cfg.MAX_ENTRY_GAP_USD:
+            return True, "gap_exceeded_cap"
+
+        # --- الطبقة 5: Daily Loss / Consecutive Losses Circuit Breaker ---
+        # لا تطبق هنا لأنها تؤثر على الفتح وليس الإغلاق
+
+        st_pos["pnl_peak_usd"] = round(peak, 2)
+        st_pos["pnl_last_usd"] = round(net_pnl, 2)
+        track = st_pos.setdefault("pnl_track", [])
+        track.append(round(net_pnl, 2))
+        if len(track) > 120:
+            del track[:-120]
+
+        return False, None
+
+    def record_close(self, state, win):
+        """تسجيل نتائج الصفقة المغلقة."""
+        if win:
+            self.record_win()
+        else:
+            self.record_loss()
+        self.save_perf_to_state(state)
+
+
+# ============================================================================
+# trade logic
+# ============================================================================
 
 
 def _record_close(state, rec):
@@ -166,15 +368,19 @@ def _record_close(state, rec):
         with open(config.TRADES_FILE, "a", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             if new:
-                w.writerow(["ts_open", "ts_close", "side", "entry_gap", "close_gap",
-                            "entry_price", "close_price", "pnl_units", "pnl_usd",
-                            "fees_usd", "pnl_net_usd", "reason"])
-            w.writerow([rec.get("ts_open"), rec.get("ts_close"), rec.get("side"),
-                        _fmt(rec.get("entry_gap")), _fmt(rec.get("close_gap")),
-                        _fmt(rec.get("entry_price")), _fmt(rec.get("close_price")),
-                        rec.get("pnl_units"), _fmt(rec.get("pnl_usd")),
-                        _fmt(rec.get("fees_usd")), _fmt(rec.get("pnl_net_usd")),
-                        rec.get("reason")])
+                w.writerow([
+                    "ts_open", "ts_close", "side", "entry_gap", "close_gap",
+                    "entry_price", "close_price", "pnl_units", "pnl_usd",
+                    "fees_usd", "pnl_net_usd", "reason",
+                ])
+            w.writerow([
+                rec.get("ts_open"), rec.get("ts_close"), rec.get("side"),
+                _fmt(rec.get("entry_gap")), _fmt(rec.get("close_gap")),
+                _fmt(rec.get("entry_price")), _fmt(rec.get("close_price")),
+                rec.get("pnl_units"), _fmt(rec.get("pnl_usd")),
+                _fmt(rec.get("fees_usd")), _fmt(rec.get("pnl_net_usd")),
+                rec.get("reason"),
+            ])
     except Exception as exc:
         print("trades.csv write failed:", exc)
     _write_performance(state)
@@ -219,40 +425,10 @@ def _write_performance(state):
         print("performance write failed:", exc)
 
 
-# ============================================================================
-# trade logic (lives inside the reactor / session)
-# ============================================================================
-
-def position_fees_usd(pos, md):
-    """Estimate total cost (commission + swap + spread) for an open position in USD."""
-    commission = getattr(pos, "commission", None) or 0
-    swap = getattr(pos, "swap", None) or 0
-    if md:
-        commission = commission / (10 ** md)
-        swap = swap / (10 ** md)
-    vol_lots = pos.tradeData.volume / 10000.0 if pos.tradeData.volume else 0
-    spread_est = config.TRADING_FEES_PER_TRADE_LOT * max(vol_lots, 0.01)
-    return commission + swap + spread_est
-
-
-def dynamic_pnl_usd(pos, mid, digits, md):
-    """Live float PnL (dollars), net of fees, at the given mid.
-
-    pos.price arrives as a real dollar float (e.g. 4428.76). volume is in base
-    internal units (100 == 0.01 lot). The raw (mid - entry) * volume comes out
-    scaled by 10^md (account moneyDigits), same scale as commission, so we
-    divide by 10^md to express PnL in real dollars.
-    """
-    entry = pos.price
-    raw = (mid - entry) * pos.tradeData.volume
-    if _side_name(pos.tradeData.tradeSide) == "SELL":
-        raw = -raw
-    gross = raw / (10.0 ** (md or 2))
-    fees = position_fees_usd(pos, md)
-    return gross - fees, gross, fees
-
 @inlineCallbacks
-def run_trade_cycle(sess, mid, global_price, stats, state, result):
+def run_trade_cycle(sess, mid, global_price, stats, state, result,
+                     closing_mgr):
+    """الدورة الرئيسية للتداول مع فحص جميع طبقات الإغلاق."""
     symbol_id = result["symbol_id"]
     try:
         positions = yield sess.open_positions(symbol_id, max_age=120.0)
@@ -266,8 +442,12 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
     result["gap"] = gap
     result["z"] = None
     if stats:
-        scale = (stats.get("mad") if config.USE_MAD and stats.get("mad") else 0) or stats["sd"]
-        centre = stats["median"] if config.USE_MAD and stats.get("mad") else stats["mean"]
+        scale = (
+            stats.get("mad") if config.USE_MAD and stats.get("mad") else 0
+        ) or stats["sd"]
+        centre = (
+            stats["median"] if config.USE_MAD and stats.get("mad") else stats["mean"]
+        )
         if scale > 0:
             result["z"] = (gap - centre) / scale
 
@@ -280,130 +460,97 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
 
     side = None
     action = "none"
+    closed_this_cycle = False
 
+    # --- إذا كانت هناك صفقة مفتوحة: فحص جميع طبقات الإغلاق ---
     if positions:
         pos = positions[0]
-        side_name = _side_name(pos.tradeData.tradeSide)
-        digits = result.get("digits") or 2
-        net_pnl, gross_pnl, fees = dynamic_pnl_usd(pos, mid, digits, md)
-        result["position"] = {
-            "positionId": pos.positionId,
-            "side": side_name,
-            "price": round(float(pos.price), 2),
-            "label": pos.tradeData.label,
-            "commission_usd": (pos.commission / (10 ** md)) if pos.commission else 0,
-            "swap_usd": (pos.swap / (10 ** md)) if pos.swap else 0,
-            "pnl_net_usd": round(net_pnl, 2),
-            "pnl_gross_usd": round(gross_pnl, 2),
-            "fees_usd": round(fees, 2),
-        }
-        profit_floor = config.DYNAMIC_PROFIT_FLOOR_USD + \
-            config.PROFIT_FLOOR_PER_OLOT_USD * (pos.tradeData.volume / 10000.0)
-        z_exit_hit = result["z"] is not None and abs(result["z"]) <= config.Z_EXIT
-
-        # --- dynamic profit tracking for the open position -------------------
-        # define the persistent position state FIRST so it is never None when we
-        # call .get() on it below (this was the NoneType.get crash).
-        st_pos = state.setdefault("position", {})
+        st_pos = state.get("position")
+        if st_pos is None:
+            st_pos = {}
+            state["position"] = st_pos
         if not isinstance(st_pos, dict):
             st_pos = {}
             state["position"] = st_pos
-        profit_hit = (
-            net_pnl >= profit_floor
-            and gross_pnl > 0
-            and st_pos.get("entry_gap") is not None
-        )
 
-        peak = float(st_pos.get("pnl_peak_usd") or net_pnl)
-        peak = max(peak, net_pnl)
-        st_pos["pnl_peak_usd"] = round(peak, 2)
-        st_pos["pnl_last_usd"] = round(net_pnl, 2)
-        track = st_pos.setdefault("pnl_track", [])
-        track.append(round(net_pnl, 2))
-        if len(track) > 120:
-            del track[:-120]
-        # trailing guard only arms once profit has run up enough, then locks in
-        # close when the profit pulls back from its peak by TRAILING_BACK_USD.
-        trailing_armed = (
-            config.TRAILING_ARM_USD > 0
-            and peak >= config.TRAILING_ARM_USD
-            and config.TRAILING_BACK_USD > 0
+        # فحص الطبقات الخمس للإغلاق
+        should_close, close_reason = closing_mgr.check_close(
+            pos, mid, global_price, stats, st_pos, now_ts, md,
         )
-        trailing_hit = trailing_armed and (peak - net_pnl) >= config.TRAILING_BACK_USD
-        result["trailing_armed"] = bool(trailing_armed)
-        result["pnl_peak_usd"] = round(peak, 2)
-        result["profit_floor_usd"] = round(profit_floor, 2)
+        result["close_check"] = {
+            "should_close": should_close,
+            "reason": close_reason,
+        }
 
-        # --- Automated Trailing Exit (fully automatic, no broker TP/SL) ---
-        # Closes the trade automatically once trailing is armed and profit pulls
-        # back by TRAILING_BACK_USD from its peak. This guarantees the position
-        # does not stay open indefinitely and avoids TRADING_BAD_STOPS errors.
-        trailing_close = trailing_armed and trailing_hit
-        close_now = trailing_close
-        if close_now:
+        if should_close and close_reason:
             try:
-                yield sess.close_position(pos.positionId, getattr(pos.tradeData, "volume", None))
-                close_ok = True
-            except Exception as exc:
-                close_ok = False
-                result["close_failed"] = repr(exc)
-                print("close_position failed (will retry next tick):", repr(exc))
-            if close_ok:
+                # إغلاق نشط
+                yield sess.close_position(
+                    pos.positionId,
+                    volume=getattr(pos.tradeData, "volume", None),
+                    max_retries=3,
+                )
+                closed_this_cycle = True
+
+                # تسجيل الإغلاق
+                side_name = _side_name(pos.tradeData.tradeSide)
+                net_pnl, gross_pnl, fees = dynamic_pnl_usd(
+                    pos, mid, result.get("digits") or 2, md,
+                )
+                was_win = net_pnl > 0
+                if was_win:
+                    closing_mgr.record_win()
+                else:
+                    closing_mgr.record_loss()
+
+                trad_end = None
                 try:
                     trad_end = yield sess.get_trader()
-                    pnl_units = (trad_end.balance - entry_units) / (10 ** md) if entry_units is not None else None
                 except Exception:
-                    pnl_units = None
-                close_gap = mid - global_price
-                reason = "trailing"  # fully automatic internal trailing exit
+                    pass
+                pnl_units = (
+                    (trad_end.balance - entry_units) / (10 ** md)
+                    if entry_units is not None and trad_end is not None
+                    else None
+                )
                 _record_close(state, {
                     "ts_open": st_pos.get("opened_at"),
                     "ts_close": utcnow_iso(),
                     "side": side_name,
                     "entry_gap": st_pos.get("entry_gap"),
-                    "close_gap": close_gap,
+                    "close_gap": gap,
                     "entry_price": st_pos.get("entry_price"),
                     "close_price": mid,
                     "pnl_units": pnl_units,
                     "pnl_usd": pnl_units,
-                    "reason": reason,
-                    "pnl_net_usd": round(net_pnl, 2),
                     "fees_usd": round(fees, 2),
-                    "pnl_peak_usd": round(peak, 2),
+                    "pnl_net_usd": round(net_pnl, 2),
+                    "reason": close_reason,
+                    "pnl_peak_usd": round(
+                        float(st_pos.get("pnl_peak_usd") or 0), 2,
+                    ),
                 })
                 result["close_pnl_usd"] = pnl_units
-                result["action"] = "close:" + reason
+                result["action"] = "close:" + close_reason
                 state["position"] = None
                 state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
-            else:
+                print(
+                    f"✓ CLOSED (layer: {close_reason}): "
+                    f"pnl={net_pnl:.2f} USD, "
+                    f"peak={float(st_pos.get('pnl_peak_usd', 0)):.2f} USD"
+                )
+            except Exception as exc:
+                result["close_failed"] = repr(exc)
+                print(f"close_position failed (layer: {close_reason}): {exc!r}")
                 result["action"] = "close_pending"
         else:
             result["action"] = "hold"
     else:
-        if state.get("position") is not None and entry_units is not None:
-            try:
-                trad = yield sess.get_trader()
-                pnl_units = (trad.balance - entry_units) / (10 ** md)
-                _record_close(state, {
-                    "ts_open": state["position"].get("opened_at"),
-                    "ts_close": utcnow_iso(),
-                    "side": state["position"].get("side"),
-                    "entry_gap": state["position"].get("entry_gap"),
-                    "close_gap": gap,
-                    "entry_price": state["position"].get("entry_price"),
-                    "close_price": mid,
-                    "pnl_units": pnl_units,
-                    "pnl_usd": pnl_units,
-                    "reason": "stopped_or_external",
-                })
-                result["close_pnl_usd"] = pnl_units
-                result["action"] = "external_close"
-            except Exception as exc:
-                result["action"] = "external_close(no_pnl: " + repr(exc) + ")"
-            state["position"] = None
-            state.setdefault("closed_trades", [])
+        # لا توجد صفقة مفتوحة — التأكد من أن state نظيفة
         state["position"] = None
 
+    # --- إذا لم تكن هناك صفقة مفتوحة: اتخاذ قرار الفتح ---
+    if not positions and not closed_this_cycle:
         cooldown_left = state.get("cooldown_until", 0) - now_ts
         in_session_now = in_session(datetime.now(timezone.utc))
 
@@ -417,20 +564,23 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
             and cooldown_left <= 0
             and in_session_now
         )
+
         if can_trade:
-            # hard guard: never double-open. The `positions`/last_positions
-            # cache is kept truthful (updated on our own open/close), so we
-            # never send a fresh (slow, blocking) reconcile here just to
-            # confirm emptiness — a timeout there is what froze the loop and
-            # stopped closes entirely.
             if positions:
                 result["action"] = "hold:already_open"
                 result["open_positions"] = len(positions)
             else:
+                # --- فتح صفقة جديدة ---
                 side = "SELL" if gap > 0 else "BUY"
-                sd = stats.get("mad") if config.USE_MAD else stats["sd"]
+                sd = (
+                    stats.get("mad") if config.USE_MAD
+                    else stats["sd"]
+                )
                 sd = sd or stats["sd"]
-                sl_dist = max(config.SL_AFTER_ENTRY_USD, (config.Z_STOP - config.Z_ENTRY) * sd)
+                sl_dist = max(
+                    config.SL_AFTER_ENTRY_USD,
+                    (config.Z_STOP - config.Z_ENTRY) * sd,
+                )
                 min_tp_dist = max(0.3 * sd, 1.0)
                 if side == "SELL":
                     sl = mid + sl_dist
@@ -438,8 +588,11 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
                 else:
                     sl = mid - sl_dist
                     tp = max(mid + min_tp_dist, mid + 0.9 * abs(gap))
-                print(f"order-request side={side} mid={mid:.2f} sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "
-                      f"gap={gap:.2f} tp_dist={(mid - tp) if side == 'SELL' else (tp - mid):.2f}")
+                print(
+                    f"order-request side={side} mid={mid:.2f} "
+                    f"sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "
+                    f"gap={gap:.2f} tp_dist={(mid - tp) if side == 'SELL' else (tp - mid):.2f}"
+                )
                 try:
                     trad_pre = yield sess.get_trader()
                 except Exception:
@@ -447,53 +600,66 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
                 vol = result["volume"]
                 res = yield sess.open_market(
                     symbol_id, side, vol,
-                    sl=_to_int(sl),
-                    tp=_to_int(tp),
+                    sl=_to_int(sl), tp=_to_int(tp),
                     label=cbot.random_label(),
-                    comment="")
+                    comment="",
+                )
                 order = res.order
                 result["action"] = "open:" + side
                 result["order"] = {
                     "orderId": order.orderId,
                     "side": side,
-                    "executionPrice": order.executionPrice if order.executionPrice else None,
-                    "tradeData": {"volume": order.tradeData.volume, "label": order.tradeData.label},
+                    "executionPrice": order.executionPrice
+                    if order.executionPrice else None,
+                    "tradeData": {
+                        "volume": order.tradeData.volume,
+                        "label": order.tradeData.label,
+                    },
                 }
-                state["position"] = {
-                    "positionId": res.position.positionId if res.position else None,
+                new_st_pos = {
+                    "positionId": res.position.positionId
+                    if res.position else None,
                     "side": side,
                     "entry_gap": gap,
-                    "entry_price": (order.executionPrice / config.SPOT_SCALE) if order.executionPrice else None,
+                    "entry_price": (
+                        order.executionPrice / config.SPOT_SCALE
+                        if order.executionPrice
+                        else None
+                    ),
                     "opened_at": utcnow_iso(),
+                    "pnl_peak_usd": 0.0,
+                    "pnl_track": [],
                 }
-                state["entry_balance_units"] = trad_pre.balance if trad_pre is not None else None
+                state["position"] = new_st_pos
+                state["entry_balance_units"] = (
+                    trad_pre.balance if trad_pre is not None else None
+                )
                 state["cooldown_until"] = 0
+                # تحديث الأداء
+                closing_mgr.trade_count_today += 1
+                closing_mgr.save_perf_to_state(state)
         else:
-            reason = "no_signal"
+            reasons = []
             if config.MODE != "trade":
-                reason = "mode!=trade"
-            elif stats is None:
-                reason = "warmup"
+                reasons.append("mode!=trade")
+            if stats is None:
+                reasons.append("warmup")
             elif result["z"] is not None and abs(result["z"]) < config.Z_ENTRY:
-                reason = "z_below_entry"
-            elif abs(gap) > config.MAX_ENTRY_GAP_USD:
-                reason = "gap_above_cap"
-            elif result.get("balance_usd", 0) < config.MIN_BALANCE_TO_TRADE:
-                reason = "balance_low"
-            elif cooldown_left > 0:
-                reason = "cooldown_min"
-            elif not in_session_now:
-                reason = "session_closed"
-            result["action"] = "none:" + reason
+                reasons.append("z_below_entry")
+            if abs(gap) > config.MAX_ENTRY_GAP_USD:
+                reasons.append("gap_above_cap")
+            if result.get("balance_usd", 0) < config.MIN_BALANCE_TO_TRADE:
+                reasons.append("balance_low")
+            if cooldown_left > 0:
+                reasons.append("cooldown_min")
+            if not in_session_now:
+                reasons.append("session_closed")
+            # دائرة Daily Loss و Consecutive Losses
+            if not closing_mgr.can_trade_today():
+                reasons.append("circuit_breaker")
+            result["action"] = "none:" + ",".join(reasons) if reasons else "none"
+
     return action
-
-
-def _side_name(trade_side):
-    from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
-    for name, num in Models.ProtoOATradeSide.DESCRIPTOR.values_by_name.items():
-        if num == trade_side:
-            return name
-    return str(trade_side)
 
 
 # ============================================================================
@@ -505,9 +671,16 @@ def main():
     state = load_state()
     rows = load_history()
 
-    # stats built from history EXCLUDING this tick (what we knew before now)
     stats = compute_stats(rows)
-    result = {"ts": utcnow_iso(), "stats": stats, "stats_used": stats is not None}
+
+    result = {
+        "ts": utcnow_iso(),
+        "stats": stats,
+        "stats_used": stats is not None,
+    }
+
+    closing_mgr = ClosingManager(state, config)
+    closing_mgr.init_from_state(state)
 
     try:
         global_price, source, source_ts = gold_price.get_global_gold_price()
@@ -545,7 +718,9 @@ def main():
             result["money_digits"] = trader.moneyDigits
             state["money_digits"] = trader.moneyDigits
             result["balance_usd"] = (
-                trader.balance / (10 ** trader.moneyDigits) if trader.moneyDigits else trader.balance
+                trader.balance / (10 ** trader.moneyDigits)
+                if trader.moneyDigits
+                else trader.balance
             )
             result["deposit_asset"] = trader.depositAssetId
             symbol_id = yield sess.find_symbol(config.SYMBOL)
@@ -561,7 +736,10 @@ def main():
             result["ask"] = ask / config.SPOT_SCALE
             mid = (bid + ask) / 2 / config.SPOT_SCALE
             result["platform_price"] = mid
-            yield run_trade_cycle(sess, mid, global_price, stats, state, result)
+            yield run_trade_cycle(
+                sess, mid, global_price, stats, state, result,
+                closing_mgr,
+            )
             result["ok"] = True
         except Exception:
             import traceback
@@ -573,7 +751,6 @@ def main():
 
     @d.addBoth
     def _flush(_):
-        # record observation then persist
         if "global_price" in result and "platform_price" in result:
             rows.append({
                 "ts": result["ts"],
@@ -595,9 +772,11 @@ def _print_report(result, state):
     print("=" * 50)
     print("OPERATIONS REPORT")
     print("=" * 50)
-    for k in ("ts", "account_id", "balance", "balance_usd", "deposit_asset",
-              "symbol_id", "digits", "bid", "ask", "platform_price",
-              "global_price", "source", "gap", "z", "action", "ok"):
+    for k in (
+        "ts", "account_id", "balance", "balance_usd", "deposit_asset",
+        "symbol_id", "digits", "bid", "ask", "platform_price",
+        "global_price", "source", "gap", "z", "action", "ok",
+    ):
         if k in result:
             print(f"  {k:16s}: {result[k]}")
     if result.get("stats"):
@@ -607,6 +786,9 @@ def _print_report(result, state):
             print(f"  median/mad        : {st['median']:.2f} / {st['mad']:.2f}")
     if result.get("close_pnl_usd") is not None:
         print(f"  close_pnl_usd     : {result['close_pnl_usd']:.3f}")
+    if result.get("close_check"):
+        cc = result["close_check"]
+        print(f"  close_check       : should={cc['should_close']}, reason={cc['reason']}")
     trades = state.get("closed_trades") or []
     if trades:
         print(f"  closed_trades     : {len(trades)} (last pnl={trades[-1].get('pnl_usd')})")
@@ -618,17 +800,27 @@ def _print_report(result, state):
                 print("  perf              :", json.dumps(perf, ensure_ascii=False))
             except Exception:
                 pass
+    perf = state.get("perf")
+    if perf:
+        print(f"  DAILY P&L        : {perf.get('running_daily_pnl', 'N/A')} USD")
+        print(f"  CONSECUTIVE LOSS : {perf.get('consecutive_losses', 'N/A')}")
+        print(f"  TRADES TODAY     : {perf.get('trades_today', 'N/A')}")
     if result.get("error"):
         print("  ERROR             :", result["error"])
     if result.get("order"):
         print("  order             :", json.dumps(result["order"]))
     if result.get("position"):
-        print("  position          :", json.dumps(result["position"]))
+        print("  position          :", json.dumps(result["position"], ensure_ascii=False))
     if state.get("position"):
-        print("  state.position    :", json.dumps(state["position"], ensure_ascii=False))
+        print(
+            "  state.position    :",
+            json.dumps(state["position"], ensure_ascii=False),
+        )
     if result.get("trailing_armed"):
-        print(f"  trailing armed    : peak={result.get('pnl_peak_usd')} "
-              f"back={config.TRAILING_BACK_USD}")
+        print(
+            f"  trailing armed    : peak={result.get('pnl_peak_usd')} "
+            f"back={config.TRAILING_BACK_USD}"
+        )
     print("=" * 50)
 
 

@@ -342,7 +342,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result):
         close_now = trailing_close
         if close_now:
             try:
-                yield sess.close_position(pos.positionId)
+                yield sess.close_position(pos.positionId, getattr(pos.tradeData, "volume", None))
                 close_ok = True
             except Exception as exc:
                 close_ok = False

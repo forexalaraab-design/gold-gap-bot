@@ -248,6 +248,11 @@ class CtraderSession:
 
     @defer.inlineCallbacks
     def close_position(self, position_id, volume=None):
+        if volume is None:
+            for p in self.last_positions:
+                if p.positionId == position_id and getattr(p.tradeData, "volume", None):
+                    volume = p.tradeData.volume
+                    break
         req = ProtoOAClosePositionReq(ctidTraderAccountId=self.account_id, positionId=position_id)
         if volume is not None:
             req.volume = volume

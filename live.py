@@ -440,7 +440,19 @@ def live_loop():
                         and in_session_now
                         and session_ok
                         and velocity_ok
-                        and abs(gap) <= config.MAX_ENTRY_GAP_USD
+                        and (
+                            abs(gap) <= config.MAX_ENTRY_GAP_USD
+                            and (
+                                abs(z) >= config.Z_ENTRY
+                                or (
+                                    config.Z_ENTRY_SOFT
+                                    and abs(z) >= config.Z_ENTRY_SOFT
+                                    and stats
+                                    and stats.get("sd", 0) > 0
+                                    and abs(gap - centre) >= config.MIN_GAP_USD
+                                )
+                            )
+                        )
                     ):
                         new_side = "SELL" if gap > 0 else "BUY"
                         # لا توجد صفقة — نفتح

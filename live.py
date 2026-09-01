@@ -408,10 +408,38 @@ def live_loop():
                     )
                     bal_usd = result.get("balance_usd", 0)
 
+                    # ── حارس الجلسة: لا نفتح خارج أوقات السوق النشطة ──
+                    session_ok = True
+                    if config.SESSION_GUARD:
+                        now_hour = datetime.now(timezone.utc).hour + \
+                                   datetime.now(timezone.utc).minute / 60.0
+                        if config.LIVE_TRADING_END_HOUR < config.LIVE_TRADING_START_HOUR:
+                            # الفترة cross midnight (مثلاً 22:00 → 05:00)
+                            session_ok = now_hour >= config.LIVE_TRADING_START_HOUR or \
+                                        now_hour < config.LIVE_TRADING_END_HOUR
+                        else:
+                            session_ok = config.LIVE_TRADING_START_HOUR <= now_hour < config.LIVE_TRADING_END_HOUR
+                        if not session_ok:
+                            print("no-open: outside trading session")
+                            can_trade_today = False
+
+                    # ── حارس السرعة: لا نفتح إذا كانت الفجوة تتحرك بسرعة ──
+                    velocity_ok = True
+                    if last_gap is not None and now - last_append > 0:
+                        dt_min = (now - last_append) / 60.0
+                        if dt_min > 0:
+                            velocity = abs(gap - last_gap) / dt_min
+                            if velocity > config.MAX_GAP_VELOCITY:
+                                print(f"no-open: gap velocity {velocity:.1f}$/min > {config.MAX_GAP_VELOCITY}$/min")
+                                can_trade_today = False
+                                velocity_ok = False
+
                     if (
                         bal_usd >= config.MIN_BALANCE_TO_TRADE
                         and cooldown_left <= 0
                         and in_session_now
+                        and session_ok
+                        and velocity_ok
                         and abs(gap) <= config.MAX_ENTRY_GAP_USD
                     ):
                         new_side = "SELL" if gap > 0 else "BUY"

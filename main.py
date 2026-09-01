@@ -331,6 +331,12 @@ class ClosingManager:
         if entry_price and abs(global_price - entry_price) >= self.cfg.MAX_ENTRY_GAP_USD:
             return True, "gap_exceeded_cap"
 
+        # --- الطبقة 4b: إغلاق فوري إذا تجاوزت الفجوة نسبة مئوية من السعر (Gap Cap Pct) ---
+        if entry_price and entry_price > 0:
+            gap_pct = abs(global_price - entry_price) / entry_price
+            if gap_pct >= self.cfg.gap_max_gap_pct:
+                return True, "gap_cap_pct"
+
         # --- الطبقة 5: Daily Loss / Consecutive Losses Circuit Breaker ---
         # لا تطبق هنا لأنها تؤثر على الفتح وليس الإغلاق
 

@@ -57,7 +57,10 @@ Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.0)          # enter when |z| >= Z_ENTRY
 Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)            # exit when |z| <= Z_EXIT (reverted)
 Z_STOP = _env_float("STRAT_Z_STOP", 3.5)            # hard stop for the gap itself (sanity)
 SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past entry (gap units)
-MAX_ENTRY_GAP_USD = _env_float("STRAT_MAX_ENTRY_GAP", 50.0)  # reject phantom/news spikes
+MAX_ENTRY_GAP_USD       = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)   # قبل: 50.0
+
+# الفجوة القصوى المسموحة (للحماية): إذا تجاوز gap_max_gap_pct% من السعر، نغلق.
+gap_max_gap_pct           = 0.10   # 10% من سعر الصرف (قبل: 0.15)
 MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)    # reject/strip observations beyond this
 COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 15.0)  # pause re-entry after a close
 FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)  # open+close one diagnostic trade on start
@@ -72,6 +75,9 @@ MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 10.0)       # إغلاقٍ آل�
 MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)   # دائرة أمان Daily Loss
 MAX_CONSECUTIVE_LOSSES = int(_env_float("STRAT_MAX_CONSEC_LOSSES", 3.0))  # دائرة أمان متتالية الخسائر
 SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"  # trade only in XAU sessions
+LIVE_TRADING_START_HOUR = _env_float("STRAT_SESSION_START", 22.0)   # UTC ساعة بدء التداول الحي
+LIVE_TRADING_END_HOUR   = _env_float("STRAT_SESSION_END", 5.0)     # UTC ساعة نهاية التداول الحي
+MAX_GAP_VELOCITY        = _env_float("STRAT_MAX_VELOCITY", 5.0)    # دولار/دقيقة -anha تجعلنا نمنع الفتح
 USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"  # robust median/MAD scale for z
 
 # Stats

@@ -529,7 +529,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     f"pnl={pnl_net:.2f} USD (gross={pnl_gross:.2f}), "
                     f"peak={float(st_pos.get('pnl_peak_usd', 0)):.2f} USD"
                 )
-                # تسجيل الإغلاق في الـ state و CSV
+                # تسجيل الإغلاق في الـ state و CSV  
                 _record_close(state, {
                     "ts_open": st_pos.get("opened_at"),
                     "ts_close": utcnow_iso(),
@@ -553,6 +553,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 else:
                     closing_mgr.record_loss()
                 closing_mgr.save_perf_to_state(state)
+                result["action"] = "close:" + close_reason
             except Exception as exc:
                 result["close_failed"] = repr(exc)
                 print(f"close_position failed (layer: {close_reason}): {exc!r}")

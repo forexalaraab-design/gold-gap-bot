@@ -1,13 +1,5 @@
 {
-  "position": {
-    "positionId": 41213893,
-    "side": "BUY",
-    "entry_gap": -1.7851950000003853,
-    "entry_price": 0.0,
-    "opened_at": "2026-09-01T22:15:11Z",
-    "pnl_peak_usd": 0.0,
-    "pnl_track": []
-  },
+  "position": null,
   "stats": {
     "n": 48,
     "mean": -1.0310969374998915,
@@ -154,42 +146,12 @@
       "pnl_units": -121.14,
       "pnl_usd": -121.14,
       "reason": "stopped_or_external"
-    },
-    {
-      "ts_open": null,
-      "ts_close": "2026-09-01T18:54:08Z",
-      "side": "1",
-      "entry_gap": null,
-      "close_gap": -2167.8650979999998,
-      "entry_price": null,
-      "close_price": 2166.735,
-      "pnl_units": -117.98,
-      "pnl_usd": -117.98,
-      "reason": "trailing",
-      "pnl_net_usd": -2163.46,
-      "fees_usd": 0.05,
-      "pnl_peak_usd": 3.99
-    },
-    {
-      "ts_open": null,
-      "ts_close": "2026-09-01T19:11:56Z",
-      "side": "1",
-      "entry_gap": null,
-      "close_gap": -2166.639902,
-      "entry_price": null,
-      "close_price": 2167.26,
-      "pnl_units": -115.45,
-      "pnl_usd": -115.45,
-      "reason": "trailing",
-      "pnl_net_usd": -2164.67,
-      "fees_usd": 0.05,
-      "pnl_peak_usd": 3.83
     }
   ],
   "perf": {
     "running_daily_pnl": 0.0,
     "consecutive_losses": 0,
-    "trades_today": 10,
-    "last_updated": "2026-09-01T22:15:11Z"
+    "trades_today": 0,
+    "last_updated": "2026-09-02T19:27:00Z"
   }
 }

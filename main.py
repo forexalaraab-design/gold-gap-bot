@@ -229,6 +229,8 @@ def dynamic_pnl_usd(pos, mid, digits, md):
     """
     entry = pos.price
     if entry is None or entry == 0:
+        entry = None  # لا نعيد 0.0؛ نجعله None صراحةً
+    if entry is None:
         return 0.0, 0.0, 0.0
     raw = (mid - entry) * pos.tradeData.volume
     if _side_name(pos.tradeData.tradeSide) == "SELL":
@@ -340,19 +342,21 @@ class ClosingManager:
 
         # --- الطبقة 5: عودة الفجوة (Mean Reversion) ---
         # إغلاق إذا عاد z للقرب من الصفر (Z_EXIT) أو إذا تجاوزت الفجوة الحد الأقصى
-        if stats:
-            scale = (stats.get("mad") if self.cfg.USE_MAD and stats.get("mad") else 0) or stats["sd"]
-            centre = stats["median"] if self.cfg.USE_MAD and stats.get("mad") else stats["mean"]
-            if scale > 0:
-                z = (global_price - entry_price) / scale if entry_price else None
-                if z is not None and abs(z) <= self.cfg.Z_EXIT:
-                    return True, "z_revert"
-        if entry_price and abs(global_price - entry_price) >= self.cfg.MAX_ENTRY_GAP_USD:
-            return True, "gap_exceeded_cap"
-
-        # --- الطبقة 5b: إغلاق فوري إذا تجاوزت الفجوة نسبة مئوية من السعر (Gap Cap Pct) ---
-        if entry_price and entry_price > 0:
-            gap_pct = abs(global_price - entry_price) / entry_price
+        # ملاحظة: نستخدم position.price من server بدلاً من st_pos.get("entry_price")
+        pos_entry = getattr(position, "price", None)
+        if pos_entry is None:
+            pos_entry = st_pos.get("entry_price")
+        if pos_entry and pos_entry > 0:
+            if stats:
+                scale = (stats.get("mad") if self.cfg.USE_MAD and stats.get("mad") else 0) or stats["sd"]
+                centre = stats["median"] if self.cfg.USE_MAD and stats.get("mad") else stats["mean"]
+                if scale > 0:
+                    z = (global_price - pos_entry) / scale
+                    if z is not None and abs(z) <= self.cfg.Z_EXIT:
+                        return True, "z_revert"
+            if abs(global_price - pos_entry) >= self.cfg.MAX_ENTRY_GAP_USD:
+                return True, "gap_exceeded_cap"
+            gap_pct = abs(global_price - pos_entry) / pos_entry
             if gap_pct >= self.cfg.gap_max_gap_pct:
                 return True, "gap_cap_pct"
 
@@ -675,6 +679,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     # محاولة من mid إذا لزم
                     entry_price_val = mid
                     print(f"  WARN: تعويض entry_price من mid={mid:.2f}")
+                if entry_price_val == 0:
+                    # لا نستخدم 0.0 كـ entry_price - استخدم mid كبديل آمن
+                    entry_price_val = mid
+                    print(f"  WARN: entry_price=0 تم تعويظه بـ mid={mid:.2f}")
 
                 result["action"] = "open:" + side
                 result["order"] = {

@@ -42,10 +42,10 @@ YAHOO_OFFSET_USD = 0.0  # GC=F is futures; add offset to approximate spot if nee
 
 # ===== Signal & risk (units: USD per ounce unless stated) =====
 SYMBOL = "XAUUSD"
-LOT = 0.01  # 1/100 lot (1 oz gold = $1 PnL per $1 move)
+LOT = 0.03  # 3/100 lot (3 oz gold = $3 PnL per $1 move) [was 0.01]
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
 # (symbol.digits=2 is only the display precision). Verified against live quotes.
-SPOT_SCALE = 100000.0
+SPOT_SCALE = 100000.0  # تم التحقق من أنه 10^5 (وليس 10^2) للأسعار الداخلية لـ cTrader
 
 # Modes: "log" = record gaps only; "trade" = open/close demo positions
 MODE = os.environ.get("CBOT_MODE", "log")
@@ -73,6 +73,7 @@ TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.50) # close if profit pu
 # --- 参数の新增 (إضافة للمزادات الجديدة) ---
 MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 8.0)   # إغلاقٍ آلي إذا تجاوزت المدة
 MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 2.0)       # إغلاقٍ آلي إذا تجاوزت الخسارة
+MAX_TRADE_PNL_USD = _env_float("STRAT_MAX_TRADE_PNL_USD", 15.0)  # حد أقصى خسارة/ربح لكل صفقة على حدة
 MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)   # دائرة أمان Daily Loss
 MAX_CONSECUTIVE_LOSSES = int(_env_float("STRAT_MAX_CONSEC_LOSSES", 3.0))  # دائرة أمان متتالية الخسائر
 SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"  # trade only in XAU sessions

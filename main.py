@@ -211,7 +211,7 @@ def position_fees_usd(pos, md):
     if md:
         commission = commission / (10 ** md)
         swap = swap / (10 ** md)
-    vol_lots = pos.tradeData.volume / 10000.0 if pos.tradeData.volume else 0
+    vol_lots = pos.tradeData.volume / 100000.0 if pos.tradeData.volume else 0
     spread_est = config.TRADING_FEES_PER_TRADE_LOT * max(vol_lots, 0.01)
     return commission + swap + spread_est
 
@@ -225,7 +225,7 @@ def dynamic_pnl_usd(pos, mid, digits, md):
     raw = (mid - entry) * pos.tradeData.volume
     if _side_name(pos.tradeData.tradeSide) == "SELL":
         raw = -raw
-    gross = raw / (10.0 ** (md or 2))
+    gross = raw / (config.SPOT_SCALE or 100000.0)  # SPOT_SCALE=100000 → price في نقاط داخلية
     fees = position_fees_usd(pos, md)
     return gross - fees, gross, fees
 
@@ -314,6 +314,10 @@ class ClosingManager:
         # --- الطبقة 2: الحد الأقصى للخسارة (Max Loss) ---
         if net_pnl <= -self.cfg.MAX_LOSS_USD:
             return True, "max_loss"
+
+        # --- الطبقة 2b: الحد الأقصى المطلق لكل صفقة (Per-Trade Hard Stop) ---
+        if net_pnl <= -self.cfg.MAX_TRADE_PNL_USD:
+            return True, "trade_hard_stop"
 
         # --- الطبقة 3: الحد الأقصى للزمن (Max Hold) ---
         if opened_at:
@@ -502,40 +506,38 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 closed_this_cycle = True
 
                 # حساب PnL الحقيقي من حركة السعر (ليس من رصيد الحساب)
-                # PnL = (السعر النهائي - سعر الفتح) × الحجم × الاتجاه
-                # للـ BUY: PnL = (mid - entry) * volume
-                # للـ SELL: PnL = (entry - mid) * volume
+                # PnL = (السعر النهائي - سعر الفتح) × الحجم / SPOT_SCALE
+                # SPOT_SCALE = 100000: السعر raw internal × 100000
+                # XAUUSD 0.01 لوت = 1 أونصة = $1 لكل حركة $1 في السعر
                 entry_price = st_pos.get("entry_price")
                 close_price = mid  # سعر الإغلاق الحالي
                 side_name = _side_name(pos.tradeData.tradeSide)
-                volume = getattr(pos.tradeData, "volume", None)
-                if volume is not None and volume != 0:
-                    # تحويل الـ volume إلى وحدات صحيحة:
-                    # cTrader XAUUSD 0.01 لوت = 1 أونصة ذهب
-                    # الـ volume قد يكون 100 (وحدات داخلية) أو 0.01 (لوت)
-                    if volume <= 1:
-                        unit_volume = volume * 100  # من لوت إلى وحدات داخلية
-                    else:
-                        unit_volume = volume  # بالفعل وحدات داخلية
-                    # PnL = حركة السعر × الوحدات / SPOT_SCALE
-                    spot_scale = config.SPOT_SCALE or 100000.0
-                    price_diff = close_price - entry_price if entry_price else 0
-                    if side_name == "SELL":
-                        price_diff = -price_diff
-                    raw_pnl = (price_diff * unit_volume) / spot_scale
-                    fees_est = position_fees_usd(pos, md) if md else 0
-                    pnl_net = round(raw_pnl - fees_est, 2)
-                    pnl_gross = round(raw_pnl, 2)
-                    print(f"  [PnL calc] vol={volume} → unit={unit_volume}, "
-                          f"diff={price_diff:.2f}, raw={raw_pnl:.4f}, "
-                          f"fees={fees_est:.2f}, net=${pnl_net}")
+                volume = getattr(pos.tradeData, "volume", 100)
+                # إذا كان volume > 1000 فغالباً هو بالوحدات الداخلية (مقسوم على SPOT_SCALE)
+                # وإذا كان volume ≤ 1 فغالباً هو باللوتات
+                # الصيغة الموحدة: PnL = حركة السعر × الحجم الصحيح / SPOT_SCALE
+                spot_scale = config.SPOT_SCALE or 100000.0
+                if volume > 1000:
+                    # volume خاص بالوحدات الداخلية — نستخدمه مباشرةً
+                    unit_volume = volume
+                elif volume > 1:
+                    # volume خاص بالأونصات (0.01 لوت = 100 وحدة داخلية)
+                    unit_volume = volume
                 else:
-                    # volume غير متوفر — نعود لحساب dynamic_pnl_usd
-                    net_pnl, gross_pnl, fees = dynamic_pnl_usd(pos, mid, md, md)
-                    pnl_net = net_pnl
-                    pnl_gross = gross_pnl
-                    fees = 0.0
-                    print(f"  [PnL calc] volume=None → فالينغ باك إلى dynamic_pnl_usd")
+                    # volume الخاص باللوتات — نحوله للأونصات (×100 للـ 0.01 لوت)
+                    unit_volume = volume * 100
+                price_diff = close_price - entry_price if entry_price else 0
+                if side_name == "SELL":
+                    price_diff = -price_diff
+                raw_pnl = (price_diff * unit_volume) / spot_scale
+                fees_est = position_fees_usd(pos, md) if md else 0
+                pnl_net = round(raw_pnl - fees_est, 2)
+                pnl_gross = round(raw_pnl, 2)
+                print(
+                    f"  [PnL calc] vol={volume} → unit={unit_volume}, "
+                    f"diff={price_diff:.2f}, raw={raw_pnl:.4f}, "
+                    f"fees={fees_est:.2f}, net=${pnl_net}"
+                )
                 result["action"] = "close:" + close_reason
                 state["position"] = None
                 state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60

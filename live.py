@@ -256,7 +256,20 @@ def live_loop():
                     position_id_to_close = pos.positionId
                     volume_to_close = getattr(pos.tradeData, "volume", 100)
                     open_position = pos
-                    open_entry_price = float(pos.price)
+                    # استخراج السعر من position أو من الـ state
+                    raw_pos_price = float(pos.price) if pos.price else None
+                    if raw_pos_price is not None and raw_pos_price > 10000:
+                        raw_pos_price = raw_pos_price / config.SPOT_SCALE
+                    st_pos = state.get("position", {})
+                    stored_entry = st_pos.get("entry_price") if isinstance(st_pos, dict) else None
+                    # الأولوية لـ stored_entry (إذا كان مسجلاً بشكل صحيح)
+                    #否则 نستخدم raw_pos_price المحوّل
+                    if stored_entry is not None and stored_entry != 0:
+                        open_entry_price = stored_entry
+                    elif raw_pos_price is not None and raw_pos_price != 0:
+                        open_entry_price = raw_pos_price
+                    else:
+                        open_entry_price = None
                     open_side = (
                         "SELL" if "SELL" in str(pos.tradeData.tradeSide).upper()
                         else "BUY"
@@ -467,7 +480,28 @@ def live_loop():
                                 )
                                 if res.position:
                                     pid = res.position.positionId
-                                    entry0 = float(res.position.price)
+                                    # استخدام executionPrice من الطلب (الأولوية) مع تحويل الوحدات الداخلية
+                                    raw_entry = (
+                                        float(res.order.executionPrice)
+                                        if res.order and res.order.executionPrice
+                                        else None
+                                    )
+                                    pos_price = (
+                                        float(res.position.price)
+                                        if (res.position and res.position.price) else None
+                                    )
+                                    if raw_entry is not None and raw_entry != 0:
+                                        if raw_entry > 10000:
+                                            entry0 = raw_entry / config.SPOT_SCALE
+                                        else:
+                                            entry0 = raw_entry
+                                    elif pos_price is not None and pos_price != 0:
+                                        if pos_price > 10000:
+                                            entry0 = pos_price / config.SPOT_SCALE
+                                        else:
+                                            entry0 = pos_price
+                                    else:
+                                        entry0 = None
                                     new_st_pos = {
                                         "positionId": pid,
                                         "side": new_side,
@@ -477,6 +511,13 @@ def live_loop():
                                         "pnl_peak_usd": 0.0,
                                         "pnl_track": [],
                                     }
+                                    if entry0 is not None:
+                                        print(
+                                            f"  [ENTRY] execPrice={raw_entry}, "
+                                            f"posPrice={pos_price} → entry0={entry0:.2f}"
+                                        )
+                                    else:
+                                        print("WARN: open 시장 failed to provide entry price")
                                     state["position"] = new_st_pos
                                     state["entry_balance_units"] = (
                                         trad_pre.balance

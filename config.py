@@ -42,7 +42,7 @@ YAHOO_OFFSET_USD = 0.0  # GC=F is futures; add offset to approximate spot if nee
 
 # ===== Signal & risk (units: USD per ounce unless stated) =====
 SYMBOL = "XAUUSD"
-LOT = 0.03  # 3/100 lot (3 oz gold = $3 PnL per $1 move) [was 0.01]
+LOT = 0.05  # 5/100 lot (5 oz gold = $5 PnL per $1 move) [تعديل من 0.03 → 0.05]
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
 # (symbol.digits=2 is only the display precision). Verified against live quotes.
 SPOT_SCALE = 100000.0  # تم التحقق من أنه 10^5 (وليس 10^2) للأسعار الداخلية لـ cTrader
@@ -70,8 +70,9 @@ DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)    # min net pr
 PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)  # extra per 0.01 lot above the gross floor
 TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.30)   # arm trailing一旦 net pnl >= this
 TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.50) # close if profit pulls back this much from peak (when armed)
+PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 2.0)  # إغلاق فوري عند بلوغ ربح صافي 2$ (تثبيت الربح)
 # --- 参数の新增 (إضافة للمزادات الجديدة) ---
-MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 8.0)   # إغلاقٍ آلي إذا تجاوزت المدة
+MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 1.5)   # إغلاق آلي بعد 90 دقيقة (تقليل من 8.0)
 MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 2.0)       # إغلاقٍ آلي إذا تجاوزت الخسارة
 MAX_TRADE_PNL_USD = _env_float("STRAT_MAX_TRADE_PNL_USD", 15.0)  # حد أقصى خسارة/ربح لكل صفقة على حدة
 MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)   # دائرة أمان Daily Loss

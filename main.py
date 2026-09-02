@@ -225,7 +225,7 @@ def dynamic_pnl_usd(pos, mid, digits, md):
     raw = (mid - entry) * pos.tradeData.volume
     if _side_name(pos.tradeData.tradeSide) == "SELL":
         raw = -raw
-    gross = raw / (config.SPOT_SCALE or 100000.0)  # SPOT_SCALE=100000 → price في نقاط داخلية
+    gross = raw / (10.0 ** (md or 2))
     fees = position_fees_usd(pos, md)
     return gross - fees, gross, fees
 
@@ -314,6 +314,11 @@ class ClosingManager:
         # --- الطبقة 2: الحد الأقصى للخسارة (Max Loss) ---
         if net_pnl <= -self.cfg.MAX_LOSS_USD:
             return True, "max_loss"
+
+        # --- الطبقة 2c: تثبيت الربح (Profit Target) ---
+        # إغلاق فوري إذا وصل الـ PnL الصافي للحد المستهدف
+        if net_pnl >= self.cfg.PROFIT_TARGET_USD:
+            return True, "profit_target"
 
         # --- الطبقة 2b: الحد الأقصى المطلق لكل صفقة (Per-Trade Hard Stop) ---
         if net_pnl <= -self.cfg.MAX_TRADE_PNL_USD:

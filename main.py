@@ -646,23 +646,34 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                         "label": order.tradeData.label,
                     },
                 }
+                # استخدام order.executionPrice كمصدر أول لسعر الفتح
+                # لأن cTrader لا يملأ دائماً res.position.price في الرد
+                order_exec_price = (
+                    float(order.executionPrice)
+                    if order.executionPrice else None
+                )
+                position_price = (
+                    float(res.position.price)
+                    if (res.position and res.position.price) else None
+                )
+                # الأولوية لـ executionPrice (سعر التنفيذ الفعلي)
+                entry_price_val = order_exec_price or position_price
                 new_st_pos = {
                     "positionId": res.position.positionId
                     if res.position else None,
                     "side": side,
                     "entry_gap": gap,
-                    "entry_price": (
-                        float(res.position.price)
-                        if (res.position is not None
-                            and hasattr(res.position, "price")
-                            and res.position.price is not None
-                            and float(res.position.price) != 0.0)
-                        else None
-                    ),
+                    "entry_price": entry_price_val,
                     "opened_at": utcnow_iso(),
                     "pnl_peak_usd": 0.0,
                     "pnl_track": [],
                 }
+                if entry_price_val is None:
+                    print("WARN: Could not determine entry_price — both "
+                          "order.executionPrice and res.position.price are None/0")
+                else:
+                    print(f"  [ENTRY] executionPrice={order_exec_price}, "
+                          f"position.price={position_price} → entry_price={entry_price_val}")
                 state["position"] = new_st_pos
                 state["entry_balance_units"] = (
                     trad_pre.balance if trad_pre is not None else None

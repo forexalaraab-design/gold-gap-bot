@@ -48,7 +48,7 @@ LOT = 0.03  # 3/100 lot (3 oz gold = $3 PnL per $1 move)
 SPOT_SCALE = 100000.0
 
 # Modes: "log" = record gaps only; "trade" = open/close demo positions
-MODE = os.environ.get("CBOT_MODE", "log")
+MODE = os.environ.get("CBOT_MODE", "trade")  # trade = نفّذ صفقات حقيقية
 
 # Self-built thresholds (statistical), replaced by measured scale after warmup.
 Z_ENTRY = _env_float("STRAT_Z_ENTRY", 1.5)          # 3.0 → 1.5 (إشارة أضعف مقبولة)

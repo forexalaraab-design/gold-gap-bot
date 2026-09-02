@@ -10,7 +10,7 @@ import string
 import time
 import config
 from ctrader_open_api import Client, EndPoints, Protobuf, TcpProtocol
-from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
+from ctrader_open_api.messages import OpenApiMessages_pb2 as Models  # كان OpenApiModelMessages_pb2 خطأ
 from twisted.internet import reactor, defer
 from twisted.internet import task as _task
 

@@ -51,7 +51,7 @@ SPOT_SCALE = 100000.0
 MODE = os.environ.get("CBOT_MODE", "log")
 
 # Self-built thresholds (statistical), replaced by measured scale after warmup.
-Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.5)          # enter when |z| >= Z_ENTRY
+Z_ENTRY = _env_float("STRAT_Z_ENTRY", 3.0)          # 2.5 → 3.0 (إشارة أقوى فقط)
 Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)            # exit when |z| <= Z_EXIT (reverted)
 Z_STOP = _env_float("STRAT_Z_STOP", 3.5)            # hard stop for the gap itself (sanity)
 SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past entry (gap units)
@@ -62,10 +62,10 @@ gap_max_gap_pct           = 0.10   # 10% من سعر الصرف
 MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)    # reject/strip observations beyond this
 
 # FLTR ضوضاء السوق: لا تدخل صفقة إلا إذا كانت الفجوة ≥ قيمة واضحة
-MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 0.50)     # الحد الأدنى للفجوة قبل الفتح
+MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 1.00)     # 0.50 → 1.00 (فلترة ضوضاء أقوى)
 
 COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 5.0)  # تقليل من 15 → 5 دقائق
-MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 10))
+MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 20))  # 10 → 20 (زيادة للسماح بمزيد من الصفقات)
 FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)
 
 TRADING_FEES_PER_TRADE_LOT = _env_float("STRAT_FEES_PER_LOT", 8.0)
@@ -73,12 +73,12 @@ DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)
 PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
 
 # تثبيت الأرباح: إغلاق فوري عند بلوغ ربح صافي محدد
-PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 2.0)  # إغلاق عند +2$ صافي
+PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 3.0)  # 2.0 → 3.0 (هدف ربح أعلى)
 
-TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.30)   # تتبع يبدأ عند ربح 30 سنت
+TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.50)   # 0.30 → 0.50 (تتبع أبكر)
 TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.50) # تراجع 50 سنت يغلق (من 1$ → 0.50$)
 
-MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.0)   # تقليل من 8 → 2 ساعة (إغلاق إلزامي)
+MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 4.0)   # 2.0 → 4.0 (وقت أطول للإغلاق الاختياري)
 MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 2.0)       # إغلاقٍ آلي إذا تجاوزت الخسارة
 MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)
 MAX_CONSECUTIVE_LOSSES = int(_env_float("STRAT_MAX_CONSEC_LOSSES", 3.0))

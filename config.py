@@ -51,9 +51,12 @@ SPOT_SCALE = 100000.0
 MODE = os.environ.get("CBOT_MODE", "log")
 
 # Self-built thresholds (statistical), replaced by measured scale after warmup.
-Z_ENTRY = _env_float("STRAT_Z_ENTRY", 3.0)          # 2.5 → 3.0 (إشارة أقوى فقط)
+Z_ENTRY = _env_float("STRAT_Z_ENTRY", 1.5)          # 3.0 → 1.5 (إشارة أضعف مقبولة)
+Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.0)  # إشارة ناعمة: تدخل إذا |z| >= 1.0 مع شروط إضافية
 Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)            # exit when |z| <= Z_EXIT (reverted)
 Z_STOP = _env_float("STRAT_Z_STOP", 3.5)            # hard stop for the gap itself (sanity)
+SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past entry (gap units)
+MAX_ENTRY_GAP_USD       = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)   # reject entries beyond this gap
 SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past entry (gap units)
 MAX_ENTRY_GAP_USD       = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)   # reject entries beyond this gap
 

@@ -609,6 +609,8 @@ def live_loop():
         sess.stop()
         main._print_report(result, state)
         reactor.stop()
+        import sys as _sys
+        _sys.exit(0)
 
 
 def _record_external_close(state, ts_open, ts_close, gap,
@@ -634,6 +636,16 @@ def _record_external_close(state, ts_open, ts_close, gap,
 
 
 if __name__ == "__main__":
+    import signal
+    import sys
+
+    def _shutdown(signum, frame):
+        print("shutdown signal received — stopping reactor")
+        reactor.stop()
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
     d = live_loop()
     d.addErrback(lambda f: print("FATAL", f.getTraceback()))
     reactor.run()

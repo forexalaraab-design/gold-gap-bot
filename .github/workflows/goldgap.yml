@@ -41,7 +41,7 @@ jobs:
           CBOT_REFRESH_TOKEN: ${{ secrets.CBOT_REFRESH_TOKEN }}
           CBOT_MODE: ${{ secrets.CBOT_MODE }}
           CBOT_ENVIRONMENT: ${{ secrets.CBOT_ENVIRONMENT }}
-          CBOT_DURATION_MIN: "4.5"
+          CBOT_DURATION_MIN: "3.0"
           CBOT_TOKEN_SYNC: "1"
           GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
           STRAT_COOLDOWN_MIN: ${{ secrets.STRAT_COOLDOWN_MIN }}
@@ -52,6 +52,7 @@ jobs:
           STRAT_TRAILING_ARM: ${{ secrets.STRAT_TRAILING_ARM }}
           STRAT_TRAILING_BACK: ${{ secrets.STRAT_TRAILING_BACK }}
           PYTHONIOENCODING: utf-8
+          PYTHONUNBUFFERED: "1"
 
       - name: Persist gap log
         run: |

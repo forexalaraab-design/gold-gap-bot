@@ -16,6 +16,7 @@ def _env_bool(name, default=False):
         return default
     return str(v).strip().lower() in ("1", "true", "yes", "on")
 
+
 # ===== cTrader / FP Markets =====
 ENVIRONMENT = os.environ.get("CBOT_ENVIRONMENT", "demo")  # demo | live
 APP_CLIENT_ID = os.environ.get("CBOT_APP_CLIENT_ID", "")
@@ -32,7 +33,6 @@ except ImportError:
 CBOT_ACCESS_TOKEN = os.environ.get("CBOT_ACCESS_TOKEN", "")
 CBOT_REFRESH_TOKEN = os.environ.get("CBOT_REFRESH_TOKEN", "")
 TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
-# Store the running token here so later runs can refresh via refreshToken
 TOKEN_STORE = os.environ.get("CBOT_TOKEN_STORE", TOKEN_FILE)
 
 # ===== Global gold sources =====
@@ -42,68 +42,73 @@ YAHOO_OFFSET_USD = 0.0  # GC=F is futures; add offset to approximate spot if nee
 
 # ===== Signal & risk (units: USD per ounce unless stated) =====
 SYMBOL = "XAUUSD"
-LOT = 0.05  # 5/100 lot (5 oz gold = $5 PnL per $1 move) [تعديل من 0.03 → 0.05]
+# زيادة الحجم من 0.01 → 0.03 (3x الأرباح المحتملة لكل حركة سعر)
+LOT = 0.03  # 3/100 lot (3 oz gold = $3 PnL per $1 move)
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
-# (symbol.digits=2 is only the display precision). Verified against live quotes.
-SPOT_SCALE = 100000.0  # تم التحقق من أنه 10^5 (وليس 10^2) للأسعار الداخلية لـ cTrader
+SPOT_SCALE = 100000.0
 
 # Modes: "log" = record gaps only; "trade" = open/close demo positions
 MODE = os.environ.get("CBOT_MODE", "log")
 
 # Self-built thresholds (statistical), replaced by measured scale after warmup.
-# Tunables can be overridden via repo secrets (STRAT_*) so the effective
-# configuration is never visible in the public repository.
-Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.5)          # enter when |z| >= Z_ENTRY (was 2.0)
+Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.5)          # enter when |z| >= Z_ENTRY
 Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)            # exit when |z| <= Z_EXIT (reverted)
 Z_STOP = _env_float("STRAT_Z_STOP", 3.5)            # hard stop for the gap itself (sanity)
 SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past entry (gap units)
-MAX_ENTRY_GAP_USD       = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)   # قبل: 50.0
+MAX_ENTRY_GAP_USD       = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)   # reject entries beyond this gap
 
 # الفجوة القصوى المسموحة (للحماية): إذا تجاوز gap_max_gap_pct% من السعر، نغلق.
-gap_max_gap_pct           = 0.10   # 10% من سعر الصرف (قبل: 0.15)
+gap_max_gap_pct           = 0.10   # 10% من سعر الصرف
 MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)    # reject/strip observations beyond this
-COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 15.0)  # pause re-entry after a close
-MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 10))  # أقصى عدد صفقات يومياً
-FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)  # open+close one diagnostic trade on start
-TRADING_FEES_PER_TRADE_LOT = _env_float("STRAT_FEES_PER_LOT", 8.0)  # est. commission+swap per 1.0 lot in USD
-DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)    # min net profit (after fees+spread) to bank via dynamic exit
-PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)  # extra per 0.01 lot above the gross floor
-TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.30)   # arm trailing一旦 net pnl >= this
-TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.50) # close if profit pulls back this much from peak (when armed)
-PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 2.0)  # إغلاق فوري عند بلوغ ربح صافي 2$ (تثبيت الربح)
-# --- 参数の新增 (إضافة للمزادات الجديدة) ---
-MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 1.5)   # إغلاق آلي بعد 90 دقيقة (تقليل من 8.0)
+
+# FLTR ضوضاء السوق: لا تدخل صفقة إلا إذا كانت الفجوة ≥ قيمة واضحة
+MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 0.50)     # الحد الأدنى للفجوة قبل الفتح
+
+COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 5.0)  # تقليل من 15 → 5 دقائق
+MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 10))
+FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)
+
+TRADING_FEES_PER_TRADE_LOT = _env_float("STRAT_FEES_PER_LOT", 8.0)
+DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)
+PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
+
+# تثبيت الأرباح: إغلاق فوري عند بلوغ ربح صافي محدد
+PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 2.0)  # إغلاق عند +2$ صافي
+
+TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.30)   # تتبع يبدأ عند ربح 30 سنت
+TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.50) # تراجع 50 سنت يغلق (من 1$ → 0.50$)
+
+MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.0)   # تقليل من 8 → 2 ساعة (إغلاق إلزامي)
 MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 2.0)       # إغلاقٍ آلي إذا تجاوزت الخسارة
-MAX_TRADE_PNL_USD = _env_float("STRAT_MAX_TRADE_PNL_USD", 15.0)  # حد أقصى خسارة/ربح لكل صفقة على حدة
-MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)   # دائرة أمان Daily Loss
-MAX_CONSECUTIVE_LOSSES = int(_env_float("STRAT_MAX_CONSEC_LOSSES", 3.0))  # دائرة أمان متتالية الخسائر
-SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"  # trade only in XAU sessions
-LIVE_TRADING_START_HOUR = _env_float("STRAT_SESSION_START", 22.0)   # UTC ساعة بدء التداول الحي
-LIVE_TRADING_END_HOUR   = _env_float("STRAT_SESSION_END", 5.0)     # UTC ساعة نهاية التداول الحي
-MAX_GAP_VELOCITY        = _env_float("STRAT_MAX_VELOCITY", 5.0)    # دولار/دقيقة -anha تجعلنا نمنع الفتح
-USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"  # robust median/MAD scale for z
+MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)
+MAX_CONSECUTIVE_LOSSES = int(_env_float("STRAT_MAX_CONSEC_LOSSES", 3.0))
+
+SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"
+LIVE_TRADING_START_HOUR = _env_float("STRAT_SESSION_START", 22.0)
+LIVE_TRADING_END_HOUR   = _env_float("STRAT_SESSION_END", 5.0)
+
+MAX_GAP_VELOCITY        = _env_float("STRAT_MAX_VELOCITY", 5.0)
+USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"
 
 # Stats
-ROLLING_WINDOW = int(_env_float("STRAT_WINDOW", 48))   # last N valid observations
-MIN_SAMPLES = int(_env_float("STRAT_MIN_SAMPLES", 8))  # minimum before z can trigger trades
-MIN_BALANCE_TO_TRADE = 200.0  # below this, always behave like "log"
+ROLLING_WINDOW = int(_env_float("STRAT_WINDOW", 48))
+MIN_SAMPLES = int(_env_float("STRAT_MIN_SAMPLES", 8))
+MIN_BALANCE_TO_TRADE = 200.0
 
 # Files / state
 HISTORY_FILE = os.path.join(BASE_DIR, "data", "gap_history.csv")
-STATE_FILE = os.path.join(BASE_DIR, "data", "bot_state.json")
-TRADES_FILE = os.path.join(BASE_DIR, "data", "trades.csv")
-PERF_FILE = os.path.join(BASE_DIR, "data", "performance.json")
-MAX_CLOSED_TRADES = 200        # records kept in state
+STATE_FILE   = os.path.join(BASE_DIR, "data", "bot_state.json")
+TRADES_FILE  = os.path.join(BASE_DIR, "data", "trades.csv")
+PERF_FILE    = os.path.join(BASE_DIR, "data", "performance.json")
+MAX_CLOSED_TRADES = 200
 
-# ===== Live loop (live.py) — near real-time coverage =====
-# Each GitHub scheduled job (every 5 min) runs a continuous loop for DURATION_MIN
-# minutes, polling the global price and reacting to streamed ticks ~immediately.
+# ===== Live loop =====
 DURATION_MIN = _env_float("CBOT_DURATION_MIN", 4.5)
 GLOBAL_POLL_SEC = _env_float("CBOT_GLOBAL_POLL_SEC", 3)
-APPEND_EVERY_SEC = 60.0          # cap history rows: 1 per minute unless fast move
-APPEND_TOLERANCE = 0.02          # force an extra row if |gap changed| beyond this
+APPEND_EVERY_SEC = 60.0
+APPEND_TOLERANCE = 0.02
 MAX_HISTORY_ROWS = 2000
 
 # ===== Misc =====
 VERSION_REQ = True
-CONNECT_TIMEOUT = 30          # seconds for the TCP/SSL connection attempt
+CONNECT_TIMEOUT = 30

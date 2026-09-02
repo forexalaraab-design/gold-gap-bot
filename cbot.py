@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-cbot.py — غلاف cTrader Open API المت 강화 (إغلاق + reconcile + متابعة)
-يدعم: اتصال، مصادقة، رمز، أسعار، صفقات، إغلاق مع volume حتمي، reconcile.
+cbot.py — غلاف cTrader Open API (اتصال + مصادقة + رمز + صفقات)
+يدعم: اتصال TCP، مصادقة ثلاثية، بحث عن رمز، معلومات الرمز،
+       الاشتراك في الأسعار، الإغلاق مع استعادة volume تلقائي، reconcile.
 """
 
 import random
@@ -9,24 +10,14 @@ import string
 import time
 import config
 from ctrader_open_api import Client, EndPoints, Protobuf, TcpProtocol
-from ctrader_open_api.messages.OpenApiMessages_pb2 import (
-    ProtoOAApplicationAuthReq,
-    ProtoOAGetAccountListByAccessTokenReq,
-    ProtoOAAccountAuthReq,
-    ProtoOASymbolsListReq,
-    ProtoOASymbolByIdReq,
-    ProtoOASubscribeSpotsReq,
-    ProtoOAUnsubscribeSpotsReq,
-    ProtoOANewOrderReq,
-    ProtoOAClosePositionReq,
-    ProtoOAReconcileReq,
-    ProtoOATraderReq,
-    ProtoOAAmendPositionSLTPReq,
-)
 from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
 from twisted.internet import reactor, defer
 from twisted.internet import task as _task
 
+
+# =============================================================================
+# مساعدة
+# =============================================================================
 
 def _side(v):
     return Models.ProtoOATradeSide.DESCRIPTOR.values_by_name[v].number
@@ -40,19 +31,49 @@ def _unwrap(message):
     return Protobuf.extract(message)
 
 
+def _check_error(resp, context):
+    code = getattr(resp, "errorCode", 0)
+    if code != 0:
+        desc = (getattr(resp, "error_description", "") or
+                getattr(resp, "message", "") or "")
+        raise RuntimeError(f"[{context}] errorCode={code} {desc}")
+
+
+# =============================================================================
+# انتظار تسجيل سعر واحد
+# =============================================================================
+
+class _WsWaiter:
+    def __init__(self, symbol_id):
+        self.symbol_id = symbol_id
+        self.deferred = defer.Deferred()
+        self.received = False
+
+    def _on_msg(self, inner):
+        if self.received:
+            return
+        if (hasattr(inner, "symbolId") and
+                inner.symbolId == self.symbol_id and
+                hasattr(inner, "bid")):
+            self.received = True
+            self.deferred.callback(inner)
+
+
+# =============================================================================
+# الجلسة
+# =============================================================================
+
 class CtraderSession:
     def __init__(self):
         self.client = None
         self.account_id = None
-        self.waiter = None
         self.spot_cache = {}
-        self._pos_cache = None
         self._send_lock = defer.DeferredLock()
         self._closed_positions = set()
 
-    # ── إرسال آمن (أقفال لمنع التداخل) ──────────────────────────────
+    # ── إرسال آمن (يحمي من التداخل) ──────────────────────────────
     @defer.inlineCallbacks
-    def _send(self, req, responseTimeoutInSeconds=30):
+    def _send(self, req, responseTimeoutInSeconds=15):
         d = self._send_lock.acquire()
         d.addCallback(
             lambda _: self.client.send(
@@ -63,29 +84,31 @@ class CtraderSession:
         res = yield d
         defer.returnValue(res)
 
-    # ── استقبال الرسائل ──────────────────────────────────────────────
+    # ── استقبال الأسعار ────────────────────────────────────────────
     def _on_received(self, client, message):
         try:
             inner = _unwrap(message)
         except Exception:
             return
-        if hasattr(inner, "symbolId") and hasattr(inner, "bid") and hasattr(inner, "ask"):
-            self.spot_cache[inner.symbolId] = (inner.bid, inner.ask, inner.timestamp)
-        if self.waiter is not None and not self.waiter.deferred.called:
-            if hasattr(inner, "symbolId") and inner.symbolId == self.waiter.symbol_id:
-                self.waiter.deferred.callback(inner)
+        if (hasattr(inner, "symbolId") and
+                hasattr(inner, "bid") and
+                hasattr(inner, "ask")):
+            self.spot_cache[inner.symbolId] = (
+                inner.bid, inner.ask, inner.timestamp
+            )
 
-    def latest_spot(self, symbol_id):
-        return self.spot_cache.get(symbol_id)
-
+    # ── الاشتراك في الأسعار (يستدعيه live.py ويستخدم latest_spot) ──
     def subscribe_persistent(self, symbol_id):
-        req = ProtoOASubscribeSpotsReq()
+        req = Models.ProtoOASubscribeSpotsReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId.append(symbol_id)
         req.subscribeToSpotTimestamp = int(time.time() * 1000)
         self.client.send(req, responseTimeoutInSeconds=10)
 
-    # ── الاتصال ─────────────────────────────────────────────────────
+    def latest_spot(self, symbol_id):
+        return self.spot_cache.get(symbol_id)
+
+    # ── الاتصال TCP ────────────────────────────────────────────────
     @defer.inlineCallbacks
     def connect(self):
         host = (
@@ -101,10 +124,10 @@ class CtraderSession:
         yield conn.addTimeout(config.CONNECT_TIMEOUT, reactor)
         defer.returnValue(host)
 
-    # ── المصادقة (ثلاث طبقات) ──────────────────────────────────────
+    # ── المصادقة (ثلاث طبقات) ─────────────────────────────────────
     @defer.inlineCallbacks
     def authenticate(self, access_token):
-        req = ProtoOAApplicationAuthReq(
+        req = Models.ProtoOAApplicationAuthReq(
             clientId=config.APP_CLIENT_ID.strip(),
             clientSecret=config.APP_CLIENT_SECRET.strip(),
         )
@@ -112,7 +135,9 @@ class CtraderSession:
         res = _unwrap(res)
         _check_error(res, "app auth")
 
-        req = ProtoOAGetAccountListByAccessTokenReq(accessToken=access_token)
+        req = Models.ProtoOAGetAccountListByAccessTokenReq(
+            accessToken=access_token
+        )
         res = yield self._send(req, responseTimeoutInSeconds=15)
         res = _unwrap(res)
         _check_error(res, "account list")
@@ -126,7 +151,7 @@ class CtraderSession:
             match = accounts
         target = match[0]
 
-        req = ProtoOAAccountAuthReq(
+        req = Models.ProtoOAAccountAuthReq(
             ctidTraderAccountId=target.ctidTraderAccountId,
             accessToken=access_token,
         )
@@ -136,18 +161,18 @@ class CtraderSession:
         self.account_id = res.ctidTraderAccountId
         defer.returnValue(self.account_id)
 
-    # ── معلومات الحساب ──────────────────────────────────────────────
+    # ── معلومات الحساب ─────────────────────────────────────────────
     @defer.inlineCallbacks
     def get_trader(self):
-        req = ProtoOATraderReq(ctidTraderAccountId=self.account_id)
+        req = Models.ProtoOATraderReq(ctidTraderAccountId=self.account_id)
         res = yield self._send(req, responseTimeoutInSeconds=30)
         res = _unwrap(res)
         defer.returnValue(res.trader)
 
-    # ── البحث عن رمز ────────────────────────────────────────────────
+    # ── البحث عن رمز ───────────────────────────────────────────────
     @defer.inlineCallbacks
     def find_symbol(self, name):
-        req = ProtoOASymbolsListReq(ctidTraderAccountId=self.account_id)
+        req = Models.ProtoOASymbolsListReq(ctidTraderAccountId=self.account_id)
         res = yield self._send(req, responseTimeoutInSeconds=15)
         res = _unwrap(res)
         for sym in res.symbol:
@@ -155,10 +180,10 @@ class CtraderSession:
                 defer.returnValue(sym.symbolId)
         raise RuntimeError("symbol not found: " + name)
 
-    # ── معلومات الرمز ───────────────────────────────────────────────
+    # ── معلومات الرمز ──────────────────────────────────────────────
     @defer.inlineCallbacks
     def symbol_info(self, symbol_id):
-        req = ProtoOASymbolByIdReq()
+        req = Models.ProtoOASymbolByIdReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId.append(symbol_id)
         res = yield self._send(req, responseTimeoutInSeconds=15)
@@ -184,228 +209,117 @@ class CtraderSession:
                 defer.returnValue(info)
         raise RuntimeError("symbol details not returned for id " + str(symbol_id))
 
-    # ── سعر فوري ────────────────────────────────────────────────────
+    # ── سعر فوري (ينتظر أول رسالة) ──────────────────────────────
     @defer.inlineCallbacks
     def get_spot(self, symbol_id, timeout=12):
-        self.waiter = _WsWaiter(symbol_id)
-        req = ProtoOASubscribeSpotsReq()
+        waiter = _WsWaiter(symbol_id)
+        self.client.setMessageReceivedCallback(
+            lambda c, m: waiter._on_msg(_unwrap(m))
+        )
+        req = Models.ProtoOASubscribeSpotsReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId.append(symbol_id)
         req.subscribeToSpotTimestamp = int(time.time() * 1000)
         yield self._send(req, responseTimeoutInSeconds=10)
-        ev = yield self.waiter.deferred.addTimeout(timeout, reactor)
-        self.waiter = None
-        try:
-            unsub = ProtoOAUnsubscribeSpotsReq()
-            unsub.ctidTraderAccountId = self.account_id
-            unsub.symbolId.append(symbol_id)
-            yield self._send(unsub, responseTimeoutInSeconds=5)
-        except Exception:
-            pass
+        ev = yield waiter.deferred.addTimeout(timeout, reactor)
         defer.returnValue((ev.bid, ev.ask, ev.timestamp))
 
-    # ── صفقات مفتوحة ───────────────────────────────────────────────
+    # ── أوامر السوق ────────────────────────────────────────────────
     @defer.inlineCallbacks
-    def open_positions(self, symbol_id, max_age=0.0):
-        import time as _t
-        now = _t.time()
-        ctx = getattr(self, "_pos_cache", None)
-        if max_age and ctx and (now - ctx[0]) < max_age:
-            defer.returnValue(list(ctx[1]))
-        req = ProtoOAReconcileReq(ctidTraderAccountId=self.account_id)
-        res = yield self._send(req, responseTimeoutInSeconds=30)
-        res = _unwrap(res)
-        open_flags = (
-            Models.ProtoOAPositionStatus.POSITION_STATUS_OPEN,
-            Models.ProtoOAPositionStatus.POSITION_STATUS_CREATED,
-        )
-        found = [
-            p
-            for p in res.position
-            if p.tradeData.symbolId == symbol_id and p.positionStatus in open_flags
-        ]
-        self._pos_cache = (_t.time(), list(found))
-        defer.returnValue(found)
-
-    @property
-    def last_positions(self):
-        return list(getattr(self, "_pos_cache", (0, []))[1])
-
-    # ── إيجاد volume position (إجباري للإغلاق) ─────────────────────
-    @defer.inlineCallbacks
-    def resolve_position_volume(self, position_id, attempts=3):
-        """إيجاد volume position عبر cache → reconcile → القيمة الافتراضية."""
-        # 1. cache
-        for p in self.last_positions:
-            if p.positionId == position_id:
-                vol = getattr(p.tradeData, "volume", None)
-                if vol:
-                    defer.returnValue(vol)
-        # 2. reconcile مع إعادة محاولة
-        for attempt in range(attempts):
-            try:
-                req = ProtoOAReconcileReq(ctidTraderAccountId=self.account_id)
-                res = yield self._send(req, responseTimeoutInSeconds=30)
-                res = _unwrap(res)
-                for p in res.position:
-                    if p.positionId == position_id:
-                        vol = getattr(p.tradeData, "volume", None)
-                        if vol:
-                            defer.returnValue(vol)
-                break
-            except Exception as exc:
-                if attempt < attempts - 1:
-                    yield _task.deferLater(reactor, 2, lambda: None)
-                else:
-                    print(
-                        "WARN _resolve_position_volume exhaust: ", repr(exc)
-                    )
-        # 3. افتراضي (0.01 لوت = volume 100 ل XAUUSD)
-        defer.returnValue(100)
-
-    # ── فتح صفقة ────────────────────────────────────────────────────
-    @defer.inlineCallbacks
-    def open_market(
-        self, symbol_id, side, volume, sl=None, tp=None,
-        label=None, comment="",
-    ):
-        req = ProtoOANewOrderReq()
+    def open_market(self, symbol_id, side, volume,
+                    sl=None, tp=None, label="",
+                    comment=""):
+        cls = Models.ProtoOATradeSide
+        side_enum = cls.SELL if str(side).upper() == "SELL" else cls.BUY
+        req = Models.ProtoOANewOrderReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId = symbol_id
-        req.orderType = Models.ProtoOAOrderType.MARKET
-        req.tradeSide = _side(side)
+        req.tradeSide = side_enum
         req.volume = volume
-        req.timeInForce = Models.ProtoOATimeInForce.IMMEDIATE_OR_CANCEL
-        req.label = label if label else random_label()
-        req.comment = comment
-        res = yield self._send(req, responseTimeoutInSeconds=15)
+        req.label = label or random_label()
+        req.comment = comment or ""
+        if sl is not None:
+            req.stopLoss = sl
+        if tp is not None:
+            req.takeProfit = tp
+        res = yield self._send(req, responseTimeoutInSeconds=30)
         res = _unwrap(res)
-        _check_error(res, "new order")
-        if sl is not None or tp is not None:
-            try:
-                yield self.set_sltp(res.position.positionId, sl, tp)
-            except Exception as exc:
-                print("WARN: could not set SL/TP after open:", repr(exc))
-        # تحديث cache
-        import time as _t
-        if res.position is not None:
-            lst = list(getattr(self, "_pos_cache", (0, []))[1])
-            lst = [p for p in lst if p.positionId != res.position.positionId]
-            lst.append(res.position)
-            self._pos_cache = (_t.time(), lst)
+        _check_error(res, "open_market")
         defer.returnValue(res)
 
-    # ── تعديل SL/TP ─────────────────────────────────────────────────
+    # ── إغلاق صفقة مع استعادة volume تلقائي ─────────────────────
     @defer.inlineCallbacks
-    def set_sltp(self, position_id, sl=None, tp=None):
-        req = ProtoOAAmendPositionSLTPReq(
-            ctidTraderAccountId=self.account_id,
-            positionId=position_id,
-            stopLoss=sl,
-            takeProfit=tp,
-        )
-        res = yield self._send(req, responseTimeoutInSeconds=15)
-        res = _unwrap(res)
-        _check_error(res, "amend sl/tp")
-        defer.returnValue(res)
-
-    # ── إغلاق صفقة ──────────────────────────────────────────────────
-    @defer.inlineCallbacks
-    def close_position(self, position_id, volume=None, max_retries=3):
-        """إغلاق صفقة مع إيجاد volume وتتأكد من وجوده.
-
-        يضمن أن req.volume مُعيّن قبل الإرسال (proto2 required field).
-        """
-        # 1. إيجاد volume
+    def close_position(self, position_id, volume=None,
+                       max_retries=3, delay_sec=2.0):
         if volume is None:
-            for p in self.last_positions:
-                if p.positionId == position_id:
-                    vol = getattr(p.tradeData, "volume", None)
-                    if vol:
-                        volume = vol
-                        break
-        if volume is None:
+            positions = None
             try:
-                req = ProtoOAReconcileReq(ctidTraderAccountId=self.account_id)
-                res = yield self._send(req, responseTimeoutInSeconds=30)
-                res = _unwrap(res)
-                for p in res.position:
-                    if p.positionId == position_id:
-                        vol = getattr(p.tradeData, "volume", None)
-                        if vol:
-                            volume = vol
-                            break
+                positions = yield self.open_positions(self.account_id)
             except Exception as exc:
-                print("reconcile-for-close WARN:", repr(exc))
-        if volume is None:
-            # افتراضي: 0.01 لوت ل XAUUSD = volume 100
-            volume = 100
-            print(
-                "INFO close_position default volume=100 "
-                f"for position {position_id}"
-            )
-        # 2. إغلاق مع إعادة محاولة
-        last_exc = None
-        for attempt in range(max_retries):
-            try:
-                req = ProtoOAClosePositionReq(
-                    ctidTraderAccountId=self.account_id,
-                    positionId=position_id,
+                print(f"close: reconcile fallback: {exc!r}")
+                positions = getattr(self, "_last_positions", None) or []
+            match = [p for p in positions
+                     if p.positionId == position_id]
+            if not match:
+                raise RuntimeError(
+                    f"position {position_id} not found in positions list"
                 )
-                req.volume = volume
-                res = yield self._send(req, responseTimeoutInSeconds=30)
+            vol = getattr(match[0].tradeData, "volume", None)
+            if vol is None:
+                raise RuntimeError(
+                    f"cannot determine volume for position {position_id}"
+                )
+            volume = vol
+        vol_int = int(round(volume))
+        for attempt in range(1, max_retries + 1):
+            req = Models.ProtoOAClosePositionReq()
+            req.ctidTraderAccountId = self.account_id
+            req.positionId = position_id
+            req.volume = vol_int
+            try:
+                res = yield self._send(req, responseTimeoutInSeconds=15)
                 res = _unwrap(res)
-                _check_error(res, "close position")
-                # تحديث cache
-                import time as _t
-                lst = list(getattr(self, "_pos_cache", (0, []))[1])
-                lst = [p for p in lst if p.positionId != position_id]
-                self._pos_cache = (_t.time(), lst)
+                _check_error(res, f"close #{attempt}")
                 self._closed_positions.add(position_id)
                 defer.returnValue(res)
             except Exception as exc:
-                last_exc = exc
-                print(
-                    f"close_position(attempt {attempt+1}/{max_retries}) "
-                    f"failed: {exc!r}"
-                )
-                if attempt < max_retries - 1:
-                    yield _task.deferLater(reactor, 3, lambda: None)
-        raise RuntimeError(
-            f"close_position({position_id}) failed after "
-            f"{max_retries} attempts: {last_exc!r}"
-        )
+                if attempt == max_retries:
+                    print(f"close_position failed after {max_retries} retries: "
+                          f"{exc!r}")
+                    raise
+                print(f"close attempt {attempt}/{max_retries} failed: {exc!r} "
+                      f"→ retry in {delay_sec}s")
+                yield _task.deferLater(reactor, delay_sec, lambda: None)
 
-    # ── إغلاق قسري (أخير) ──────────────────────────────────────────
+    # ── تعديل SL/TP ────────────────────────────────────────────────
     @defer.inlineCallbacks
-    def force_close_position(self, position_id):
-        """إغلاق抜esis بغض النظر عن الحالة — last resort."""
-        if position_id in self._closed_positions:
-            defer.returnValue(None)
-        try:
-            vol = yield self.resolve_position_volume(position_id, attempts=2)
-            if vol is None:
-                vol = 100
-            yield self.close_position(position_id, volume=vol, max_retries=2)
-        except Exception as exc:
-            print(f"force_close_position WARN {position_id}: {exc!r}")
+    def set_sltp(self, position_id, sl, tp):
+        req = Models.ProtoOAAmendPositionSLTPReq()
+        req.ctidTraderAccountId = self.account_id
+        req.positionId = position_id
+        req.stopLoss = sl
+        req.takeProfit = tp
+        res = yield self._send(req, responseTimeoutInSeconds=15)
+        res = _unwrap(res)
+        _check_error(res, "set_sltp")
+        defer.returnValue(res)
 
+    # ── قائمة الصفقات المفتوحة ────────────────────────────────────
+    @defer.inlineCallbacks
+    def open_positions(self, account_id=None, max_age=None):
+        aid = account_id or self.account_id
+        start = time.time() - (max_age if max_age else 300.0)
+        req = Models.ProtoOAPositionsReq()
+        req.ctidTraderAccountId = aid
+        req.startTime = int(start * 1000)
+        res = yield self._send(req, responseTimeoutInSeconds=15)
+        res = _unwrap(res)
+        defer.returnValue(list(res.position))
+
+    # ── إيقاف الخدمة ───────────────────────────────────────────────
     def stop(self):
         try:
-            self.client.stopService()
+            if self.client is not None:
+                self.client.stopService()
         except Exception:
             pass
-
-
-def _check_error(res, where):
-    if res.DESCRIPTOR.fields_by_name.get("errorCode") is None:
-        return
-    code = getattr(res, "errorCode", None)
-    if code:
-        raise RuntimeError(f"{where} rejected by server: errorCode={code}")
-
-
-class _WsWaiter:
-    def __init__(self, symbol_id):
-        self.symbol_id = symbol_id
-        self.deferred = defer.Deferred()

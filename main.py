@@ -657,7 +657,17 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     if (res.position and res.position.price) else None
                 )
                 # الأولوية لـ executionPrice (سعر التنفيذ الفعلي)
-                entry_price_val = order_exec_price or position_price
+                # cTrader يعيد الأسعار بتنسيق داخلي (مقسوم على SPOT_SCALE 100000)
+                # نحول إلى سعر حقيقي بالدولار للتوافق مع mid الذي نستخدمه في الإغلاق
+                raw_entry = order_exec_price or position_price
+                if raw_entry is not None and raw_entry != 0:
+                    # إذا كان raw_entry كبيراً (> 10000) فغالباً بالوحدات الداخلية — نقسم على SPOT_SCALE
+                    if raw_entry > 10000:
+                        entry_price_val = raw_entry / (config.SPOT_SCALE or 100000.0)
+                    else:
+                        entry_price_val = raw_entry
+                else:
+                    entry_price_val = None
                 new_st_pos = {
                     "positionId": res.position.positionId
                     if res.position else None,

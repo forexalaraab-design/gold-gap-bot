@@ -56,6 +56,8 @@ class CtraderSession:
         self.account_id = None
         self.spot_cache = {}
         self._lock = defer.DeferredLock()
+        self.last_positions = []
+        self._last_positions = []
 
     # ── send ──────────────────────────────────────────────────────────
     @defer.inlineCallbacks
@@ -291,9 +293,19 @@ class CtraderSession:
         req.ctidTraderAccountId = aid
         req.fromTimestamp = int(start * 1000)
         req.toTimestamp = int(now * 1000)
-        res = yield self._send(req, 15)
-        res = _unwrap(res)
-        defer.returnValue(list(res.order))
+        try:
+            res = yield self._send(req, 15)
+            res = _unwrap(res)
+            if hasattr(res, 'order'):
+                self._last_positions = list(res.order)
+                defer.returnValue(self._last_positions)
+            else:
+                self._last_positions = []
+                defer.returnValue([])
+        except Exception as exc:
+            print(f"open_positions send failed: {exc!r}")
+            self._last_positions = []
+            defer.returnValue([])
 
     # ── stop ─────────────────────────────────────────────────────────
     def stop(self):

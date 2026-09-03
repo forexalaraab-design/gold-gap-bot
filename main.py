@@ -486,6 +486,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     symbol_id = result["symbol_id"]
     try:
         positions = yield sess.open_positions(symbol_id, max_age=120.0)
+        sess.last_positions = positions
     except Exception as exc:
         positions = sess.last_positions
         result["open_positions_warn"] = "reconcile-failed:" + repr(exc)

@@ -285,7 +285,8 @@ def live_loop():
 
             action_str = "none"
             if pos_id is not None:
-                action_str = f"hold:pnl={pnl_net:.2f}"
+                pnlu = result.get("close_pnl_usd", 0.0)
+                action_str = f"hold:pnl={pnlu:.2f}"
             elif state.get("position") is not None:
                 action_str = "open"
             if z_val is not None and abs(z_val) >= config.Z_ENTRY:

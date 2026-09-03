@@ -42,8 +42,10 @@ YAHOO_OFFSET_USD = 0.0  # GC=F is futures; add offset to approximate spot if nee
 
 # ===== Signal & risk (units: USD per ounce unless stated) =====
 SYMBOL = "XAUUSD"
-# زيادة الحجم من 0.01 → 0.03 (3x الأرباح المحتملة لكل حركة سعر)
-LOT = 0.03  # 3/100 lot (3 oz gold = $3 PnL per $1 move)
+
+# الحجم: 0.03 لوت = 3 أونصات ذهب ≈ $3 PnL لكل حركة 1$ في السعر
+LOT = 0.03
+
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
 SPOT_SCALE = 100000.0
 
@@ -51,24 +53,42 @@ SPOT_SCALE = 100000.0
 MODE = os.environ.get("CBOT_MODE", "trade")  # trade = نفّذ صفقات حقيقية
 
 # Self-built thresholds (statistical), replaced by measured scale after warmup.
-Z_ENTRY = _env_float("STRAT_Z_ENTRY", 1.5)          # 3.0 → 1.5 (إشارة أضعف مقبولة)
-Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.0)  # إشارة ناعمة: تدخل إذا |z| >= 1.0 مع شروط إضافية
-Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)            # exit when |z| <= Z_EXIT (reverted)
-Z_STOP = _env_float("STRAT_Z_STOP", 3.5)            # hard stop for the gap itself (sanity)
-SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past entry (gap units)
-MAX_ENTRY_GAP_USD       = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)   # reject entries beyond this gap
-SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)  # min SL distance past entry (gap units)
-MAX_ENTRY_GAP_USD       = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)   # reject entries beyond this gap
+# Z_ENTRY: الحد الأدنى لـ |z| قبل الدخول. كلما زاد الرقم، قلّت الدخولات الخاطئة.
+# 1.5 → 2.0: نزيد الدقة، نقلل الدخول الخاطئ، نعتمد إشارات أقوى فقط.
+Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.0)
 
-# الفجوة القصوى المسموحة (للحماية): إذا تجاوز gap_max_gap_pct% من السعر، نغلق.
-gap_max_gap_pct           = 0.10   # 10% من سعر الصرف
-MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)    # reject/strip observations beyond this
+# Z_ENTRY_SOFT: مستوى ثاني أقل — دخول إذا |z| ≥ Z_ENTRY_SOFT مع شروط إضافية
+# (مثلاً: الفجوة واضحة والسرعة غير خطرة).
+Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.5)
+
+# Z_EXIT: إغلاق إذا عاد |z| إلى هذا المستوى (عندما يتراجع الانحراف).
+Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)
+
+# Z_STOP: حدود上限 لـ |z| قبل اعتباره خطرًا أو غير مستدام.
+Z_STOP = _env_float("STRAT_Z_STOP", 3.5)
+
+# SL_AFTER_ENTRY_USD: المسافة الدنيا لوقف الخسارة بعد الفتح (بالفجوة/الوحدات).
+SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)
+
+# MAX_ENTRY_GAP_USD: إذا تجاوزت الفجوة هذه القيمة، لا ندخل (لأنها قد تكون خطأً).
+MAX_ENTRY_GAP_USD = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)
+
+# gap_max_gap_pct: إغلاق إذا تجاوزت الفجوة نسبة مئوية من سعر الصرف (للحماية).
+gap_max_gap_pct = 0.10  # 10% من سعر الصرف
+
+MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)  # رفض/تجاهل ملاحظات خارج هذا المدى
 
 # FLTR ضوضاء السوق: لا تدخل صفقة إلا إذا كانت الفجوة ≥ قيمة واضحة
-MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 1.00)     # 0.50 → 1.00 (فلترة ضوضاء أقوى)
+# 0.50 → 1.00: نزيد عتبة الدخول لتقليل الدخول في تذبذبات صغيرة.
+MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 1.50)
 
-COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 5.0)  # تقليل من 15 → 5 دقائق
-MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 20))  # 10 → 20 (زيادة للسماح بمزيد من الصفقات)
+# COOLDOWN_MINUTES: انتظار بعد إغلاق صفقة قبل فتح أخرى (تجنب المتتابعات الخاطئة).
+# 5.0 → 3.0: عدد أقل لكنه لا يزال واقعيًا.
+COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 3.0)
+
+# MAX_TRADES_PER_DAY: الحد الأقصى لعدد الصفقات في اليوم.
+MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 1))
+
 FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)
 
 TRADING_FEES_PER_TRADE_LOT = _env_float("STRAT_FEES_PER_LOT", 8.0)
@@ -76,21 +96,35 @@ DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)
 PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
 
 # تثبيت الأرباح: إغلاق فوري عند بلوغ ربح صافي محدد
-PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 3.0)  # 2.0 → 3.0 (هدف ربح أعلى)
+# 2.0 → 3.0: نزيد الهدف قليلاً لنحمي الأرباح وتجنب التقلبات.
+PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 3.0)
 
-TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.50)   # 0.30 → 0.50 (تتبع أبكر)
-TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.50) # تراجع 50 سنت يغلق (من 1$ → 0.50$)
+# TRAILING_ARM_USD: تتبع الأرباح يبدأ عندما يصل الـ PnL الصافي إلى هذه القيمة.
+# 0.30 → 0.30: netting $0.30 以上でトラリング開始（そのまま）
+TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.30)
 
-MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 4.0)   # 2.0 → 4.0 (وقت أطول للإغلاق الاختياري)
-MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 2.0)       # إغلاقٍ آلي إذا تجاوزت الخسارة
+# TRAILING_BACK_USD: إذا تراجع الربح من ذروته بهذا المقدار، نغلق الصفقة.
+# 0.50 → 0.30: نغلق أسرع عند تراجع الأرباح (حماية من العودة الخاسرة).
+TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.30)
+
+# MAX_HOLD_HOURS: أقصى وقت للحفاظ على الصفقة مفتوحة قبل الإغلاق الإلزامي.
+# 2.0 → 4.0: وقت أطول قليلاً لإعطاء الفرصة للاستعادة، لكن نغلق في النهاية.
+MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.0)
+
+# الحد الأقصى للخسارة لصفقة واحدة (إغلاق آلي).
+MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 2.0)
+
+# الحد اليومي للخسارة (دائرة أمان).
 MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)
+
+# أقصى عدد من الخسائر المتتالية قبل التوقف (دائرة أمان).
 MAX_CONSECUTIVE_LOSSES = int(_env_float("STRAT_MAX_CONSEC_LOSSES", 3.0))
 
 SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"
 LIVE_TRADING_START_HOUR = _env_float("STRAT_SESSION_START", 22.0)
-LIVE_TRADING_END_HOUR   = _env_float("STRAT_SESSION_END", 5.0)
+LIVE_TRADING_END_HOUR = _env_float("STRAT_SESSION_END", 5.0)
 
-MAX_GAP_VELOCITY        = _env_float("STRAT_MAX_VELOCITY", 5.0)
+MAX_GAP_VELOCITY = _env_float("STRAT_MAX_VELOCITY", 5.0)
 USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"
 
 # Stats
@@ -100,9 +134,9 @@ MIN_BALANCE_TO_TRADE = 200.0
 
 # Files / state
 HISTORY_FILE = os.path.join(BASE_DIR, "data", "gap_history.csv")
-STATE_FILE   = os.path.join(BASE_DIR, "data", "bot_state.json")
-TRADES_FILE  = os.path.join(BASE_DIR, "data", "trades.csv")
-PERF_FILE    = os.path.join(BASE_DIR, "data", "performance.json")
+STATE_FILE = os.path.join(BASE_DIR, "data", "bot_state.json")
+TRADES_FILE = os.path.join(BASE_DIR, "data", "trades.csv")
+PERF_FILE = os.path.join(BASE_DIR, "data", "performance.json")
 MAX_CLOSED_TRADES = 200
 
 # ===== Live loop =====

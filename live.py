@@ -357,6 +357,16 @@ def live_loop():
                     state["cooldown_until"] = (now +
                                                 config.COOLDOWN_MINUTES * 60)
 
+            # ----- تنفيذ دورة التداول (فتح + إغلاق) من main.py -----
+            closing_mgr_local = _main.ClosingManager(state, config)
+            closing_mgr_local.init_from_state(state)
+            try:
+                yield _main.run_trade_cycle(
+                    sess, mid, global_price, stats,
+                    state, result, closing_mgr_local)
+            except Exception as exc:
+                print(f"trade-cycle error: {exc!r}", flush=True)
+
             # ----- إحصائيات حية -----
             z_val = None
             if stats:

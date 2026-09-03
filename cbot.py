@@ -10,7 +10,8 @@ import string
 import time
 import config
 from ctrader_open_api import Client, EndPoints, Protobuf, TcpProtocol
-from ctrader_open_api.messages import OpenApiMessages_pb2 as Models  # كان OpenApiModelMessages_pb2 خطأ
+from ctrader_open_api.messages import OpenApiMessages_pb2 as ProtoMsgs
+from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
 from twisted.internet import reactor, defer
 from twisted.internet import task as _task
 
@@ -99,7 +100,7 @@ class CtraderSession:
 
     # ── الاشتراك في الأسعار (يستدعيه live.py ويستخدم latest_spot) ──
     def subscribe_persistent(self, symbol_id):
-        req = Models.ProtoOASubscribeSpotsReq()
+        req = ProtoMsgs.ProtoOASubscribeSpotsReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId.append(symbol_id)
         req.subscribeToSpotTimestamp = int(time.time() * 1000)
@@ -216,7 +217,7 @@ class CtraderSession:
         self.client.setMessageReceivedCallback(
             lambda c, m: waiter._on_msg(_unwrap(m))
         )
-        req = Models.ProtoOASubscribeSpotsReq()
+        req = ProtoMsgs.ProtoOASubscribeSpotsReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId.append(symbol_id)
         req.subscribeToSpotTimestamp = int(time.time() * 1000)
@@ -309,12 +310,12 @@ class CtraderSession:
     def open_positions(self, account_id=None, max_age=None):
         aid = account_id or self.account_id
         start = time.time() - (max_age if max_age else 300.0)
-        req = Models.ProtoOAPositionsReq()
+        req = ProtoMsgs.ProtoOAOrderListReq()
         req.ctidTraderAccountId = aid
         req.startTime = int(start * 1000)
         res = yield self._send(req, responseTimeoutInSeconds=15)
         res = _unwrap(res)
-        defer.returnValue(list(res.position))
+        defer.returnValue(list(res.order))
 
     # ── إيقاف الخدمة ───────────────────────────────────────────────
     def stop(self):

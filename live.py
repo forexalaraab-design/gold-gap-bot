@@ -14,10 +14,6 @@ from twisted.internet.threads import deferToThread
 import main as _main
 
 
-# =============================================================================
-# مساعدة
-# =============================================================================
-
 def utcnow_iso():
     return _main.utcnow_iso()
 
@@ -42,20 +38,12 @@ def _record_external_close(state, ts_open, ts_close, gap,
                                  max_gap, result)
 
 
-# =============================================================================
-# قفل تجاري (لحماية الفتح/الإغلاق من التداخل)
-# =============================================================================
-
 _trade_lock = DeferredLock()
 
 
 def _now_unix():
     return time.time()
 
-
-# =============================================================================
-# الحلقة الرئيسية (تعمل 3-5 دقائق ثم تتوقف عند انتهاء المهلة)
-# =============================================================================
 
 @inlineCallbacks
 def live_loop():
@@ -77,7 +65,6 @@ def live_loop():
     peak = 0.0
 
     try:
-        # --- الاتصال (إعادة محاولة 4 مرات) ---
         host = None
         for attempt in (1, 2, 3, 4):
             try:
@@ -91,7 +78,6 @@ def live_loop():
                 yield deferLater(reactor, 5, lambda: None)
         print(f"connected to {host}", flush=True)
 
-        # --- المصادقة ---
         account = None
         for attempt in (1, 2, 3, 4):
             t = token
@@ -102,20 +88,17 @@ def live_loop():
                 try:
                     yield sess.connect()
                 except Exception as exc:
-                    print(f"reconnect before auth {attempt}: {exc!r}",
-                          flush=True)
+                    print(f"reconnect before auth {attempt}: {exc!r}", flush=True)
             try:
                 account = yield sess.authenticate(t)
                 break
             except Exception as exc:
-                print(f"auth attempt {attempt} failed: {exc!r}",
-                      flush=True)
+                print(f"auth attempt {attempt} failed: {exc!r}", flush=True)
                 yield deferLater(reactor, 5, lambda: None)
         if account is None:
             raise RuntimeError("authentication failed after all attempts")
         print(f"authenticated as account {account}", flush=True)
 
-        # --- رمز الذهب ---
         symbol_id = yield sess.find_symbol(config.SYMBOL)
         info = yield sess.symbol_info(symbol_id)
         volume = int(round(config.LOT * info["lotSize"]))
@@ -127,13 +110,11 @@ def live_loop():
         result["balance"] = 0
         result["money_digits"] = digits
         print(f"symbol={config.SYMBOL} id={symbol_id} "
-              f"volume={volume} digits={digits} lotSize={info['lotSize']}",
-              flush=True)
+              f"volume={volume} digits={digits} lotSize={info['lotSize']}", flush=True)
 
         sess.subscribe_persistent(symbol_id)
         print(f"subscribed symbol={symbol_id}", flush=True)
 
-        # --- FORCE_TEST_OPEN (ديمو فقط) ---
         if (config.FORCE_TEST_OPEN and
                 config.ENVIRONMENT.strip().lower() == "demo"):
             try:
@@ -165,8 +146,7 @@ def live_loop():
                                     int(round((entry0 + dist) * scale)),
                                 )
                                 print(f"FORCE-TEST SETSLTP OK "
-                                      f"dist={dist} scale={int(scale)}",
-                                      flush=True)
+                                      f"dist={dist} scale={int(scale)}", flush=True)
                                 break
                             except Exception as exc:
                                 print(f"FORCE-TEST SETSLTP FAIL "
@@ -177,13 +157,11 @@ def live_loop():
             except Exception as exc:
                 print(f"FORCE-TEST FAIL: {exc!r}", flush=True)
 
-        # --- المراقبة المستمرة ---
         end = _now_unix() + config.DURATION_MIN * 60
         while _now_unix() < end:
             now = _now_unix()
             tick_start = now
 
-            # ----- جلب سعر الذهب العالمي -----
             global_price = 0.0
             source = "none"
             source_ts = ""
@@ -196,7 +174,6 @@ def live_loop():
                                 lambda: None)
                 continue
 
-            # ----- آخر سعر من المنصة -----
             spot = sess.latest_spot(symbol_id)
             if spot is None:
                 yield deferLater(reactor, config.GLOBAL_POLL_SEC,
@@ -206,7 +183,6 @@ def live_loop():
             mid = (bid + ask) / 2 / config.SPOT_SCALE
             gap = mid - global_price
 
-            # ----- حفظ السجل -----
             changed = (last_gap is None or
                        abs(gap - last_gap) >= config.APPEND_TOLERANCE)
             if (now - last_append >= config.APPEND_EVERY_SEC or
@@ -222,10 +198,8 @@ def live_loop():
                 if len(rows) > config.MAX_HISTORY_ROWS:
                     rows = rows[-config.MAX_HISTORY_ROWS:]
 
-            # ----- إحصائيات الفجوة -----
             stats = _main.compute_stats(rows[:-1], verbose=False)
 
-            # ----- رصيد السوق كل 15 ثانية -----
             if now - last_balance >= 15:
                 try:
                     trader = yield sess.get_trader()
@@ -237,7 +211,6 @@ def live_loop():
                 except Exception:
                     pass
 
-            # ----- فحص الصفقة المفتوحة كل 30 ثانية -----
             reconcile_now = (now - last_reconcile >= 30)
             st_pos = state.get("position")
             pos_id = None
@@ -285,8 +258,7 @@ def live_loop():
                             st_p.get("entry_price"),
                             mid, config.MAX_ENTRY_GAP_USD,
                             result)
-                        print("detected external close — recorded",
-                              flush=True)
+                        print("detected external close — recorded", flush=True)
                         st_pos = None
 
             # ----- تنفيذ دورة التداول الكاملة (فتح + إغلاق) -----
@@ -298,72 +270,6 @@ def live_loop():
                     state, result, closing_mgr_full)
             except Exception as exc:
                 print(f"trade-cycle error: {exc!r}", flush=True)
-            should_close = False
-            close_reason = None
-            pnl_net = 0.0
-            if pos_id is not None and st_pos is not None:
-                digits = result.get("digits") or 2
-                md = result.get("money_digits") or 2
-                net_pnl, gross_pnl, fees = _main.dynamic_pnl_usd(
-                    pos, mid, digits, md)
-                if st_pos.get("pnl_peak_usd") is not None:
-                    peak = max(float(st_pos["pnl_peak_usd"]), net_pnl)
-                    st_pos["pnl_peak_usd"] = round(peak, 2)
-                st_pos["pnl_last_usd"] = round(net_pnl, 2)
-                pnl_net = net_pnl
-
-                closing_mgr = _main.ClosingManager(state, config)
-                closing_mgr.init_from_state(state)
-                should_close, close_reason = closing_mgr.check_close(
-                    pos, mid, global_price, stats,
-                    st_pos, now, md)
-
-                if should_close:
-                    print(f"✓ closing: reason={close_reason}, "
-                          f"pnl={pnl_net:.2f}, peak={peak:.2f}",
-                          flush=True)
-                    try:
-                        yield _trade_lock.acquire()
-                        try:
-                            yield sess.close_position(
-                                pos_id, volume=pos_vol,
-                                max_retries=3)
-                            print(f"LIVE-CLOSE OK: {close_reason} "
-                                  f"pnl={pnl_net:.2f}", flush=True)
-                            if net_pnl > 0:
-                                closing_mgr.record_win()
-                            else:
-                                closing_mgr.record_loss()
-                            closing_mgr.save_perf_to_state(state)
-                            _record_close(state, {
-                                "ts_open": st_pos.get("opened_at"),
-                                "ts_close": utcnow_iso(),
-                                "side": open_side,
-                                "entry_gap": st_pos.get("entry_gap"),
-                                "close_gap": gap,
-                                "entry_price": open_entry,
-                                "close_price": mid,
-                                "pnl_units": round(net_pnl, 2),
-                                "pnl_usd": round(net_pnl, 2),
-                                "fees_usd": round(fees, 2),
-                                "pnl_net_usd": round(net_pnl, 2),
-                                "reason": close_reason,
-                                "pnl_peak_usd": round(peak, 2),
-                            })
-                            result["action"] = "close:" + close_reason
-                            result["close_pnl_usd"] = pnl_net
-                        finally:
-                            yield _trade_lock.release()
-                    except Exception as exc:
-                        print(f"live-close failed ({close_reason}): "
-                              f"{exc!r}", flush=True)
-                        result["close_failed"] = repr(exc)
-                        result["action"] = "close_pending:" + close_reason
-                    pos_id = None
-                    st_pos = None
-                    state["position"] = None
-                    state["cooldown_until"] = (now +
-                                                config.COOLDOWN_MINUTES * 60)
 
             # ----- إحصائيات حية -----
             z_val = None
@@ -388,8 +294,7 @@ def live_loop():
                 z_str = "-"
 
             print(f"{_ts(now)} mid={mid:.2f} global={global_price:.2f} "
-                  f"gap={gap:.2f} z={z_str} action={action_str}",
-                  flush=True)
+                  f"gap={gap:.2f} z={z_str} action={action_str}", flush=True)
 
             # ----- الحفظ الدوري كل 30 ثانية -----
             if now - last_save >= 30:
@@ -408,7 +313,6 @@ def live_loop():
                 _main.save_state(state)
                 last_save = now
 
-            # ----- تأخير حتى الدورة التالية -----
             yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
 
         # --- نهاية الدورة: إغلاق أي صفقة متبقية ---
@@ -447,10 +351,6 @@ def live_loop():
         _sys.exit(0)
 
 
-# =============================================================================
-# نقطة الدخول
-# =============================================================================
-
 if __name__ == "__main__":
     import signal
 
@@ -469,7 +369,6 @@ if __name__ == "__main__":
     d = live_loop()
     d.addErrback(lambda f: print("FATAL", f.getTraceback(), flush=True))
 
-    #_hard timeout: if the bot runs longer than DURATION_MIN + 60s, force stop
     _total_timeout = int((config.DURATION_MIN + 1.0) * 60)
     _hard_timer = reactor.callLater(_total_timeout, lambda: (
         print(f"hard timeout after {_total_timeout}s — stopping", flush=True),

@@ -289,7 +289,15 @@ def live_loop():
                               flush=True)
                         st_pos = None
 
-            # ----- فحص الإغلاق -----
+            # ----- تنفيذ دورة التداول الكاملة (فتح + إغلاق) -----
+            closing_mgr_full = _main.ClosingManager(state, config)
+            closing_mgr_full.init_from_state(state)
+            try:
+                yield _main.run_trade_cycle(
+                    sess, mid, global_price, stats,
+                    state, result, closing_mgr_full)
+            except Exception as exc:
+                print(f"trade-cycle error: {exc!r}", flush=True)
             should_close = False
             close_reason = None
             pnl_net = 0.0
@@ -357,16 +365,6 @@ def live_loop():
                     state["cooldown_until"] = (now +
                                                 config.COOLDOWN_MINUTES * 60)
 
-            # ----- تنفيذ دورة التداول (فتح + إغلاق) من main.py -----
-            closing_mgr_local = _main.ClosingManager(state, config)
-            closing_mgr_local.init_from_state(state)
-            try:
-                yield _main.run_trade_cycle(
-                    sess, mid, global_price, stats,
-                    state, result, closing_mgr_local)
-            except Exception as exc:
-                print(f"trade-cycle error: {exc!r}", flush=True)
-
             # ----- إحصائيات حية -----
             z_val = None
             if stats:
@@ -382,8 +380,6 @@ def live_loop():
             action_str = "none"
             if pos_id is not None:
                 action_str = f"hold:pnl={pnl_net:.2f}"
-                if should_close:
-                    action_str = f"live-close:{close_reason}"
             elif state.get("position") is not None:
                 action_str = "open"
             if z_val is not None and abs(z_val) >= config.Z_ENTRY:

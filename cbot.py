@@ -27,9 +27,20 @@ def _unwrap(msg):
 
 
 def _check_error(resp, ctx):
-    code = getattr(resp, "errorCode", 0) or 0
+    code = getattr(resp, "errorCode", None)
     desc = (getattr(resp, "error_description", "") or
             getattr(resp, "message", "") or "")
+    if code is None or code == 0 or str(code).strip() == "":
+        # Expect either a numeric zero (success) or a non-empty error code.
+        # Empty string / None without a valid order/position means the broker
+        # rejected the request silently — treat as error.
+        has_order = hasattr(resp, "order") and resp.order is not None
+        has_position = hasattr(resp, "position") and resp.position is not None
+        if not (has_order or has_position):
+            raise RuntimeError(f"[{ctx}] broker rejected request (empty response)")
+        return
+    if str(code).strip() != "":
+        code = int(code)
     if code != 0:
         raise RuntimeError(f"[{ctx}] errorCode={code} {desc}")
 
@@ -54,6 +65,7 @@ class CtraderSession:
     def __init__(self):
         self.client = None
         self.account_id = None
+        self._closed_positions = set()
         self.spot_cache = {}
         self._lock = defer.DeferredLock()
         self.last_positions = []
@@ -229,9 +241,16 @@ class CtraderSession:
         # Closure relies solely on internal software layers.
         res = yield self._send(req, 30)
         res = _unwrap(res)
-        print(f"DEBUG open_market raw resp: errorCode={getattr(res, 'errorCode', 'N/A')!r} "
-              f"desc={(getattr(res, 'error_description', '') or getattr(res, 'message', ''))!r}", flush=True)
+        # DEBUG: print raw response fields before _check_error
+        code_val = getattr(res, "errorCode", "N/A")
+        desc_val = getattr(res, "error_description", "") or getattr(res, "message", "")
+        print(f"DEBUG open_market: errorCode={code_val!r} desc={desc_val!r}", flush=True)
         _check_error(res, "open_market")
+        # Validate response actually contains a real order
+        if not (hasattr(res, "order") and res.order is not None and
+                getattr(res.order, "executionPrice", None) is not None):
+            raise RuntimeError("open_market: broker returned empty/invalid order "
+                               f"(executionPrice={getattr(res.order, 'executionPrice', None)!r})")
         defer.returnValue(res)
 
     # ── close position ────────────────────────────────────────────────

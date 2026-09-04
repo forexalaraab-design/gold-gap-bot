@@ -423,7 +423,7 @@ def _record_external_close(state, ts_open, ts_close, gap,
         net_gap = close_price - (entry_price or close_price)
         # حساب PnL تقريبي يعتمد على الفجوة
         pnl_usd_guess = net_gap * config.LOT * 100  # LOT × 100 (لأن 0.01 لوت = 100 وحدة)
-        main._record_close(state, {
+        _record_close(state, {
             "ts_open": ts_open,
             "ts_close": ts_close,
             "side": state.get("position", {}).get("side"),
@@ -827,6 +827,22 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             result["action"] = "none:" + ",".join(reasons) if reasons else "none"
 
     return action
+
+
+def _print_report(result, state):
+    """طباعة تقرير النهاية لـ live.py."""
+    print("\n" + "=" * 60)
+    print("تقرير الاختبار النهائي")
+    print("=" * 60)
+    print(f"  الفجوة: {result.get('gap', 'N/A'):.4f}" if result.get('gap') else "  الفجوة: N/A")
+    print(f"  z-score: {result.get('z', 'N/A'):.4f}" if result.get('z') else "  z-score: N/A")
+    print(f"  Action: {result.get('action', 'N/A')}")
+    if result.get('close_pnl_usd') is not None:
+        print(f"  PnL: {result['close_pnl_usd']:.2f} USD")
+    print(f"  الأخطاء: {result.get('error', 'لا توجد')}")
+    print(f"  التحذيرات: {result.get('open_positions_warn', 'لا توجد')}")
+    if result.get('close_failed'):
+        print(f"  فشل الإغلاق: {result['close_failed']}")
 
 
 # ============================================================================

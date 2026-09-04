@@ -210,8 +210,13 @@ class CtraderSession:
     @defer.inlineCallbacks
     def open_market(self, symbol_id, side, volume,
                     sl=None, tp=None, label="", comment=""):
-        cls = ProtoMsgs.ProtoOATradeSide
-        side_enum = cls.SELL if str(side).upper() == "SELL" else cls.BUY
+        cls = ProtoMsgs.ProtoOANewOrderReq
+        side_enum = (cls.DESCRIPTOR.fields_by_name["tradeSide"]
+                     .enum_type.values_by_name["SELL"]
+                     .number)
+        if str(side).upper() == "BUY":
+            side_enum = (cls.DESCRIPTOR.fields_by_name["tradeSide"]
+                         .enum_type.values_by_name["BUY"].number)
         req = ProtoMsgs.ProtoOANewOrderReq()
         req.ctidTraderAccountId = self.account_id
         req.symbolId = symbol_id

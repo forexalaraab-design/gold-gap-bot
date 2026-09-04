@@ -614,12 +614,13 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 config.MODE == "trade"
                 and stats is not None
                 and result["z"] is not None
-                and abs(result["z"]) >= config.Z_ENTRY_SOFT  # ← Z_ENTRY_SOFTを使用（より頻繁にエントリー）
+                and abs(result["z"]) >= config.Z_ENTRY_SOFT
                 and abs(gap) <= config.MAX_ENTRY_GAP_USD
                 and abs(gap) >= config.MIN_GAP_USD
                 and result.get("balance_usd", 0) >= config.MIN_BALANCE_TO_TRADE
                 and cooldown_left <= 0
                 and in_session_now
+                and state.get("position") is None
             )
 
         if can_trade:

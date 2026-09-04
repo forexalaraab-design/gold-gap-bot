@@ -44,7 +44,7 @@ YAHOO_OFFSET_USD = 0.0  # GC=F is futures; add offset to approximate spot if nee
 SYMBOL = "XAUUSD"
 
 # الحجم: 0.03 لوت = 3 أونصات ذهب ≈ $3 PnL لكل حركة 1$ في السعر
-LOT = 0.03
+LOT = 0.01
 
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
 SPOT_SCALE = 100000.0

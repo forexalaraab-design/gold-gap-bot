@@ -309,8 +309,6 @@ def live_loop():
                     st_pos["entry_gap"] = gap
                     st_pos["entry_price"] = open_entry
                     st_pos["opened_at"] = utcnow_iso()
-                    st_pos["pnl_peak_usd"] = round(peak, 2)
-                    st_pos["pnl_track"] = []
                     state["position"] = st_pos
                 _main.save_state(state)
                 last_save = now

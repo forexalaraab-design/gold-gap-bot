@@ -221,6 +221,7 @@ class CtraderSession:
         req.ctidTraderAccountId = self.account_id
         req.symbolId = symbol_id
         req.tradeSide = side_enum
+        req.orderType = 1  # MARKET
         req.volume = volume
         req.label = label or random_label()
         req.comment = comment or ""

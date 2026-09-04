@@ -225,10 +225,8 @@ class CtraderSession:
         req.volume = volume
         req.label = label or random_label()
         req.comment = comment or ""
-        if sl is not None:
-            req.stopLoss = sl
-        if tp is not None:
-            req.takeProfit = tp
+        # Note: SL/TP not sent — broker rejects them (TRADING_BAD_STOPS).
+        # Closure relies solely on internal software layers.
         res = yield self._send(req, 30)
         res = _unwrap(res)
         _check_error(res, "open_market")

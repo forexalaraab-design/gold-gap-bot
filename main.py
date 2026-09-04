@@ -746,7 +746,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 vol = result["volume"]
                 res = yield sess.open_market(
                     symbol_id, side, vol,
-                    sl=_to_int(sl), tp=_to_int(tp),
+                    sl=None, tp=None,
                     label=cbot.random_label(),
                     comment="",
                 )

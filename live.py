@@ -207,7 +207,9 @@ def live_loop():
                     md = trader.moneyDigits
                     result["balance"] = bal
                     result["money_digits"] = md
-                    last_balance = bal / (10 ** md) if md else bal
+                    bal_usd = bal / (10 ** md) if md else bal
+                    result["balance_usd"] = bal_usd
+                    last_balance = bal_usd
                 except Exception:
                     pass
 

@@ -304,11 +304,15 @@ def live_loop():
                 state["stats"] = stats
                 state["last_run"] = utcnow_iso()
                 if pos_id is not None and st_pos is not None:
+                    # تحديث الحقول فقط، بدون استبدال كامل لـ pnl_peak_usd
                     st_pos["positionId"] = pos_id
                     st_pos["side"] = open_side
                     st_pos["entry_gap"] = gap
                     st_pos["entry_price"] = open_entry
                     st_pos["opened_at"] = utcnow_iso()
+                    # الاحتفاظ بـ pnl_peak_usd من الـ state الحالي إن وجد
+                    if "pnl_peak_usd" not in st_pos or st_pos["pnl_peak_usd"] is None:
+                        st_pos["pnl_peak_usd"] = 0.0
                     state["position"] = st_pos
                 _main.save_state(state)
                 last_save = now

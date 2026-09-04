@@ -13,6 +13,7 @@ main.py — استراتيجية احترافية مع إغلاق متعدد ا�
   8. الطبقة 5: إغلاق عند عودة الفجوة لـ Z_EXIT أو تجاوز Z_STOP
   9. حفظ state شمولي يشمل كل الطبقات وبيانات الأداء
   10. حساب PnL للإغلاق يستخدم نفس الصيغة الموحدة
+  11. إصلاح جذري: منع تعدد الصفقات، إغلاق عند فشل API، تتبع الربح الصحيح
 """
 
 import csv
@@ -239,7 +240,6 @@ def dynamic_pnl_usd(pos, mid, digits, md):
     gross = raw / (10.0 ** (md or 2))
     fees = position_fees_usd(pos, md)
     return gross - fees, gross, fees
-
 
 # ============================================================================
 # قنوات إغلاق متعددة الطبقات
@@ -482,7 +482,15 @@ def _write_performance(state):
 @inlineCallbacks
 def run_trade_cycle(sess, mid, global_price, stats, state, result,
                      closing_mgr):
-    """الدورة الرئيسية للتداول مع فحص جميع طبقات الإغلاق."""
+    """الدورة الرئيسية للتداول مع فحص جميع طبقات الإغلاق.
+    
+    التدفق المنطقي:
+    1. جلب المواقع من API (مع الاعتماد على الكاش عند الفشل)
+    2. إذا وُجدت مواقع → فحص الإغلاق عبر check_close (5 طبقات)
+    3. إذا لم تكن هناك مواقع ولكن state يحتوي positionId → إغلاق قسري
+    4. إذا لم تكن هناك صفقة مفتوحة → قرار الفتح (مع منع التعدد)
+    5. عدم مسح state["position"] إلا بعد التأكد من عدم وجود صفقة فعليّة
+    """
     symbol_id = result["symbol_id"]
     try:
         positions = yield sess.open_positions(symbol_id, max_age=120.0)
@@ -517,76 +525,73 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     action = "none"
     closed_this_cycle = False
 
-    # --- إذا كانت هناك صفقة مفتوحة: فحص جميع طبقات الإغلاق ---
-    # ملاحظة: positions قد يكون فارغًا بسبب فشل API، لذا لا نعتمد عليه فقط
+    # =========================================================================
+    # مرحلة الإغلاق: نحدد ما إذا كنا نغلق صفقة حاليّة
+    # =========================================================================
     pos_for_close = None
     if positions:
         pos_for_close = positions[0]
-    elif state.get("position") is not None:
-        # API أعطى empty لكن estado يقول فيه صفقة — نستخدم الـ state
+    elif state.get("position") is not None and state["position"].get("positionId"):
+        # API أعاد empty لكن state يحتوي positionId → محاولة إغلاق قسري
         sp = state["position"]
-        pos_for_close = None  # 不知道真实的 position 对象，但 نعرف الـ positionId
-        # نعتمد على الكاش أو نفتح محاولة إغلاق مباشرة بالـ positionId
-        if sp.get("positionId"):
-            # محاولة إغلاق مباشرة using stored positionId
-            try:
-                yield sess.close_position(
-                    sp["positionId"],
-                    volume=None,
-                    max_retries=3,
-                )
-                st_pos = state.get("position") or {}
-                entry_price = st_pos.get("entry_price")
-                side_name = st_pos.get("side", "BUY")
-                now_ts_close = time.time()
-                digits = state.get("money_digits", 2) or 2
-                mid_close = mid
-                if entry_price:
-                    price_diff = mid_close - entry_price
-                    if side_name == "SELL":
-                        price_diff = -price_diff
-                    volume_close = result.get("volume", 100)
-                    gross_pnl_close = (price_diff * volume_close) / (10.0 ** digits)
-                    pnl_net_close = round(gross_pnl_close, 2)
-                    sp["pnl_last_usd"] = pnl_net_close
-                    sp["pnl_peak_usd"] = max(float(sp.get("pnl_peak_usd", 0)), pnl_net_close)
-                    print(f"✓ CLOSED (state-force-close): pnl={pnl_net_close:.2f} USD")
-                    result["action"] = "close:state-force-close"
-                    result["close_pnl_usd"] = pnl_net_close
-                    state["position"] = None
-                    state["cooldown_until"] = now_ts_close + config.COOLDOWN_MINUTES * 60
-                    if pnl_net_close > 0:
-                        closing_mgr.record_win()
-                    else:
-                        closing_mgr.record_loss()
-                    closing_mgr.save_perf_to_state(state)
-                    _record_close(state, {
-                        "ts_open": st_pos.get("opened_at"),
-                        "ts_close": utcnow_iso(),
-                        "side": side_name,
-                        "entry_gap": st_pos.get("entry_gap"),
-                        "close_gap": gap,
-                        "entry_price": entry_price,
-                        "close_price": mid_close,
-                        "pnl_units": pnl_net_close,
-                        "pnl_usd": pnl_net_close,
-                        "fees_usd": 0,
-                        "pnl_net_usd": pnl_net_close,
-                        "reason": "state-force-close",
-                        "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
-                    })
-            except Exception as exc:
-                print(f"state-force-close failed: {exc!r}")
-                result["action"] = "close_pending:state"
-                # لا نخرج، نستمر لمحاولة الإغلاق في الـ layers المعتادة
-            except Exception as exc:
-                print(f"state-force-close setup failed: {exc!r}")
+        try:
+            yield sess.close_position(
+                sp["positionId"],
+                volume=None,
+                max_retries=3,
+            )
+            entry_price = sp.get("entry_price")
+            side_name = sp.get("side", "BUY")
+            digits = state.get("money_digits", 2) or 2
+            volume_close = result.get("volume", 100)
+            mid_close = mid
+            if entry_price:
+                price_diff = mid_close - entry_price
+                if side_name == "SELL":
+                    price_diff = -price_diff
+                gross_pnl_close = (price_diff * volume_close) / (10.0 ** digits)
+                pnl_net_close = round(gross_pnl_close, 2)
+                sp["pnl_last_usd"] = pnl_net_close
+                sp["pnl_peak_usd"] = max(float(sp.get("pnl_peak_usd", 0)), pnl_net_close)
+                print(f"✓ CLOSED (state-force-close): pnl={pnl_net_close:.2f} USD")
+            else:
+                pnl_net_close = 0.0
+                print("✓ CLOSED (state-force-close): no entry_price — PnL=0")
+            result["action"] = "close:state-force-close"
+            result["close_pnl_usd"] = pnl_net_close
+            state["position"] = None
+            state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
+            if pnl_net_close > 0:
+                closing_mgr.record_win()
+            else:
+                closing_mgr.record_loss()
+            closing_mgr.save_perf_to_state(state)
+            _record_close(state, {
+                "ts_open": sp.get("opened_at"),
+                "ts_close": utcnow_iso(),
+                "side": side_name,
+                "entry_gap": sp.get("entry_gap"),
+                "close_gap": gap,
+                "entry_price": entry_price,
+                "close_price": mid_close,
+                "pnl_units": pnl_net_close,
+                "pnl_usd": pnl_net_close,
+                "fees_usd": 0,
+                "pnl_net_usd": pnl_net_close,
+                "reason": "state-force-close",
+                "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
+            })
+            result["close_pnl_usd"] = pnl_net_close
+            closed_this_cycle = True
+        except Exception as exc:
+            print(f"state-force-close failed: {exc!r}")
+            result["action"] = "close_pending:state"
+
+    # =========================================================================
+    # إذا كانت هناك صفقة مفتوحة (من API أو حالة قسريّة)، فحص الإغلاق
+    # =========================================================================
     if pos_for_close is not None:
         pos = pos_for_close
-    else:
-        pos = None
-
-    if pos is not None:
         st_pos = state.get("position")
         if st_pos is None:
             st_pos = {}
@@ -595,7 +600,19 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             st_pos = {}
             state["position"] = st_pos
 
-        # فحص الطبقات الخمس للإغلاق
+        # تحديث st_pos بالبيانات الجديدة من الـ API
+        st_pos["positionId"] = pos.positionId
+        st_pos["side"] = _side_name(pos.tradeData.tradeSide)
+        raw_price = float(pos.price) if pos.price else None
+        if raw_price is not None and raw_price > 10000:
+            raw_price = raw_price / config.SPOT_SCALE
+        st_pos["entry_price"] = st_pos.get("entry_price") or raw_price
+        # الحفاظ على pnl_peak_usd و pnl_track من الـ state
+        st_pos.setdefault("pnl_peak_usd", 0.0)
+        st_pos.setdefault("pnl_track", [])
+        state["position"] = st_pos
+
+        # --- فحص جميع طبقات الإغلاق ---
         should_close, close_reason = closing_mgr.check_close(
             pos, mid, global_price, stats, st_pos, now_ts, md,
         )
@@ -606,7 +623,6 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
 
         if should_close and close_reason:
             try:
-                # إغلاق نشط
                 yield sess.close_position(
                     pos.positionId,
                     volume=getattr(pos.tradeData, "volume", None),
@@ -614,14 +630,13 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 )
                 closed_this_cycle = True
 
-                # حساب PnL الحقيقي باستخدام الصيغة الموحدة
+                # حساب PnL الحقيقي
                 entry_price = st_pos.get("entry_price")
-                close_price = mid  # سعر الإغلاق الحالي
+                close_price = mid
                 side_name = _side_name(pos.tradeData.tradeSide)
                 volume = getattr(pos.tradeData, "volume", 100)
                 digits = getattr(pos, "digits", 2) or 2
 
-                # حساب PnL بالصيغة الموحدة: (mid - entry) × volume / (10^digits)
                 price_diff = close_price - entry_price if entry_price else 0
                 if side_name == "SELL":
                     price_diff = -price_diff
@@ -668,15 +683,18 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 result["action"] = "close_pending"
         else:
             result["action"] = "hold"
-    else:
-        # لا توجد صفقة مفتوحة من API
-        # لكن قد يكون هناك position في state (إذا فشل API)
-        # لا نحذف state["position"] إلا إذا لم يكن هناك positionId
-        if not (state.get("position") and state["position"].get("positionId")):
-            state["position"] = None
 
-    # --- إذا لم تكن هناك صفقة مفتوحة: اتخاذ قرار الفتح ---
-    if not positions and not closed_this_cycle:
+    # =========================================================================
+    # مرحلة الفتح: لا تفتح إلا إذا لم تكن هناك صفقة مفتوحة فعليّة
+    # =========================================================================
+    # NOTICE: لا نعتمد على positions فقط — إذا فشل API، positions قد يكون []
+    # لكن state["position"] فقط إذا كان لديه positionId صحيح يوضح وجود صفقة
+    has_open_position = (
+        bool(positions)
+        or (state.get("position") is not None and state["position"].get("positionId"))
+    )
+    
+    if not has_open_position and not closed_this_cycle:
         cooldown_left = state.get("cooldown_until", 0) - now_ts
         in_session_now = in_session(datetime.now(timezone.utc))
 

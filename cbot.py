@@ -27,7 +27,7 @@ def _unwrap(msg):
 
 
 def _check_error(resp, ctx):
-    code = getattr(resp, "errorCode", 0)
+    code = getattr(resp, "errorCode", 0) or 0
     desc = (getattr(resp, "error_description", "") or
             getattr(resp, "message", "") or "")
     if code != 0:
@@ -229,6 +229,8 @@ class CtraderSession:
         # Closure relies solely on internal software layers.
         res = yield self._send(req, 30)
         res = _unwrap(res)
+        print(f"DEBUG open_market raw resp: errorCode={getattr(res, 'errorCode', 'N/A')!r} "
+              f"desc={(getattr(res, 'error_description', '') or getattr(res, 'message', ''))!r}", flush=True)
         _check_error(res, "open_market")
         defer.returnValue(res)
 

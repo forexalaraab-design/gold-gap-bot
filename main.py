@@ -533,59 +533,69 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         pos_for_close = positions[0]
     elif state.get("position") is not None and state["position"].get("positionId"):
         # API أعاد empty لكن state يحتوي positionId → محاولة إغلاق قسري
+        # لكن لا نُغلِق إذا كانت الصفقة جديدة (افتُتحت أقل من 2 دقيقة) —API قد يتأخر في المزامنة
         sp = state["position"]
-        try:
-            yield sess.close_position(
-                sp["positionId"],
-                volume=None,
-                max_retries=3,
-            )
-            entry_price = sp.get("entry_price")
-            side_name = sp.get("side", "BUY")
-            digits = state.get("money_digits", 2) or 2
-            volume_close = result.get("volume", 100)
-            mid_close = mid
-            if entry_price:
-                price_diff = mid_close - entry_price
-                if side_name == "SELL":
-                    price_diff = -price_diff
-                gross_pnl_close = (price_diff * volume_close) / (10.0 ** digits)
-                pnl_net_close = round(gross_pnl_close, 2)
-                sp["pnl_last_usd"] = pnl_net_close
-                sp["pnl_peak_usd"] = max(float(sp.get("pnl_peak_usd", 0)), pnl_net_close)
-                print(f"✓ CLOSED (state-force-close): pnl={pnl_net_close:.2f} USD")
-            else:
-                pnl_net_close = 0.0
-                print("✓ CLOSED (state-force-close): no entry_price — PnL=0")
-            result["action"] = "close:state-force-close"
-            result["close_pnl_usd"] = pnl_net_close
-            state["position"] = None
-            state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
-            if pnl_net_close > 0:
-                closing_mgr.record_win()
-            else:
-                closing_mgr.record_loss()
-            closing_mgr.save_perf_to_state(state)
-            _record_close(state, {
-                "ts_open": sp.get("opened_at"),
-                "ts_close": utcnow_iso(),
-                "side": side_name,
-                "entry_gap": sp.get("entry_gap"),
-                "close_gap": gap,
-                "entry_price": entry_price,
-                "close_price": mid_close,
-                "pnl_units": pnl_net_close,
-                "pnl_usd": pnl_net_close,
-                "fees_usd": 0,
-                "pnl_net_usd": pnl_net_close,
-                "reason": "state-force-close",
-                "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
-            })
-            result["close_pnl_usd"] = pnl_net_close
-            closed_this_cycle = True
-        except Exception as exc:
-            print(f"state-force-close failed: {exc!r}")
-            result["action"] = "close_pending:state"
+        opened_at = sp.get("opened_at")
+        if opened_at:
+            try:
+                opened_dt = datetime.fromisoformat(opened_at)
+                age_sec = (datetime.now(timezone.utc) - opened_dt).total_seconds()
+                if age_sec < 120:
+                    print(f"skip state-force-close: position only {age_sec:.0f}s old — wait for API sync")
+                    result["action"] = "hold:recently_opened"
+                    closed_this_cycle = False
+                else:
+                    yield sess.close_position(
+                        sp["positionId"],
+                        volume=None,
+                        max_retries=3,
+                    )
+                    entry_price = sp.get("entry_price")
+                    side_name = sp.get("side", "BUY")
+                    digits = state.get("money_digits", 2) or 2
+                    volume_close = result.get("volume", 100)
+                    mid_close = mid
+                    if entry_price:
+                        price_diff = mid_close - entry_price
+                        if side_name == "SELL":
+                            price_diff = -price_diff
+                        gross_pnl_close = (price_diff * volume_close) / (10.0 ** digits)
+                        pnl_net_close = round(gross_pnl_close, 2)
+                        sp["pnl_last_usd"] = pnl_net_close
+                        sp["pnl_peak_usd"] = max(float(sp.get("pnl_peak_usd", 0)), pnl_net_close)
+                        print(f"✓ CLOSED (state-force-close): pnl={pnl_net_close:.2f} USD")
+                    else:
+                        pnl_net_close = 0.0
+                        print("✓ CLOSED (state-force-close): no entry_price — PnL=0")
+                    result["action"] = "close:state-force-close"
+                    result["close_pnl_usd"] = pnl_net_close
+                    state["position"] = None
+                    state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
+                    if pnl_net_close > 0:
+                        closing_mgr.record_win()
+                    else:
+                        closing_mgr.record_loss()
+                    closing_mgr.save_perf_to_state(state)
+                    _record_close(state, {
+                        "ts_open": sp.get("opened_at"),
+                        "ts_close": utcnow_iso(),
+                        "side": side_name,
+                        "entry_gap": sp.get("entry_gap"),
+                        "close_gap": gap,
+                        "entry_price": entry_price,
+                        "close_price": mid_close,
+                        "pnl_units": pnl_net_close,
+                        "pnl_usd": pnl_net_close,
+                        "fees_usd": 0,
+                        "pnl_net_usd": pnl_net_close,
+                        "reason": "state-force-close",
+                        "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
+                    })
+                    result["close_pnl_usd"] = pnl_net_close
+                    closed_this_cycle = True
+            except Exception as exc:
+                print(f"state-force-close failed: {exc!r}")
+                result["action"] = "close_pending:state"
 
     # =========================================================================
     # إذا كانت هناك صفقة مفتوحة (من API أو حالة قسريّة)، فحص الإغلاق

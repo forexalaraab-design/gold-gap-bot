@@ -140,7 +140,7 @@ PERF_FILE = os.path.join(BASE_DIR, "data", "performance.json")
 MAX_CLOSED_TRADES = 200
 
 # ===== Live loop =====
-DURATION_MIN = _env_float("CBOT_DURATION_MIN", 4.5)
+DURATION_MIN = _env_float("CBOT_DURATION_MIN", 9999.0)  # run until stopped
 GLOBAL_POLL_SEC = _env_float("CBOT_GLOBAL_POLL_SEC", 3)
 APPEND_EVERY_SEC = 60.0
 APPEND_TOLERANCE = 0.02

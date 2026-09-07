@@ -32,8 +32,20 @@ def _check_error(resp, ctx):
             getattr(resp, "message", "") or "")
     if code != 0:
         raise RuntimeError(f"[{ctx}] errorCode={code} {desc}")
-
-
+def _has_execution_price(resp):
+    """Return True if the broker response contains a real execution price."""
+    if resp is None:
+        return False
+    for item in (getattr(resp, "order", None), getattr(resp, "position", None)):
+        if item is not None:
+            ep = getattr(item, "executionPrice", None)
+            if ep is not None:
+                try:
+                    if float(ep) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    pass
+    return False
 class _SpotWaiter:
     def __init__(self, sym_id):
         self.sym_id = sym_id
@@ -236,10 +248,11 @@ class CtraderSession:
         print(f"DEBUG open_market: errorCode={code_val!r} desc={desc_val!r}", flush=True)
         _check_error(res, "open_market")
         # Validate: broker must return a real order with executionPrice
-        if (not hasattr(res, "order") or res.order is None or
-                getattr(res.order, "executionPrice", None) is None):
-            raise RuntimeError("open_market: broker returned order with no "
-                               f"executionPrice (got {getattr(res.order, 'executionPrice', None)!r})")
+        if not _has_execution_price(res):
+            raise RuntimeError(
+                "open_market: broker returned no executionPrice "
+                f"(errorCode={getattr(res, 'errorCode', 'N/A')!r})"
+            )
         defer.returnValue(res)
 
     # ── close position ────────────────────────────────────────────────

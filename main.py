@@ -702,7 +702,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 config.MODE == "trade"
                 and stats is not None
                 and result["z"] is not None
-                and abs(result["z"]) >= config.Z_ENTRY_SOFT
+                and (
+                    abs(result["z"]) >= config.Z_ENTRY_SOFT
+                    or abs(gap) >= config.MIN_GAP_USD * 1.5
+                )
                 and abs(gap) <= config.MAX_ENTRY_GAP_USD
                 and abs(gap) >= config.MIN_GAP_USD
                 and result.get("balance_usd", 0) >= config.MIN_BALANCE_TO_TRADE

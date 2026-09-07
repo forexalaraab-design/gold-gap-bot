@@ -44,7 +44,7 @@ YAHOO_OFFSET_USD = 0.0  # GC=F is futures; add offset to approximate spot if nee
 SYMBOL = "XAUUSD"
 
 # الحجم: 0.03 لوت = 3 أونصات ذهب ≈ $3 PnL لكل حركة 1$ في السعر
-LOT = 0.01
+LOT = 0.03
 
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
 SPOT_SCALE = 100000.0
@@ -59,7 +59,7 @@ Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.0)
 
 # Z_ENTRY_SOFT: مستوى ثاني أقل — دخول إذا |z| ≥ Z_ENTRY_SOFT مع شروط إضافية
 # (مثلاً: الفجوة واضحة والسرعة غير خطرة).
-Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.5)
+Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.0)
 
 # Z_EXIT: إغلاق إذا عاد |z| إلى هذا المستوى (عندما يتراجع الانحراف).
 Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)
@@ -97,7 +97,7 @@ PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
 
 # تثبيت الأرباح: إغلاق فوري عند بلوغ ربح صافي محدد
 # 2.0 → 3.0: نزيد الهدف قليلاً لنحمي الأرباح وتجنب التقلبات.
-PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 3.0)
+PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 5.0)
 
 # TRAILING_ARM_USD: تتبع الأرباح يبدأ عندما يصل الـ PnL الصافي إلى هذه القيمة.
 # 0.30 → 0.30: netting $0.30 以上でトラリング開始（そのまま）

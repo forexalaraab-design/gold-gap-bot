@@ -248,9 +248,9 @@ class CtraderSession:
         print(f"DEBUG open_market: errorCode={code_val!r} desc={desc_val!r}", flush=True)
         _check_error(res, "open_market")
         # Validate: broker must return a real order with executionPrice
-        if not _has_execution_price(res):
+        if not getattr(res, "positionId", None):
             raise RuntimeError(
-                "open_market: broker returned no executionPrice "
+                "open_market: broker returned no positionId "
                 f"(errorCode={getattr(res, 'errorCode', 'N/A')!r})"
             )
         defer.returnValue(res)

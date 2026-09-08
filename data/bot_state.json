@@ -1,7 +1,7 @@
 {
   "position": null,
   "stats": null,
-  "last_run": "2026-09-08T21:28:39Z",
+  "last_run": "2026-09-08T21:32:05Z",
   "money_digits": 2,
   "entry_balance_units": 70467,
   "cooldown_until": 0,
@@ -162,5 +162,6 @@
     "consecutive_losses": 0,
     "trades_today": 0,
     "last_updated": "2026-09-08T21:26:12Z"
-  }
+  },
+  "cleanup_done_internal": true
 }

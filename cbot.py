@@ -324,6 +324,38 @@ class CtraderSession:
         _check_error(res, "set_sltp")
         defer.returnValue(res)
 
+    # ── close every open position (cleanup of a messy demo account) ───
+    @defer.inlineCallbacks
+    def close_all_positions(self, account_id=None, max_close=1500):
+        """إغلاق جميع الصفقات المفتوحة (يُستدعى مرة واحدة لتنظيف الحساب
+        من الصفقات العالقة القديمة حتى يعود البوت للصفقة الواحدة)."""
+        aid = account_id or self.account_id
+        if not aid:
+            defer.returnValue(0)
+        positions = yield self.open_positions(aid)
+        if not positions:
+            defer.returnValue(0)
+        closed = 0
+        for o in positions[:max_close]:
+            pid = getattr(o, "positionId", None)
+            if not pid:
+                continue
+            vol = getattr(
+                getattr(o, "tradeData", None), "volume", 100
+            )
+            try:
+                yield self.close_position(pid, volume=vol)
+                closed += 1
+                print(f"cleanup: closed positionId={pid}", flush=True)
+            except Exception as exc:
+                print(f"cleanup: close FAIL positionId={pid}: {exc!r}",
+                      flush=True)
+            # مهلة بسيطة بين الطلبات لتجنب إغراق الخادم
+            yield _task.deferLater(reactor, 0.4, lambda: None)
+        print(f"cleanup done: closed {closed} of {len(positions)}",
+              flush=True)
+        defer.returnValue(closed)
+
     # ── list open positions ───────────────────────────────────────────
     @defer.inlineCallbacks
     def open_positions(self, account_id=None, max_age=None):

@@ -173,6 +173,28 @@ def live_loop():
             except Exception as exc:
                 print(f"FORCE-TEST FAIL: {exc!r}", flush=True)
 
+        # تنظيف الحساب من الصفقات العالقة القديمة (مرة واحدة فقط)
+        # حتى يبدأ البوت بصفقة واحدة فقط كما هو مطلوب.
+        if (config.MODE == "trade"
+                and not state.get("cleanup_done_internal")):
+            try:
+                print("cleanup: closing stale open positions...", flush=True)
+                nclosed = yield sess.close_all_positions(sess.account_id)
+                # تحقق نهائي: هل اكتمل التنظيف؟
+                if nclosed == 0:
+                    state["cleanup_done_internal"] = True
+                else:
+                    remain = yield sess.open_positions(sess.account_id)
+                    if not remain:
+                        state["cleanup_done_internal"] = True
+                        print("cleanup: all stale positions now closed",
+                              flush=True)
+                    else:
+                        print(f"cleanup: {len(remain)} still open - will "
+                              f"continue next run", flush=True)
+            except Exception as exc:
+                print(f"cleanup error: {exc!r}", flush=True)
+
         end = _now_unix() + config.DURATION_MIN * 60
         while _now_unix() < end:
             now = _now_unix()
@@ -372,10 +394,19 @@ def live_loop():
         print(f"FATAL in live_loop: {result['error']}", flush=True)
     finally:
         print("live: saving state & stopping...", flush=True)
-        _main.save_history(rows)
+        try:
+            _main.save_history(rows)
+        except Exception as exc:
+            print(f"save_history error: {exc!r}", flush=True)
         state["last_run"] = utcnow_iso()
-        _main.save_state(state)
-        sess.stop()
+        try:
+            _main.save_state(state)
+        except Exception as exc:
+            print(f"save_state error: {exc!r}", flush=True)
+        try:
+            sess.stop()
+        except Exception as exc:
+            print(f"sess.stop error: {exc!r}", flush=True)
         try:
             _main._print_report(result, state)
         except Exception as exc:

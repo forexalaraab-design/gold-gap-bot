@@ -53,7 +53,7 @@ def live_loop():
 
     token = _main.resolve_token()
     state = _main.load_state()
-    rows = []
+    rows = _main.load_history()
 
     sess = CtraderSession()
     result = {"ts": utcnow_iso()}

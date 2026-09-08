@@ -237,7 +237,7 @@ def dynamic_pnl_usd(pos, mid, digits, md, st_pos=None):
         except (TypeError, ValueError):
             entry = None
     if entry is None:
-        entry = pos.price
+        entry = getattr(pos, "price", None)
     if entry is None or entry == 0:
         return 0.0, 0.0, 0.0
     # إن كان سعراً خاماً مضروباً بـ 100000 نجعل الحقيقي
@@ -637,7 +637,9 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         # تحديث st_pos بالبيانات الجديدة من الـ API
         st_pos["positionId"] = pos.positionId
         st_pos["side"] = _side_name(pos.tradeData.tradeSide)
-        raw_price = float(pos.price) if pos.price else None
+        # ملاحظة: open_positions يعيد ProtoOAOrder (بلا سعر).
+        # نحافظ على entry_price من الـ state — السعر الموثوق الوحيد.
+        raw_price = getattr(pos, "price", None)
         if raw_price is not None and raw_price > 10000:
             raw_price = raw_price / config.SPOT_SCALE
         st_pos["entry_price"] = st_pos.get("entry_price") or raw_price
@@ -989,16 +991,27 @@ def main():
                 existing = sess.open_positions(sess.account_id, max_age=86400.0)
                 if existing:
                     print(f"FORCE-TEST SKIP (already open): "
-                          f"{[(p.positionId, float(p.price)) for p in existing]}")
+                          f"{[p.positionId for p in existing]}")
                 else:
                     res = sess.open_market(
                         symbol_id, "BUY", volume,
                         label="FORCE-TEST", comment="",
                     )
-                    print(f"FORCE-TEST OPEN OK positionId={res.position.positionId}")
-                    if res.position:
-                        pid = res.position.positionId
-                        entry0 = float(res.position.price)
+                    res = res if isinstance(res, dict) else getattr(res, "position", None)
+                    pos_obj = res
+                    pos_id = (res.get("positionId")
+                              if isinstance(res, dict)
+                              else getattr(res, "positionId", None))
+                    print(f"FORCE-TEST OPEN OK positionId={pos_id}")
+                    if pos_id:
+                        pos_price = (res.get("position", {}).get("price")
+                                     if isinstance(res, dict)
+                                     else getattr(getattr(res, "position", None) or pos_obj, "price", None))
+                        if pos_price is None:
+                            pos_price = None
+                        entry0 = float(pos_price) if pos_price else 0.0
+                        if entry0 <= 0:
+                            entry0 = mid
                         for dist, scale in (
                             (5.0, config.SPOT_SCALE),
                             (5.0, 100.0),
@@ -1008,7 +1021,7 @@ def main():
                         ):
                             try:
                                 sess.set_sltp(
-                                    pid,
+                                    pos_id,
                                     int(round((entry0 - dist) * scale)),
                                     int(round((entry0 + dist) * scale)),
                                 )
@@ -1021,7 +1034,7 @@ def main():
                                     f"FORCE-TEST SETSLTP FAIL dist={dist} scale={int(scale)}: {exc!r}"
                                 )
                         try:
-                            sess.close_position(pid)
+                            sess.close_position(pos_id)
                             print("FORCE-TEST CLOSE OK")
                         except Exception as exc:
                             print("FORCE-TEST CLOSE FAIL:", repr(exc))

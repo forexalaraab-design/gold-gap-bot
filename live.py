@@ -130,11 +130,24 @@ def live_loop():
                         symbol_id, "BUY", volume,
                         label="FORCE-TEST", comment=""
                     )
-                    print(f"FORCE-TEST OPEN OK positionId="
-                          f"{res.position.positionId}", flush=True)
-                    if res.position:
-                        pid = res.position.positionId
-                        entry0 = float(res.position.price)
+                    if isinstance(res, dict):
+                        pos_id = res.get("positionId")
+                        pos_price = None
+                        pos_obj = res.get("position")
+                        if pos_obj is not None:
+                            entry0p = getattr(pos_obj, "price", None)
+                            if entry0p is not None:
+                                pos_price = float(entry0p)
+                        if pos_price is None:
+                            pos_price = mid
+                        entry0 = pos_price
+                    else:
+                        pos_obj = getattr(res, "position", None)
+                        pos_id = getattr(pos_obj, "positionId", None)
+                        entry0p = getattr(pos_obj, "price", None)
+                        entry0 = float(entry0p) if entry0p else mid
+                    print(f"FORCE-TEST OPEN OK positionId={pos_id}", flush=True)
+                    if pos_id:
                         for dist, scale in (
                             (5.0, config.SPOT_SCALE),
                             (5.0, 100.0),
@@ -144,7 +157,7 @@ def live_loop():
                         ):
                             try:
                                 yield sess.set_sltp(
-                                    pid,
+                                    pos_id,
                                     int(round((entry0 - dist) * scale)),
                                     int(round((entry0 + dist) * scale)),
                                 )
@@ -155,7 +168,7 @@ def live_loop():
                                 print(f"FORCE-TEST SETSLTP FAIL "
                                       f"dist={dist} scale={int(scale)}: "
                                       f"{exc!r}", flush=True)
-                        yield sess.close_position(pid)
+                        yield sess.close_position(pos_id)
                         print("FORCE-TEST CLOSE OK", flush=True)
             except Exception as exc:
                 print(f"FORCE-TEST FAIL: {exc!r}", flush=True)
@@ -240,23 +253,25 @@ def live_loop():
                     print(f"reconcile warn: {exc!r}", flush=True)
                 if positions:
                     p = positions[0]
-                    pos_id = p.positionId
+                    pos_id = getattr(p, "positionId", None)
                     pos_vol = getattr(p.tradeData, "volume", 100)
                     pos = p
-                    raw_price = float(p.price) if p.price else None
+                    # ملاحظة: open_positions يعيد ProtoOAOrder وليس Position.
+                    # لا نعتمد أبداً على سعر الـ order — نستخدم entry من الـ state.
+                    raw_price = getattr(p, "price", None)
                     if raw_price is not None and raw_price > 10000:
                         raw_price = raw_price / config.SPOT_SCALE
-                    open_entry = raw_price
-                    open_side = ("SELL" if
-                                 "SELL" in str(p.tradeData.tradeSide).upper()
-                                 else "BUY")
                     stored = state.get("position") or {}
                     if isinstance(stored, dict):
-                        open_entry = (stored.get("entry_price") or
-                                      open_entry)
+                        open_entry = stored.get("entry_price") or raw_price
                         stored_peak = float(stored.get("pnl_peak_usd") or 0)
                         peak = max(stored_peak, peak)
                         st_pos = stored
+                    else:
+                        open_entry = raw_price
+                    open_side = ("SELL" if
+                                 "SELL" in str(p.tradeData.tradeSide).upper()
+                                 else "BUY")
                 else:
                     if state.get("position") is not None:
                         st_p = state.get("position", {})

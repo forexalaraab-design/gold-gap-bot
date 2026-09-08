@@ -4,3 +4,7 @@ __pycache__/
 token.json
 config_local.py
 PROJECT_HANDOFF.md
+PROJECT_SUMMARY.md
+BOT_DATA_FOR_AI.md
+data/backup_*/
+data/backup_*

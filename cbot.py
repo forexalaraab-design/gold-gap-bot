@@ -18,6 +18,21 @@ def _side(v):
     return ProtoMsgs.ProtoOATradeSide.DESCRIPTOR.values_by_name[v].number
 
 
+def _is_open_position(order):
+    """يعيد True فقط إذا كان الأمر يمثل صفقة مفتوحة فعلياً."""
+    try:
+        pos_id = getattr(order, "positionId", None) or 0
+        if not pos_id:
+            return False
+        closing = getattr(order, "closingOrder", None) or 0
+        if closing:
+            return False
+        # يعتبر مفتوحاً ما دام لم يُغلق (لنفترض أنه منفّذ ما لم يخبرنا العكس)
+        return True
+    except Exception:
+        return bool(getattr(order, "positionId", None))
+
+
 def random_label(n=6):
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
 
@@ -247,13 +262,12 @@ class CtraderSession:
         desc_val = getattr(res, "error_description", "") or getattr(res, "message", "")
         print(f"DEBUG open_market: errorCode={code_val!r} desc={desc_val!r}", flush=True)
         _check_error(res, "open_market")
-        # Validate: broker must return a real order with executionPrice
-        if not getattr(res, "positionId", None):
-            raise RuntimeError(
-                "open_market: broker returned no positionId "
-                f"(errorCode={getattr(res, 'errorCode', 'N/A')!r})"
-            )
-        defer.returnValue(res)
+        # Accept response even if executionPrice/positionId is missing;
+        # we will verify/fetch the position via open_positions() after a short delay.
+        pos_id = getattr(res, "positionId", None)
+        if not pos_id:
+            print("  WARN: open_market response has no positionId; will verify via positions list", flush=True)
+        defer.returnValue({"positionId": pos_id, "order": getattr(res, "order", None), "position": getattr(res, "position", None)})
 
     # ── close position ────────────────────────────────────────────────
     @defer.inlineCallbacks
@@ -314,8 +328,11 @@ class CtraderSession:
     @defer.inlineCallbacks
     def open_positions(self, account_id=None, max_age=None):
         aid = account_id or self.account_id
+        if not aid:
+            self._last_positions = []
+            defer.returnValue([])
         now = time.time()
-        start = now - (max_age if max_age else 300.0)
+        start = now - (max_age if max_age else 86400.0)
         req = ProtoMsgs.ProtoOAOrderListReq()
         req.ctidTraderAccountId = aid
         req.fromTimestamp = int(start * 1000)
@@ -323,12 +340,12 @@ class CtraderSession:
         try:
             res = yield self._send(req, 15)
             res = _unwrap(res)
-            if hasattr(res, 'order'):
-                self._last_positions = list(res.order)
-                defer.returnValue(self._last_positions)
-            else:
-                self._last_positions = []
-                defer.returnValue([])
+            orders = list(res.order) if hasattr(res, 'order') else []
+            # الصفقات المفتوحة فعلياً فقط: أوامر منفّذة تملك positionId
+            # ولم تُغلق بعد (لا يوجد closingOrder)
+            open_pos = [o for o in orders if _is_open_position(o)]
+            self._last_positions = open_pos
+            defer.returnValue(open_pos)
         except Exception as exc:
             print(f"open_positions send failed: {exc!r}")
             self._last_positions = []

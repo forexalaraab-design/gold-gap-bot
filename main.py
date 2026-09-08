@@ -209,18 +209,19 @@ def _side_name(trade_side):
 
 
 def position_fees_usd(pos, md):
-    """تكلفة الصفقة الإجمالية (عمولة + س왑 + spread مقدر)."""
+    """تكلفة الصفقة الإجمالية (عمولة + سواب + spread مقدر)."""
     commission = getattr(pos, "commission", None) or 0
     swap = getattr(pos, "swap", None) or 0
     if md:
         commission = commission / (10 ** md)
         swap = swap / (10 ** md)
-    vol_lots = pos.tradeData.volume / 100000.0 if pos.tradeData.volume else 0
+    # حجمنا ثابت: config.LOT (=0.01). الرسوم لكل لوت × عدد اللوتات.
+    vol_lots = float(config.LOT) if getattr(config, "LOT", None) else 0.01
     spread_est = config.TRADING_FEES_PER_TRADE_LOT * max(vol_lots, 0.01)
     return commission + swap + spread_est
 
 
-def dynamic_pnl_usd(pos, mid, digits, md):
+def dynamic_pnl_usd(pos, mid, digits, md, st_pos=None):
     """PnL صافي (بعد الرسوم) من mid الحالي والصفقة المفتوحة.
     الصيغة: PnL = (mid - entry) × volume / (10^md)
     حيث md=2 لكل صغيرة → القسم 100
@@ -228,11 +229,20 @@ def dynamic_pnl_usd(pos, mid, digits, md):
     مثال: mid=4400, entry=4390, volume=100, md=2
           PnL = (10 × 100) / 100 = 10.0$
     """
-    entry = pos.price
-    if entry is None or entry == 0:
-        entry = None  # لا نعيد 0.0؛ نجعله None صراحةً
+    entry = None
+    # نفضل entry_price المخزن في state (حقيقي، مقسوم على SPOT_SCALE)
+    if st_pos is not None:
+        try:
+            entry = float(st_pos.get("entry_price"))
+        except (TypeError, ValueError):
+            entry = None
     if entry is None:
+        entry = pos.price
+    if entry is None or entry == 0:
         return 0.0, 0.0, 0.0
+    # إن كان سعراً خاماً مضروباً بـ 100000 نجعل الحقيقي
+    if abs(entry) > 10000:
+        entry = entry / config.SPOT_SCALE
     raw = (mid - entry) * pos.tradeData.volume
     if _side_name(pos.tradeData.tradeSide) == "SELL":
         raw = -raw
@@ -279,6 +289,8 @@ class ClosingManager:
             return False
         if self.consecutive_losses >= self.cfg.MAX_CONSECUTIVE_LOSSES:
             return False
+        if self.trade_count_today >= self.cfg.MAX_TRADES_PER_DAY:
+            return False
         return True
 
     def record_loss(self):
@@ -302,7 +314,8 @@ class ClosingManager:
         side_name = _side_name(position.tradeData.tradeSide)
         digits = getattr(position, "digits", 2) or 2
         net_pnl, gross_pnl, fees = dynamic_pnl_usd(position, mid,
-                                                     digits, money_digits)
+                                                     digits, money_digits,
+                                                     st_pos)
         entry_gap = st_pos.get("entry_gap")
         entry_price = st_pos.get("entry_price")
         opened_at = st_pos.get("opened_at")
@@ -418,25 +431,35 @@ def _record_close(state, rec):
 def _record_external_close(state, ts_open, ts_close, gap,
                            entry_gap, entry_price, close_price, max_gap,
                            result):
-    """تسجيل إغلاق خارجي (من المستخدم أو السيرفر)."""
+    """تسجيل إغلاق خارجي (من المستخدم أو السيرفر).
+
+    لا نخمّن PnL هنا (كان سبباً لتلوّث البيانات سابقاً). نسجل الصفقة
+    بقيم الأسعار فقط وPnL صفر، عدا الحالة التي نتوفر فيها على pnl محسوب
+    فعلي عبر pnl_last_usd.
+    """
+    st_pos = state.get("position") or {}
+    tracked_pnl = st_pos.get("pnl_last_usd")
+    try:
+        tracked_pnl = float(tracked_pnl) if tracked_pnl is not None else 0.0
+    except (TypeError, ValueError):
+        tracked_pnl = 0.0
     if ts_open:
-        net_gap = close_price - (entry_price or close_price)
-        # حساب PnL تقريبي يعتمد على الفجوة
-        pnl_usd_guess = net_gap * config.LOT * 100  # LOT × 100 (لأن 0.01 لوت = 100 وحدة)
-        _record_close(state, {
+        rec = {
             "ts_open": ts_open,
             "ts_close": ts_close,
-            "side": state.get("position", {}).get("side"),
+            "side": st_pos.get("side"),
             "entry_gap": entry_gap,
             "close_gap": gap,
             "entry_price": entry_price,
             "close_price": close_price,
-            "pnl_units": round(pnl_usd_guess, 2),
-            "pnl_usd": round(pnl_usd_guess, 2),
+            "pnl_units": round(tracked_pnl, 2),
+            "pnl_usd": round(tracked_pnl, 2),
             "fees_usd": 0.0,
-            "pnl_net_usd": round(pnl_usd_guess, 2),
+            "pnl_net_usd": round(tracked_pnl, 2),
             "reason": "external_close",
-        })
+            "pnl_peak_usd": round(float(st_pos.get("pnl_peak_usd") or 0), 2),
+        }
+        _record_close(state, rec)
     result["action"] = "external_close"
 
 
@@ -493,7 +516,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     """
     symbol_id = result["symbol_id"]
     try:
-        positions = yield sess.open_positions(symbol_id, max_age=120.0)
+        # IMPORTANT: open_positions(account_id) — نمرر self.account_id لا symbol_id!
+        positions = yield sess.open_positions(sess.account_id, max_age=86400.0)
         sess.last_positions = positions
     except Exception as exc:
         positions = sess.last_positions
@@ -699,11 +723,17 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     # =========================================================================
     # NOTICE: لا نعتمد على positions فقط — إذا فشل API، positions قد يكون []
     # لكن state["position"] فقط إذا كان لديه positionId صحيح يوضح وجود صفقة
-    has_open_position = (
-        bool(positions)
-        or (state.get("position") is not None and state["position"].get("positionId"))
+    state_pos = state.get("position")
+    state_pos_live = (
+        isinstance(state_pos, dict) and state_pos.get("positionId")
     )
-    
+    # حارس صارم: نمنع الفتح إذا وُجدت أي صفقة (من API أو الحالة أو كاش آخر)
+    # يجب ألا نفتح صفقة جديدة قبل التأكد التام من عدم وجود صفقات مفتوحة.
+    has_open_position = bool(positions) or bool(state_pos_live)
+    cache_positions = list(getattr(sess, "last_positions", None) or [])
+    if cache_positions:
+        has_open_position = True
+
     if not has_open_position and not closed_this_cycle:
         cooldown_left = state.get("cooldown_until", 0) - now_ts
         in_session_now = in_session(datetime.now(timezone.utc))
@@ -711,17 +741,18 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         can_trade = (
                 config.MODE == "trade"
                 and stats is not None
-                and result["z"] is not None
                 and (
-                    abs(result["z"]) >= config.Z_ENTRY_SOFT
-                    or abs(gap) >= config.MIN_GAP_USD * 1.5
+                    (result["z"] is not None
+                     and abs(result["z"]) >= config.Z_ENTRY_SOFT)
+                    or abs(gap) >= config.MIN_GAP_USD * 1.2
                 )
                 and abs(gap) <= config.MAX_ENTRY_GAP_USD
                 and abs(gap) >= config.MIN_GAP_USD
                 and result.get("balance_usd", 0) >= config.MIN_BALANCE_TO_TRADE
                 and cooldown_left <= 0
                 and in_session_now
-                and state.get("position") is None
+                and state_pos is None
+                and closing_mgr.can_trade_today()
             )
 
         if can_trade:
@@ -763,16 +794,16 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     label=cbot.random_label(),
                     comment="",
                 )
-                order = res.order
+                order = res["order"] if isinstance(res, dict) else res.order
                 # تسجيل entry_price من order.executionPrice أو res.position.price
                 order_exec_price = (
                     float(order.executionPrice)
-                    if order.executionPrice else None
+                    if order and order.executionPrice else None
                 )
-                position_price = (
-                    float(res.position.price)
-                    if (res.position and res.position.price) else None
-                )
+                position_price = None
+                pos_obj = res.get("position") if isinstance(res, dict) else getattr(res, "position", None)
+                if pos_obj and getattr(pos_obj, "price", None):
+                    position_price = float(pos_obj.price)
                 # الأولوية لـ executionPrice (سعر التنفيذ الفعلي)
                 entry_price_val = order_exec_price or position_price
                 # تحويل internal units إلى سعر حقيقي إذا لزم
@@ -789,18 +820,32 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
 
                 result["action"] = "open:" + side
                 result["order"] = {
-                    "orderId": order.orderId,
+                    "orderId": getattr(order, "orderId", None),
                     "side": side,
-                    "executionPrice": order.executionPrice
-                    if order.executionPrice else None,
+                    "executionPrice": (
+                        float(order.executionPrice)
+                        if order and getattr(order, "executionPrice", None)
+                        else None
+                    ),
                     "tradeData": {
-                        "volume": order.tradeData.volume,
-                        "label": order.tradeData.label,
+                        "volume": (
+                            getattr(order.tradeData, "volume", None)
+                            if order and getattr(order, "tradeData", None)
+                            else None
+                        ),
+                        "label": (
+                            getattr(order.tradeData, "label", None)
+                            if order and getattr(order, "tradeData", None)
+                            else None
+                        ),
                     },
                 }
+                position_id_val = (
+                    res.get("positionId") if isinstance(res, dict)
+                    else getattr(getattr(res, "position", None), "positionId", None)
+                )
                 new_st_pos = {
-                    "positionId": res.position.positionId
-                    if res.position else None,
+                    "positionId": position_id_val,
                     "side": side,
                     "entry_gap": gap,
                     "entry_price": entry_price_val,
@@ -816,6 +861,19 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 # تحديث الأداء
                 closing_mgr.trade_count_today += 1
                 closing_mgr.save_perf_to_state(state)
+                # Verify/fetch positionId if broker omitted it
+                if not position_id_val:
+                    try:
+                        time.sleep(1.5)
+                        pos_list = yield sess.open_positions(sess.account_id)
+                        if pos_list:
+                            latest = sorted(pos_list, key=lambda p: getattr(p, 'utcLastUpdateTimestamp', 0) or 0, reverse=True)[0]
+                            fetched_id = getattr(latest, 'positionId', None)
+                            if fetched_id:
+                                state["position"]["positionId"] = fetched_id
+                                print(f"  VERIFY: fetched positionId={fetched_id} from positions list", flush=True)
+                    except Exception as exc:
+                        print(f"  VERIFY: could not fetch positionId: {exc!r}", flush=True)
         else:
             reasons = []
             if config.MODE != "trade":
@@ -923,9 +981,12 @@ def main():
 
         sess.subscribe_persistent(symbol_id)
 
-        if config.FORCE_TEST_OPEN and config.ENVIRONMENT.strip().lower() == "demo":
+        # FORCE-TEST: اختبار يدوي فقط — يُعطّل تماماً أثناء التداول الحقيقي
+        if (config.FORCE_TEST_OPEN
+                and config.MODE != "trade"
+                and config.ENVIRONMENT.strip().lower() == "demo"):
             try:
-                existing = sess.open_positions(symbol_id)
+                existing = sess.open_positions(sess.account_id, max_age=86400.0)
                 if existing:
                     print(f"FORCE-TEST SKIP (already open): "
                           f"{[(p.positionId, float(p.price)) for p in existing]}")

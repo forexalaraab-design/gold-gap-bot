@@ -115,10 +115,13 @@ def live_loop():
         sess.subscribe_persistent(symbol_id)
         print(f"subscribed symbol={symbol_id}", flush=True)
 
-        if (config.FORCE_TEST_OPEN and
-                config.ENVIRONMENT.strip().lower() == "demo"):
+        # FORCE-TEST: اختبار يدوي فقط — يُعطّل تماماً أثناء التداول الحقيقي
+        if (config.FORCE_TEST_OPEN
+                and config.MODE != "trade"
+                and config.ENVIRONMENT.strip().lower() == "demo"):
             try:
-                existing = yield sess.open_positions(symbol_id)
+                existing = yield sess.open_positions(sess.account_id,
+                                                     max_age=86400.0)
                 if existing:
                     print(f"FORCE-TEST SKIP (already open): "
                           f"{[p.positionId for p in existing]}", flush=True)
@@ -181,6 +184,11 @@ def live_loop():
                 continue
             bid, ask, sp_ts = spot
             mid = (bid + ask) / 2 / config.SPOT_SCALE
+            # Sanity check: XAUUSD should be around 4000-5000
+            if not (4000 <= mid <= 5000):
+                print(f"  SKIP tick: mid={mid:.2f} out of range, bid={bid} ask={ask}", flush=True)
+                yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+                continue
             gap = mid - global_price
 
             changed = (last_gap is None or
@@ -227,7 +235,7 @@ def live_loop():
                 positions = None
                 try:
                     positions = yield sess.open_positions(
-                        symbol_id, max_age=0.0)
+                        sess.account_id, max_age=86400.0)
                 except Exception as exc:
                     print(f"reconcile warn: {exc!r}", flush=True)
                 if positions:
@@ -261,6 +269,8 @@ def live_loop():
                             mid, config.MAX_ENTRY_GAP_USD,
                             result)
                         print("detected external close — recorded", flush=True)
+                        # مسح الصفقة المفتوحة من الحالة — لا صفقة نشطة الآن
+                        state["position"] = None
                         st_pos = None
 
             # ----- تنفيذ دورة التداول الكاملة (فتح + إغلاق) -----
@@ -319,22 +329,12 @@ def live_loop():
 
             yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
 
-        # --- نهاية الدورة: إغلاق أي صفقة متبقية ---
+        # --- نهاية الدورة: نحافظ على الصفقة المفتوحة في الحالة؛
+        #     لا نُغلقها زوراً (هذا كان يسبب تسجيل إغلاقات وهمية وفتح
+        #     صفقات مكررة في كل دورة). الـ state سيُحفظ في finally أدناه. ---
         if state.get("position") is not None:
-            st_p = state.get("position", {})
-            if st_p.get("opened_at"):
-                _record_external_close(
-                    state,
-                    st_p.get("opened_at"),
-                    utcnow_iso(),
-                    gap,
-                    st_p.get("entry_gap"),
-                    st_p.get("entry_price"),
-                    mid,
-                    config.MAX_ENTRY_GAP_USD,
-                    result,
-                )
-            state["position"] = None
+            print("live: exiting with position still open — keeping it in state",
+                  flush=True)
 
     except Exception:
         import traceback

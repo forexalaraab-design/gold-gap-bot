@@ -100,14 +100,8 @@
     ],
     "pnl_last_usd": 0.52
   },
-  "stats": {
-    "n": 13,
-    "mean": -1.0162288461539832,
-    "sd": 0.8023124552040432,
-    "median": -0.9099999999998545,
-    "mad": 0.5853378929998602
-  },
-  "last_run": "2026-09-08T20:34:45Z",
+  "stats": null,
+  "last_run": "2026-09-08T21:04:27Z",
   "money_digits": 2,
   "entry_balance_units": 70467,
   "cooldown_until": 1788555444.5420766,
@@ -268,5 +262,6 @@
     "consecutive_losses": 1,
     "trades_today": 2,
     "last_updated": "2026-09-04T20:37:26Z"
-  }
+  },
+  "cleanup_done_internal": true
 }

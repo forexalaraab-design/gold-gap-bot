@@ -4,7 +4,7 @@
   "last_run": "2026-09-08T21:25:12Z",
   "money_digits": 2,
   "entry_balance_units": 70467,
-  "cooldown_until": 1788555444.5420766,
+  "cooldown_until": 0,
   "closed_trades": [
     {
       "ts_open": "2026-08-31T15:38:37Z",
@@ -158,10 +158,9 @@
     }
   ],
   "perf": {
-    "running_daily_pnl": -1.0,
-    "consecutive_losses": 1,
-    "trades_today": 2,
-    "last_updated": "2026-09-04T20:37:26Z"
-  },
-  "cleanup_done_internal": true
+    "running_daily_pnl": 0.0,
+    "consecutive_losses": 0,
+    "trades_today": 0,
+    "last_updated": "2026-09-08T21:26:12Z"
+  }
 }

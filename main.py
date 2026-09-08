@@ -642,7 +642,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         raw_price = getattr(pos, "price", None)
         if raw_price is not None and raw_price > 10000:
             raw_price = raw_price / config.SPOT_SCALE
-        st_pos["entry_price"] = st_pos.get("entry_price") or raw_price
+        st_pos["entry_price"] = st_pos.get("entry_price") or raw_price or mid
         # الحفاظ على pnl_peak_usd و pnl_track من الـ state
         st_pos.setdefault("pnl_peak_usd", 0.0)
         st_pos.setdefault("pnl_track", [])

@@ -196,7 +196,20 @@ def live_loop():
                                 lambda: None)
                 continue
             bid, ask, sp_ts = spot
-            mid = (bid + ask) / 2 / config.SPOT_SCALE
+            # الحماية: أحياناً يصل bid=0 (قبل أول تحديث). لا نحسب mid
+            # من (bid+ask)/2 مع bid=0 — كان ينتج أسعاراً منتصفة في سجل
+            # الصفقات القديمة. نستخدم المتاح فقط.
+            if not bid or not ask:
+                if bid and not ask:
+                    mid = bid / config.SPOT_SCALE
+                elif ask and not bid:
+                    mid = ask / config.SPOT_SCALE
+                else:
+                    print(f"  SKIP tick: bid={bid} ask={ask} both zero", flush=True)
+                    yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+                    continue
+            else:
+                mid = (bid + ask) / 2 / config.SPOT_SCALE
             # Sanity check: XAUUSD should be around 4000-5000
             if not (4000 <= mid <= 5000):
                 print(f"  SKIP tick: mid={mid:.2f} out of range, bid={bid} ask={ask}", flush=True)
@@ -314,7 +327,9 @@ def live_loop():
             if pos_id is not None:
                 action_str = f"hold"
             elif state.get("position") is not None:
-                action_str = "open"
+                # pos_id يُحدَّث كل reconcile (30s)؛ وجود position في الحالة
+                # يعني أننا محتفظون بالصفقة — ليست فتحاً جديداً.
+                action_str = "hold:state"
             if z_val is not None and abs(z_val) >= config.Z_ENTRY:
                 z_str = f"{z_val:.2f}"
             else:

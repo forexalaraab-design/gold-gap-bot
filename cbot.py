@@ -345,6 +345,10 @@ class CtraderSession:
             # ولم تُغلق بعد (لا يوجد closingOrder)
             open_pos = [o for o in orders if _is_open_position(o)]
             self._last_positions = open_pos
+            if open_pos:
+                print(f"open_positions: {len(orders)} orders -> "
+                      f"{len(open_pos)} open "
+                      f"({[o.positionId for o in open_pos]})", flush=True)
             defer.returnValue(open_pos)
         except Exception as exc:
             print(f"open_positions send failed: {exc!r}")

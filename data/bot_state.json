@@ -1,7 +1,13 @@
 {
   "position": null,
-  "stats": null,
-  "last_run": "2026-09-08T21:39:05Z",
+  "stats": {
+    "n": 8,
+    "mean": -1.2201950000007855,
+    "sd": 0.0,
+    "median": -1.2201950000007855,
+    "mad": 0.0
+  },
+  "last_run": "2026-09-08T21:42:32Z",
   "money_digits": 2,
   "entry_balance_units": 70467,
   "cooldown_until": 0,

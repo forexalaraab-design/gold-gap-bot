@@ -308,7 +308,13 @@ def live_loop():
                                  "SELL" in str(p.tradeData.tradeSide).upper()
                                  else "BUY")
                 else:
-                    if state.get("position") is not None:
+                    # اكتشاف الإغلاق الخارجي ممكن فقط عند توفر PositionList
+                    # موثوق. في وضع state-only (مكتبة بدون PositionList) لا
+                    # توجد قائمة حقيقية — إرجاع [] هنا ليس دليلاً على إغلاق،
+                    # ولا يجوز مسح الصفقة من الحالة وإلا تفتح صفقة ثانية.
+                    if (state.get("position") is not None
+                            and getattr(sess, "_position_source", "")
+                            == "position_list"):
                         st_p = state.get("position", {})
                         ts_open = st_p.get("opened_at")
                         ts_close = utcnow_iso()
@@ -318,10 +324,16 @@ def live_loop():
                             st_p.get("entry_price"),
                             mid, config.MAX_ENTRY_GAP_USD,
                             result)
-                        print("detected external close — recorded", flush=True)
+                        print("detected external close — recorded",
+                              flush=True)
                         # مسح الصفقة المفتوحة من الحالة — لا صفقة نشطة الآن
                         state["position"] = None
                         st_pos = None
+                    else:
+                        print(f"reconcile: no positions (source="
+                              f"{getattr(sess, '_position_source', '?')}), "
+                              f"state position kept, no external close",
+                              flush=True)
 
             # ----- تنفيذ دورة التداول الكاملة (فتح + إغلاق) -----
             closing_mgr_full = _main.ClosingManager(state, config)

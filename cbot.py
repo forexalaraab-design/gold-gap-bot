@@ -108,6 +108,7 @@ class CtraderSession:
         self._lock = defer.DeferredLock()
         self.last_positions = []
         self._last_positions = []
+        self._position_source = "state"
 
     # ── send ──────────────────────────────────────────────────────────
     @defer.inlineCallbacks
@@ -386,28 +387,36 @@ class CtraderSession:
             self._last_positions = []
             defer.returnValue([])
         now = time.time()
-        start = now - (max_age if max_age else 86400.0)
-        req = ProtoMsgs.ProtoOAOrderListReq()
-        req.ctidTraderAccountId = aid
-        req.fromTimestamp = int(start * 1000)
-        req.toTimestamp = int(now * 1000)
-        try:
-            res = yield self._send(req, 15)
-            res = _unwrap(res)
-            orders = list(res.order) if hasattr(res, 'order') else []
-            # الصفقات المفتوحة فعلياً فقط: أوامر منفّذة تملك positionId
-            # ولم تُغلق بعد (لا يوجد closingOrder)
-            open_pos = [o for o in orders if _is_open_position(o)]
-            self._last_positions = open_pos
-            if open_pos:
-                print(f"open_positions: {len(orders)} orders -> "
-                      f"{len(open_pos)} open "
-                      f"({[o.positionId for o in open_pos]})", flush=True)
-            defer.returnValue(open_pos)
-        except Exception as exc:
-            print(f"open_positions send failed: {exc!r}")
-            self._last_positions = []
-            defer.returnValue([])
+        # IMPORTANT: لا نستخدم ProtoOAOrderListReq لمعرفة الصفقات المفتوحة.
+        # هذه القائمة تعيد كل الأوامر التاريخية المنفّذة (حتى المغلقة) بدون
+        # علامة قاطعة، وكانت تُعطينا 544 "صفقة مفتوحة" وهمية تمنع التداول.
+        # الصحيح هو PositionList إن توفر في نسخة المكتبة المثبتة، وإلا
+        # نعتمد على الحالة المحلية فقط (state.position) لضمان صفقة واحدة.
+        if hasattr(ProtoMsgs, "ProtoOAPositionListReq"):
+            try:
+                req = ProtoMsgs.ProtoOAPositionListReq()
+                req.ctidTraderAccountId = aid
+                res = yield self._send(req, 15)
+                res = _unwrap(res)
+                positions = list(res.position) if hasattr(res, "position") else []
+                self._last_positions = positions
+                self._position_source = "position_list"
+                if positions:
+                    print(f"open_positions(PositionList): "
+                          f"{len(positions)} open "
+                          f"({[p.positionId for p in positions]})", flush=True)
+                defer.returnValue(positions)
+            except Exception as exc:
+                print(f"open_positions(PositionList) failed: {exc!r} "
+                      f"→ relying on local state", flush=True)
+                self._last_positions = []
+                self._position_source = "state"
+                defer.returnValue([])
+        print("open_positions: library has no PositionList → local-state "
+              "mode (single-position guaranteed by state)", flush=True)
+        self._last_positions = []
+        self._position_source = "state"
+        defer.returnValue([])
 
     # ── stop ─────────────────────────────────────────────────────────
     def stop(self):

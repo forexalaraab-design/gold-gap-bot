@@ -19,15 +19,37 @@ def _side(v):
 
 
 def _is_open_position(order):
-    """يعيد True فقط إذا كان الأمر يمثل صفقة مفتوحة فعلياً."""
+    """يعيد True فقط إذا كان الأمر يمثل صفقة مفتوحة فعلياً.
+
+    المعيار الحقيقي: orderStatus == PROTO_OA_ORDER_STATUS_FILLED (2)
+    مع وجود positionId وعدم وجود closingOrder. بدون فحص الحالة كنا
+    نعد 500+ أوامر تاريخية "مفتوحة" ونتج عنها cleanup غير ضروري.
+    """
     try:
+        status = getattr(order, "orderStatus", None)
+        # proto3: الحقول enum أرقام int؛ نتعامل أيضاً مع wrappers text
+        if status is not None:
+            if getattr(status, "name", None):
+                status_name = status.name
+            elif isinstance(status, str):
+                status_name = status
+            else:
+                try:
+                    status_name = int(status)
+                except (TypeError, ValueError):
+                    status_name = status
+            if isinstance(status_name, str):
+                if status_name and "FILLED" not in status_name:
+                    return False
+            else:
+                if status_name != 2:  # PROTO_OA_ORDER_STATUS_FILLED
+                    return False
         pos_id = getattr(order, "positionId", None) or 0
         if not pos_id:
             return False
         closing = getattr(order, "closingOrder", None) or 0
         if closing:
             return False
-        # يعتبر مفتوحاً ما دام لم يُغلق (لنفترض أنه منفّذ ما لم يخبرنا العكس)
         return True
     except Exception:
         return bool(getattr(order, "positionId", None))

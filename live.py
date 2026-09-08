@@ -344,6 +344,10 @@ def live_loop():
                     state, result, closing_mgr_full)
             except Exception as exc:
                 print(f"trade-cycle error: {exc!r}", flush=True)
+                if "MARKET_CLOSED" in str(exc):
+                    # السوق مغلق (السعر مجمد). لا نكرر الطلب كل ثوانٍ —
+                    # ننتظر ثم يعيد الرن التالي المحاولة تلقائياً.
+                    yield deferLater(reactor, 60, lambda: None)
 
             # ----- إحصائيات حية -----
             z_val = None

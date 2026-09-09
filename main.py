@@ -702,6 +702,23 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 ),
             )
 
+    # إعادة محاولة ضبط SL/TP على السيرفر إذا فشلت عند الفتح
+    # (مثل TRADING_BAD_STOPS) — نستعمل القيم المخزنة في الحالة
+    if pos_for_close is not None and not state.get("position", {}).get("sltp_set"):
+        stp = state.get("position", {})
+        if stp.get("stop_loss") and stp.get("take_profit"):
+            try:
+                yield sess.set_sltp(
+                    pos_for_close.positionId,
+                    _to_int(stp["stop_loss"]),
+                    _to_int(stp["take_profit"]),
+                )
+                stp["sltp_set"] = True
+                print(f"  SLTP re-apply ok: sl={stp['stop_loss']:.2f} "
+                      f"tp={stp['take_profit']:.2f}", flush=True)
+            except Exception as exc:
+                print(f"  SLTP re-apply fail: {exc!r}", flush=True)
+
     # إذا كانت هناك صفقة مفتوحة (من API أو حالة قسريّة)، فحص الإغلاق
     # =========================================================================
     if pos_for_close is not None:
@@ -853,7 +870,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     config.SL_AFTER_ENTRY_USD,
                     (config.Z_STOP - config.Z_ENTRY) * sd,
                 )
-                min_tp_dist = max(0.3 * sd, 1.0)
+                min_tp_dist = max(0.3 * sd, 2.0)
                 if side == "SELL":
                     sl = mid + sl_dist
                     tp = min(mid - min_tp_dist, mid - 0.9 * abs(gap))
@@ -936,6 +953,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     "pnl_track": [],
                     "stop_loss": float(sl),
                     "take_profit": float(tp),
+                    "sltp_set": False,
                 }
                 state["position"] = new_st_pos
                 state["entry_balance_units"] = (
@@ -951,6 +969,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     try:
                         yield sess.set_sltp(
                             position_id_val, _to_int(sl), _to_int(tp))
+                        state["position"]["sltp_set"] = True
                         print(f"  SLTP set at open: sl={sl:.2f} "
                               f"tp={tp:.2f}", flush=True)
                     except Exception as exc:
@@ -984,6 +1003,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                                         "stop_loss", float(sl))
                                     state["position"].setdefault(
                                         "take_profit", float(tp))
+                                    state["position"]["sltp_set"] = True
                                     print(f"  SLTP set (post-recover): "
                                           f"sl={sl:.2f} tp={tp:.2f}",
                                           flush=True)

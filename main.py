@@ -21,6 +21,7 @@ import json
 import os
 import sys
 import time
+import types
 from datetime import datetime, timezone
 
 import config
@@ -681,6 +682,26 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 closed_this_cycle = False
 
     # =========================================================================
+    # إذا لم نعثر على position من API (وضع state-only)، نبنيه من الحالة
+    # ذاتها كي تُفحص طبقات الإغلاق كاملة (تريلنج/TP/SL/الزمن/الارتداد)
+    if pos_for_close is None:
+        spo = state.get("position")
+        if isinstance(spo, dict) and spo.get("positionId"):
+            pos_for_close = types.SimpleNamespace(
+                positionId=spo["positionId"],
+                digits=state.get("money_digits", 2) or 2,
+                price=spo.get("entry_price"),
+                tradeData=types.SimpleNamespace(
+                    volume=int(round(
+                        (getattr(config, "LOT", 0.01) or 0.01) * 10000.0
+                    )),
+                    tradeSide=(
+                        1 if str(spo.get("side", "BUY")).upper() == "BUY"
+                        else 2
+                    ),
+                ),
+            )
+
     # إذا كانت هناك صفقة مفتوحة (من API أو حالة قسريّة)، فحص الإغلاق
     # =========================================================================
     if pos_for_close is not None:

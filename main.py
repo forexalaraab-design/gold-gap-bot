@@ -555,71 +555,130 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     pos_for_close = None
     if positions:
         pos_for_close = positions[0]
-    elif state.get("position") is not None and state["position"].get("positionId"):
-        # API أعاد empty لكن state يحتوي positionId → محاولة إغلاق قسري
-        # لكن لا نُغلِق إذا كانت الصفقة جديدة (افتُتحت أقل من 2 دقيقة) —API قد يتأخر في المزامنة
+    elif state.get("position") is not None and isinstance(state["position"], dict):
+        # API أعاد empty لكن state يحتوي position → نحاول إصلاح
+        # positionId إن كان مفقوداً ثم إغلاق قسري للصفقة المعلقة.
         sp = state["position"]
         opened_at = sp.get("opened_at")
         if opened_at:
             try:
                 opened_dt = datetime.fromisoformat(opened_at)
                 age_sec = (datetime.now(timezone.utc) - opened_dt).total_seconds()
-                if age_sec < 120:
-                    print(f"skip state-force-close: position only {age_sec:.0f}s old — wait for API sync")
-                    result["action"] = "hold:recently_opened"
-                    closed_this_cycle = False
-                else:
-                    yield sess.close_position(
-                        sp["positionId"],
-                        volume=None,
-                        max_retries=3,
-                    )
-                    entry_price = sp.get("entry_price")
-                    side_name = sp.get("side", "BUY")
-                    digits = state.get("money_digits", 2) or 2
-                    volume_close = result.get("volume", 100)
-                    mid_close = mid
-                    if entry_price:
-                        price_diff = mid_close - entry_price
-                        if side_name == "SELL":
-                            price_diff = -price_diff
-                        gross_pnl_close = (price_diff * volume_close) / (10.0 ** digits)
-                        pnl_net_close = round(gross_pnl_close, 2)
-                        sp["pnl_last_usd"] = pnl_net_close
-                        sp["pnl_peak_usd"] = max(float(sp.get("pnl_peak_usd", 0)), pnl_net_close)
-                        print(f"✓ CLOSED (state-force-close): pnl={pnl_net_close:.2f} USD")
+            except Exception:
+                age_sec = 1e9
+                opened_dt = None
+            if age_sec < 120:
+                print(f"skip state-force-close: position only {age_sec:.0f}s old — wait for API sync")
+                result["action"] = "hold:recently_opened"
+                closed_this_cycle = False
+            else:
+                p_id = sp.get("positionId")
+                if not p_id and opened_dt is not None:
+                    # استرجاع الـ positionId الحقيقي من سجل الأوامر
+                    try:
+                        p_id = yield sess.resolve_position_id(
+                            sess.account_id, opened_dt.timestamp(),
+                            sp.get("entry_price"),
+                            sp.get("side") or "BUY",
+                            config.SL_AFTER_ENTRY_USD,
+                        )
+                    except Exception:
+                        p_id = None
+                    if p_id:
+                        sp["positionId"] = p_id
+                        print(f"state positionId recovered: {p_id}", flush=True)
+                        state["position"] = sp
+                if p_id:
+                    # القواعد الطبيعية من state وحده (لا positions من API):
+                    # أغلق فقط عند انغلاق الفجوة أو تجاوز سقف المدة
+                    # (أو فجوة شاذة كبيرة). وإلا نبقى متمسكين بالصفقة.
+                    try:
+                        age_sec_now = (datetime.now(timezone.utc)
+                                       - opened_dt).total_seconds()
+                    except Exception:
+                        age_sec_now = 1e9
+                    gap_closed = abs(gap) <= config.MIN_GAP_USD * 1.2
+                    max_age = config.MAX_HOLD_HOURS * 3600
+                    gap_anomaly = abs(gap) >= config.MAX_ENTRY_GAP_USD
+                    if not (gap_closed or age_sec_now > max_age
+                            or gap_anomaly):
+                        print(f"state-hold: gap={gap:.2f} not closed, "
+                              f"age={age_sec_now/3600:.1f}h — keeping",
+                              flush=True)
+                        result["action"] = "hold:state"
+                        closed_this_cycle = False
                     else:
-                        pnl_net_close = 0.0
-                        print("✓ CLOSED (state-force-close): no entry_price — PnL=0")
-                    result["action"] = "close:state-force-close"
-                    result["close_pnl_usd"] = pnl_net_close
+                        try:
+                            yield sess.close_position(
+                                p_id,
+                                volume=None,
+                                max_retries=3,
+                            )
+                            entry_price = sp.get("entry_price")
+                            side_name = sp.get("side", "BUY")
+                            digits = state.get("money_digits", 2) or 2
+                            volume_close = result.get("volume", 100)
+                            mid_close = mid
+                            if entry_price:
+                                price_diff = mid_close - entry_price
+                                if str(side_name).upper() == "SELL":
+                                    price_diff = -price_diff
+                                gross_pnl_close = (price_diff * volume_close) / (10.0 ** digits)
+                                pnl_net_close = round(gross_pnl_close, 2)
+                                sp["pnl_last_usd"] = pnl_net_close
+                                sp["pnl_peak_usd"] = max(float(sp.get("pnl_peak_usd", 0)), pnl_net_close)
+                                print(f"✓ CLOSED (state-force-close): pnl={pnl_net_close:.2f} USD")
+                            else:
+                                pnl_net_close = 0.0
+                                print("✓ CLOSED (state-force-close): no entry_price — PnL=0")
+                            result["action"] = "close:state-force-close"
+                            result["close_pnl_usd"] = pnl_net_close
+                            state["position"] = None
+                            state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
+                            if pnl_net_close > 0:
+                                closing_mgr.record_win()
+                            else:
+                                closing_mgr.record_loss()
+                            closing_mgr.save_perf_to_state(state)
+                            _record_close(state, {
+                                "ts_open": sp.get("opened_at"),
+                                "ts_close": utcnow_iso(),
+                                "side": side_name,
+                                "entry_gap": sp.get("entry_gap"),
+                                "close_gap": gap,
+                                "entry_price": entry_price,
+                                "close_price": mid_close,
+                                "pnl_units": pnl_net_close,
+                                "pnl_usd": pnl_net_close,
+                                "fees_usd": 0,
+                                "pnl_net_usd": pnl_net_close,
+                                "reason": "state-force-close",
+                                "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
+                            })
+                            result["close_pnl_usd"] = pnl_net_close
+                            closed_this_cycle = True
+                        except Exception as exc:
+                            print(f"state-force-close failed: {exc!r}")
+                            result["action"] = "close_pending:state"
+                else:
+                    print("state position: no positionId and none recoverable — cannot close yet", flush=True)
+                    result["action"] = "hold:no-posid"
+                    closed_this_cycle = False
+        else:
+            p_id = sp.get("positionId")
+            if p_id:
+                try:
+                    yield sess.close_position(p_id, volume=None, max_retries=3)
                     state["position"] = None
                     state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
-                    if pnl_net_close > 0:
-                        closing_mgr.record_win()
-                    else:
-                        closing_mgr.record_loss()
-                    closing_mgr.save_perf_to_state(state)
-                    _record_close(state, {
-                        "ts_open": sp.get("opened_at"),
-                        "ts_close": utcnow_iso(),
-                        "side": side_name,
-                        "entry_gap": sp.get("entry_gap"),
-                        "close_gap": gap,
-                        "entry_price": entry_price,
-                        "close_price": mid_close,
-                        "pnl_units": pnl_net_close,
-                        "pnl_usd": pnl_net_close,
-                        "fees_usd": 0,
-                        "pnl_net_usd": pnl_net_close,
-                        "reason": "state-force-close",
-                        "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
-                    })
-                    result["close_pnl_usd"] = pnl_net_close
+                    result["action"] = "close:state-force-close"
                     closed_this_cycle = True
-            except Exception as exc:
-                print(f"state-force-close failed: {exc!r}")
-                result["action"] = "close_pending:state"
+                except Exception as exc:
+                    print(f"state-force-close failed: {exc!r}")
+                    result["action"] = "close_pending:state"
+            else:
+                result["action"] = "hold:no-posid"
+                closed_this_cycle = False
 
     # =========================================================================
     # إذا كانت هناك صفقة مفتوحة (من API أو حالة قسريّة)، فحص الإغلاق
@@ -727,7 +786,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     # لكن state["position"] فقط إذا كان لديه positionId صحيح يوضح وجود صفقة
     state_pos = state.get("position")
     state_pos_live = (
-        isinstance(state_pos, dict) and state_pos.get("positionId")
+        isinstance(state_pos, dict) and any(state_pos)
     )
     # حارس صارم: نمنع الفتح إذا وُجدت أي صفقة (من API أو الحالة أو كاش آخر)
     # يجب ألا نفتح صفقة جديدة قبل التأكد التام من عدم وجود صفقات مفتوحة.
@@ -864,16 +923,26 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 closing_mgr.trade_count_today += 1
                 closing_mgr.save_perf_to_state(state)
                 # Verify/fetch positionId if broker omitted it
+                # (Open API 0.9.2 قد لا يعيد positionId في الـ response)
                 if not position_id_val:
                     try:
                         time.sleep(1.5)
-                        pos_list = yield sess.open_positions(sess.account_id)
-                        if pos_list:
-                            latest = sorted(pos_list, key=lambda p: getattr(p, 'utcLastUpdateTimestamp', 0) or 0, reverse=True)[0]
-                            fetched_id = getattr(latest, 'positionId', None)
+                        opened_unix = None
+                        try:
+                            opened_unix = datetime.fromisoformat(
+                                new_st_pos["opened_at"]).timestamp()
+                        except Exception:
+                            pass
+                        if opened_unix:
+                            fetched_id = yield sess.resolve_position_id(
+                                sess.account_id, opened_unix,
+                                entry_price_val, side,
+                                config.SL_AFTER_ENTRY_USD,
+                            )
                             if fetched_id:
                                 state["position"]["positionId"] = fetched_id
-                                print(f"  VERIFY: fetched positionId={fetched_id} from positions list", flush=True)
+                                print(f"  VERIFY: recovered positionId="
+                                      f"{fetched_id}", flush=True)
                     except Exception as exc:
                         print(f"  VERIFY: could not fetch positionId: {exc!r}", flush=True)
         else:

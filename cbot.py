@@ -418,6 +418,86 @@ class CtraderSession:
         self._position_source = "state"
         defer.returnValue([])
 
+    # ── resolve real positionId for our tracked position ─────────────
+    # ---------------------------------------------
+    # نبحث في OrderList عن ordinal صفقتنا المعلقة، لأن الفتح قد لا يعيد
+    # positionId (Open API 0.9.2). نطابق بالأرقام: side + entry قريب +
+    # بلا closingOrder + ضمن إطار زمني حول زمن الفتح.
+    @defer.inlineCallbacks
+    def resolve_position_id(self, account_id, opened_unix,
+                            entry_price=None, side="BUY",
+                            tolerance_usd=5.0):
+        aid = account_id or self.account_id
+        if not aid:
+            defer.returnValue(None)
+        now = time.time()
+        try:
+            req = ProtoMsgs.ProtoOAOrderListReq()
+            req.ctidTraderAccountId = aid
+            req.fromTimestamp = int((opened_unix - 6 * 3600) * 1000)
+            req.toTimestamp = int((now + 60) * 1000)
+            res = yield self._send(req, 20)
+            res = _unwrap(res)
+            orders = list(res.order) if hasattr(res, "order") else []
+            want_side = str(side).upper()
+            best = None
+            best_dist = float("inf")
+            for o in orders:
+                try:
+                    pos_id = getattr(o, "positionId", None) or 0
+                    if not pos_id:
+                        continue
+                    if getattr(o, "closingOrder", None):
+                        continue
+                    ts_upd = getattr(o, "utcLastUpdateTimestamp", 0) or 0
+                    if ts_upd < (opened_unix - 600) * 1000:
+                        continue
+                    ts_value = getattr(o, "tradeData", None)
+                    ts = getattr(ts_value, "tradeSide", None) if ts_value else None
+                    # مطابقة الاتجاه: BUY=1، SELL=2 (أرقام enum أو أسماء)
+                    if ts is not None:
+                        try:
+                            side_num = int(ts)
+                        except (TypeError, ValueError):
+                            side_num = None
+                        if side_num is not None:
+                            side_hit = (
+                                (want_side == "BUY" and side_num == 1)
+                                or (want_side == "SELL" and side_num == 2)
+                            )
+                        else:
+                            sname = str(ts).upper()
+                            side_hit = (
+                                (want_side == "BUY" and "BUY" in sname)
+                                or (want_side == "SELL" and "SELL" in sname)
+                            )
+                    else:
+                        side_hit = True
+                    if not side_hit:
+                        continue
+                    raw = getattr(o, "price", None)
+                    if raw is not None and raw > 10000:
+                        raw = raw / config.SPOT_SCALE
+                    if entry_price is not None and raw is not None:
+                        dist = abs(raw - entry_price)
+                    else:
+                        dist = 0.0
+                    if dist <= tolerance_usd and dist <= best_dist:
+                        best_dist = dist
+                        best = pos_id
+                except Exception:
+                    continue
+            if best:
+                print(f"resolve_position_id: matched posId={best} "
+                      f"dist={best_dist:.2f}USD side={side}", flush=True)
+            else:
+                print("resolve_position_id: no match in OrderList",
+                      flush=True)
+            defer.returnValue(best)
+        except Exception as exc:
+            print(f"resolve_position_id failed: {exc!r}", flush=True)
+            defer.returnValue(None)
+
     # ── stop ─────────────────────────────────────────────────────────
     def stop(self):
         try:

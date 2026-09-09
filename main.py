@@ -716,18 +716,36 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             sl_s = float(stp["stop_loss"])
             tp_s = float(stp["take_profit"])
             entry_s = float(stp.get("entry_price", 0) or 0)
-            if entry_s and abs(tp_s - entry_s) < 2.0:
-                tp_s = entry_s + (
-                    2.0 if str(stp.get("side", "BUY")).upper() == "BUY" else -2.0
-                )
-            try:
-                yield sess.set_sltp(
-                    pos_for_close.positionId, _to_int(sl_s), _to_int(tp_s))
-                stp["sltp_set"] = True
-                print(f"  SLTP re-apply ok: sl={sl_s:.2f} "
-                      f"tp={tp_s:.2f}", flush=True)
-            except Exception as exc:
-                print(f"  SLTP re-apply fail: {exc!r}", flush=True)
+            if entry_s:
+                side_u = str(stp.get("side", "BUY")).upper()
+                if abs(tp_s - entry_s) < 2.0:
+                    tp_s = entry_s + (2.0 if side_u == "BUY" else -2.0)
+                _ok = False
+                _cands = [8.0, 5.0, 3.0, 2.0]
+                for _dist in _cands:
+                    _sl = (entry_s - _dist if side_u == "BUY"
+                           else entry_s + _dist)
+                    try:
+                        yield sess.set_sltp(
+                            pos_for_close.positionId,
+                            _to_int(_sl), _to_int(tp_s))
+                        _ok = True
+                        sl_s, tp_s = _sl, tp_s
+                        print(f"  SLTP re-apply ok: sl={sl_s:.2f} "
+                              f"tp={tp_s:.2f} (dist={_dist:.1f})",
+                              flush=True)
+                    except Exception as exc:
+                        print(f"  SLTP re-apply try dist={_dist:.1f} "
+                              f"fail: {exc!r}", flush=True)
+                    if _ok:
+                        break
+                if not _ok:
+                    print("  SLTP re-apply FAIL: broker rejected all "
+                          "distances (8,5,3,2)", flush=True)
+                else:
+                    stp["stop_loss"] = float(sl_s)
+                    stp["take_profit"] = float(tp_s)
+                    stp["sltp_set"] = True
 
     # إذا كانت هناك صفقة مفتوحة (من API أو حالة قسريّة)، فحص الإغلاق
     # =========================================================================

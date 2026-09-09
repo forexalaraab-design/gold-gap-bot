@@ -708,44 +708,14 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 ),
             )
 
-    # إعادة محاولة ضبط SL/TP على السيرفر إذا فشلت عند الفتح
-    # (مثل TRADING_BAD_STOPS) — نستعمل القيم المخزنة في الحالة
+    # ملاحظة: البروكر (FP Markets) يرفض تعديل SL/TP لصفقة مفتوحة
+    # (ProtoOAAmendPositionSLTPReq -> TRADING_BAD_STOPS دائماً، تحقق تجريبي).
+    # الحماية تُعطى الآن حصراً من لحظة الفتح عبر sl/tp داخل الـ open request.
+    # صفقة قديمة (sltp_set=False) تُدار بالطبقات فقط ولا تُسد بضبط وسيط.
     if pos_for_close is not None and not state.get("position", {}).get("sltp_set"):
-        stp = state.get("position", {})
-        if stp.get("stop_loss") and stp.get("take_profit"):
-            sl_s = float(stp["stop_loss"])
-            tp_s = float(stp["take_profit"])
-            entry_s = float(stp.get("entry_price", 0) or 0)
-            if entry_s:
-                side_u = str(stp.get("side", "BUY")).upper()
-                if abs(tp_s - entry_s) < 2.0:
-                    tp_s = entry_s + (2.0 if side_u == "BUY" else -2.0)
-                _ok = False
-                _cands = [8.0, 5.0, 3.0, 2.0]
-                for _dist in _cands:
-                    _sl = (entry_s - _dist if side_u == "BUY"
-                           else entry_s + _dist)
-                    try:
-                        yield sess.set_sltp(
-                            pos_for_close.positionId,
-                            _to_int(_sl), _to_int(tp_s))
-                        _ok = True
-                        sl_s, tp_s = _sl, tp_s
-                        print(f"  SLTP re-apply ok: sl={sl_s:.2f} "
-                              f"tp={tp_s:.2f} (dist={_dist:.1f})",
-                              flush=True)
-                    except Exception as exc:
-                        print(f"  SLTP re-apply try dist={_dist:.1f} "
-                              f"fail: {exc!r}", flush=True)
-                    if _ok:
-                        break
-                if not _ok:
-                    print("  SLTP re-apply FAIL: broker rejected all "
-                          "distances (8,5,3,2)", flush=True)
-                else:
-                    stp["stop_loss"] = float(sl_s)
-                    stp["take_profit"] = float(tp_s)
-                    stp["sltp_set"] = True
+        print("  broker disable amending SL/TP on open positions — "
+              "protect only at open request time; layers still manage "
+              "this one", flush=True)
 
     # إذا كانت هناك صفقة مفتوحة (من API أو حالة قسريّة)، فحص الإغلاق
     # =========================================================================
@@ -915,9 +885,15 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 except Exception:
                     trad_pre = None
                 vol = result["volume"]
+                # هام: البروكر (FP Markets) يرفض تعديل السول/الهدف بعد الفتح
+                # (ProtoOAAmendPositionSLTPReq -> TRADING_BAD_STOPS دائماً؛
+                #  تم التحقق تجريبياً بكل المقاييس والمسافات)، لذلك نرسل
+                # الـ stopLoss/takeProfit داخل طلب الفتح نفسه، ويُقبل فوراً.
+                sl_units = _to_int(sl)
+                tp_units = _to_int(tp)
                 res = yield sess.open_market(
                     symbol_id, side, vol,
-                    sl=None, tp=None,
+                    sl=sl_units, tp=tp_units,
                     label=cbot.random_label(),
                     comment="",
                 )
@@ -981,7 +957,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     "pnl_track": [],
                     "stop_loss": float(sl),
                     "take_profit": float(tp),
-                    "sltp_set": False,
+                    "sltp_set": True,
                 }
                 state["position"] = new_st_pos
                 state["entry_balance_units"] = (
@@ -991,17 +967,11 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 # تحديث الأداء
                 closing_mgr.trade_count_today += 1
                 closing_mgr.save_perf_to_state(state)
-                # ستوب لوز/هدف مناسب لكل صفقة — نرسلهما للسيرفر كحماية
-                # آليّة (لا نعتمد على البوت وحده، فلو توقف فسيتدخل البروكر)
+                # ستوب/هدف مقبولان من لحظة الفتح داخل الطلب نفسه
+                # (البروكر يرفض تعديل صفقة مفتوحة، أياً كانت القيم)
                 if position_id_val:
-                    try:
-                        yield sess.set_sltp(
-                            position_id_val, _to_int(sl), _to_int(tp))
-                        state["position"]["sltp_set"] = True
-                        print(f"  SLTP set at open: sl={sl:.2f} "
-                              f"tp={tp:.2f}", flush=True)
-                    except Exception as exc:
-                        print(f"  SLTP at open warn: {exc!r}", flush=True)
+                    print(f"  SL/TP set at open: sl={sl:.2f} tp={tp:.2f}",
+                          flush=True)
                 # Verify/fetch positionId if broker omitted it
                 # (Open API 0.9.2 قد لا يعيد positionId في الـ response)
                 if not position_id_val:
@@ -1023,21 +993,6 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                                 state["position"]["positionId"] = fetched_id
                                 print(f"  VERIFY: recovered positionId="
                                       f"{fetched_id}", flush=True)
-                                # ضبط SL/TP للسيرفر بعد استرداد المعرف
-                                try:
-                                    yield sess.set_sltp(
-                                        fetched_id, _to_int(sl), _to_int(tp))
-                                    state["position"].setdefault(
-                                        "stop_loss", float(sl))
-                                    state["position"].setdefault(
-                                        "take_profit", float(tp))
-                                    state["position"]["sltp_set"] = True
-                                    print(f"  SLTP set (post-recover): "
-                                          f"sl={sl:.2f} tp={tp:.2f}",
-                                          flush=True)
-                                except Exception as exc:
-                                    print(f"  SLTP post-recover warn: "
-                                          f"{exc!r}", flush=True)
                     except Exception as exc:
                         print(f"  VERIFY: could not fetch positionId: {exc!r}", flush=True)
         else:

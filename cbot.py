@@ -297,21 +297,32 @@ class CtraderSession:
     def close_position(self, position_id, volume=None,
                        max_retries=3, delay_sec=2.0):
         if volume is None:
-            positions = None
+            # volume غير معروف: نستخرجه من سجل الأوامر (OrderList) للصفقة
+            # المعنية — ففي وضع state-only تكون open_positions فارغة.
+            vol = None
             try:
-                positions = yield self.open_positions(self.account_id)
+                now_unix = time.time()
+                req = ProtoMsgs.ProtoOAOrderListReq()
+                req.ctidTraderAccountId = self.account_id
+                req.fromTimestamp = int((now_unix - 172800) * 1000)
+                req.toTimestamp = int((now_unix + 60) * 1000)
+                res = yield self._send(req, 20)
+                res = _unwrap(res)
+                orders = list(getattr(res, "order", []) or [])
+                for o in orders:
+                    if getattr(o, "positionId", 0) == position_id:
+                        td = getattr(o, "tradeData", None)
+                        v = getattr(td, "volume", None) if td else None
+                        if v:
+                            vol = int(round(v))
+                            break
             except Exception as exc:
-                print(f"close: reconcile fallback: {exc!r}")
-                positions = getattr(self, "_last_positions", None) or []
-            match = [p for p in positions
-                     if p.positionId == position_id]
-            if not match:
-                raise RuntimeError(
-                    f"position {position_id} not found in positions list")
-            vol = getattr(match[0].tradeData, "volume", None)
+                print(f"close: volume lookup warn: {exc!r}", flush=True)
             if vol is None:
-                raise RuntimeError(
-                    f"cannot determine volume for position {position_id}")
+                # fallback: اللوت الثابت × 10000 (حجم العقد لـ XAUUSD demo)
+                vol = int(round((getattr(config, "LOT", 0.01) or 0.01)
+                                * 10000.0))
+                print(f"close: volume defaulted to {vol}", flush=True)
             volume = vol
         vol_int = int(round(volume))
         for attempt in range(1, max_retries + 1):

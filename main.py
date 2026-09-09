@@ -598,7 +598,13 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                                        - opened_dt).total_seconds()
                     except Exception:
                         age_sec_now = 1e9
-                    gap_closed = abs(gap) <= config.MIN_GAP_USD * 1.2
+                    # لا نغلق بسبب إغلاق الفجوة إلا بعد تثبيت وقف السيرفر،
+                    # وإلا قد تُغلق الصفقة بخسارة بدون أي حماية إطلاقاً
+                    # (آلية stop_loss/take_profit على الوسيط يجب أن تأخذ دورها)
+                    gap_closed = (
+                        abs(gap) <= config.MIN_GAP_USD * 1.2
+                        and bool(state["position"].get("sltp_set"))
+                    )
                     max_age = config.MAX_HOLD_HOURS * 3600
                     gap_anomaly = abs(gap) >= config.MAX_ENTRY_GAP_USD
                     if not (gap_closed or age_sec_now > max_age

@@ -934,6 +934,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     "opened_at": utcnow_iso(),
                     "pnl_peak_usd": 0.0,
                     "pnl_track": [],
+                    "stop_loss": float(sl),
+                    "take_profit": float(tp),
                 }
                 state["position"] = new_st_pos
                 state["entry_balance_units"] = (
@@ -943,6 +945,16 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 # تحديث الأداء
                 closing_mgr.trade_count_today += 1
                 closing_mgr.save_perf_to_state(state)
+                # ستوب لوز/هدف مناسب لكل صفقة — نرسلهما للسيرفر كحماية
+                # آليّة (لا نعتمد على البوت وحده، فلو توقف فسيتدخل البروكر)
+                if position_id_val:
+                    try:
+                        yield sess.set_sltp(
+                            position_id_val, _to_int(sl), _to_int(tp))
+                        print(f"  SLTP set at open: sl={sl:.2f} "
+                              f"tp={tp:.2f}", flush=True)
+                    except Exception as exc:
+                        print(f"  SLTP at open warn: {exc!r}", flush=True)
                 # Verify/fetch positionId if broker omitted it
                 # (Open API 0.9.2 قد لا يعيد positionId في الـ response)
                 if not position_id_val:
@@ -964,6 +976,20 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                                 state["position"]["positionId"] = fetched_id
                                 print(f"  VERIFY: recovered positionId="
                                       f"{fetched_id}", flush=True)
+                                # ضبط SL/TP للسيرفر بعد استرداد المعرف
+                                try:
+                                    yield sess.set_sltp(
+                                        fetched_id, _to_int(sl), _to_int(tp))
+                                    state["position"].setdefault(
+                                        "stop_loss", float(sl))
+                                    state["position"].setdefault(
+                                        "take_profit", float(tp))
+                                    print(f"  SLTP set (post-recover): "
+                                          f"sl={sl:.2f} tp={tp:.2f}",
+                                          flush=True)
+                                except Exception as exc:
+                                    print(f"  SLTP post-recover warn: "
+                                          f"{exc!r}", flush=True)
                     except Exception as exc:
                         print(f"  VERIFY: could not fetch positionId: {exc!r}", flush=True)
         else:

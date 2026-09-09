@@ -707,15 +707,19 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     if pos_for_close is not None and not state.get("position", {}).get("sltp_set"):
         stp = state.get("position", {})
         if stp.get("stop_loss") and stp.get("take_profit"):
+            sl_s = float(stp["stop_loss"])
+            tp_s = float(stp["take_profit"])
+            entry_s = float(stp.get("entry_price", 0) or 0)
+            if entry_s and abs(tp_s - entry_s) < 2.0:
+                tp_s = entry_s + (
+                    2.0 if str(stp.get("side", "BUY")).upper() == "BUY" else -2.0
+                )
             try:
                 yield sess.set_sltp(
-                    pos_for_close.positionId,
-                    _to_int(stp["stop_loss"]),
-                    _to_int(stp["take_profit"]),
-                )
+                    pos_for_close.positionId, _to_int(sl_s), _to_int(tp_s))
                 stp["sltp_set"] = True
-                print(f"  SLTP re-apply ok: sl={stp['stop_loss']:.2f} "
-                      f"tp={stp['take_profit']:.2f}", flush=True)
+                print(f"  SLTP re-apply ok: sl={sl_s:.2f} "
+                      f"tp={tp_s:.2f}", flush=True)
             except Exception as exc:
                 print(f"  SLTP re-apply fail: {exc!r}", flush=True)
 

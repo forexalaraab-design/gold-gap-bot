@@ -274,6 +274,18 @@ class ClosingManager:
         self.daily_pnl = perf.get("running_daily_pnl", 0.0)
         self.consecutive_losses = perf.get("consecutive_losses", 0)
         self.trade_count_today = perf.get("trades_today", 0)
+        # إعادة ضبط يومي: إذا كان آخر تحديث في يوم مختلف، نصفر العدادات
+        last_updated = perf.get("last_updated")
+        if last_updated:
+            try:
+                last_date = datetime.fromisoformat(last_updated).date()
+                today = datetime.utcnow().date()
+                if last_date != today:
+                    self.daily_pnl = 0.0
+                    self.trade_count_today = 0
+                    self.consecutive_losses = 0
+            except (ValueError, TypeError):
+                pass
 
     def save_perf_to_state(self, state):
         """حفظ إحصائيات الأداء في state."""

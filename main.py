@@ -936,7 +936,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 )
                 sd = sd or stats["sd"]
                 sl_dist = config.SL_AFTER_ENTRY_USD
-                min_tp_dist = 1.10
+                min_tp_dist = 1.60
                 if side == "SELL":
                     sl = mid + sl_dist
                     # هدف 1.10 نقاط على الأقل (=$1 بعد الرسوم)، لكن لا أكثر من 90% من الفجوة

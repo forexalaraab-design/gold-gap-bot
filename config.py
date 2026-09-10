@@ -45,7 +45,7 @@ SYMBOL = "XAUUSD"
 
 # الحجم: 0.01 لوت ثابت فقط (ممنوع تغييره من env أو أي مصدر)
 # تريد كل الصفقات بلوت 0.01 — إغلاق أي محاولة تغيير خارجي
-LOT = 0.01
+LOT = 0.02
 
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
 SPOT_SCALE = 100000.0
@@ -98,22 +98,22 @@ PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
 
 # تثبيت الأرباح: إغلاق فوري عند بلوغ ربح صافي محدد
 # 2.0 → 3.0: نزيد الهدف قليلاً لنحمي الأرباح وتجنب التقلبات.
-PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 1.10)
+PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 3.15)
 
 # TRAILING_ARM_USD: تتبع الأرباح يبدأ عندما يصل الـ PnL الصافي إلى هذه القيمة.
 # 0.30 → 0.30: netting $0.30 以上でトラリング開始（そのまま）
-TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.80)
+TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 1.50)
 
 # TRAILING_BACK_USD: إذا تراجع الربح من ذروته بهذا المقدار، نغلق الصفقة.
 # 0.50 → 0.30: نغلق أسرع عند تراجع الأرباح (حماية من العودة الخاسرة).
-TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.45)
+TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.60)
 
 # MAX_HOLD_HOURS: أقصى وقت للحفاظ على الصفقة مفتوحة قبل الإغلاق الإلزامي.
 # 2.0 → 4.0: وقت أطول قليلاً لإعطاء الفرصة للاستعادة، لكن نغلق في النهاية.
 MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.5)
 
 # الحد الأقصى للخسارة لصفقة واحدة (إغلاق آلي).
-MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 3.0)
+MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 6.0)
 
 # الحد اليومي للخسارة (دائرة أمان).
 MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)

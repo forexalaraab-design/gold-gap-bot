@@ -381,8 +381,12 @@ def live_loop():
                 _main.save_history(rows)
                 state["stats"] = stats
                 state["last_run"] = utcnow_iso()
-                if pos_id is not None and st_pos is not None:
-                    # تحديث الحقول فقط، بدون استبدال كامل لـ pnl_peak_usd
+                # تحديث الحقول فقط، بدون استبدال كامل لـ pnl_peak_usd.
+                # شرط إضافي: لا نعيد كتابة position من المتغيرات القديمة
+                # إذا كانت run_trade_cycle قد مسحتها (إنهاء/إغلاق خارجي تمت
+                # تسويته) — وإلا تأتي الصفقة المغلقة من قبرها حتى بعد ساعة.
+                if (pos_id is not None and st_pos is not None
+                        and state.get("position") is not None):
                     st_pos["positionId"] = pos_id
                     st_pos["side"] = open_side
                     st_pos["entry_gap"] = gap

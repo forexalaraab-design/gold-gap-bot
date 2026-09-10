@@ -665,8 +665,19 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                             result["close_pnl_usd"] = pnl_net_close
                             closed_this_cycle = True
                         except Exception as exc:
-                            print(f"state-force-close failed: {exc!r}")
-                            result["action"] = "close_pending:state"
+                            msg = repr(exc)
+                            if "POSITION_NOT_FOUND" in msg:
+                                print(" state-force: broker already closed "
+                                      "position; reconciling (external)",
+                                      flush=True)
+                                state["position"] = None
+                                state["cooldown_until"] = (
+                                    now_ts + config.COOLDOWN_MINUTES * 60
+                                )
+                                result["action"] = "close:external-reconciled"
+                            else:
+                                print(f"state-force-close failed: {exc!r}")
+                                result["action"] = "close_pending:state"
                 else:
                     print("state position: no positionId and none recoverable — cannot close yet", flush=True)
                     result["action"] = "hold:no-posid"
@@ -681,8 +692,18 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     result["action"] = "close:state-force-close"
                     closed_this_cycle = True
                 except Exception as exc:
-                    print(f"state-force-close failed: {exc!r}")
-                    result["action"] = "close_pending:state"
+                    msg = repr(exc)
+                    if "POSITION_NOT_FOUND" in msg:
+                        print(" state-force: broker already closed position; "
+                              "reconciling state", flush=True)
+                        state["position"] = None
+                        state["cooldown_until"] = (
+                            now_ts + config.COOLDOWN_MINUTES * 60
+                        )
+                        result["action"] = "close:external-reconciled"
+                    else:
+                        print(f"state-force-close failed: {exc!r}")
+                        result["action"] = "close_pending:state"
             else:
                 result["action"] = "hold:no-posid"
                 closed_this_cycle = False

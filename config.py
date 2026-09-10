@@ -102,15 +102,15 @@ PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 5.0)
 
 # TRAILING_ARM_USD: تتبع الأرباح يبدأ عندما يصل الـ PnL الصافي إلى هذه القيمة.
 # 0.30 → 0.30: netting $0.30 以上でトラリング開始（そのまま）
-TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.30)
+TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.80)
 
 # TRAILING_BACK_USD: إذا تراجع الربح من ذروته بهذا المقدار، نغلق الصفقة.
 # 0.50 → 0.30: نغلق أسرع عند تراجع الأرباح (حماية من العودة الخاسرة).
-TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.30)
+TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.45)
 
 # MAX_HOLD_HOURS: أقصى وقت للحفاظ على الصفقة مفتوحة قبل الإغلاق الإلزامي.
 # 2.0 → 4.0: وقت أطول قليلاً لإعطاء الفرصة للاستعادة، لكن نغلق في النهاية.
-MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.0)
+MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.5)
 
 # الحد الأقصى للخسارة لصفقة واحدة (إغلاق آلي).
 MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 2.0)

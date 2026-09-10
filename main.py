@@ -335,8 +335,13 @@ class ClosingManager:
             and self.cfg.TRAILING_BACK_USD > 0
         )
         trailing_hit = trailing_armed and (peak - net_pnl) >= self.cfg.TRAILING_BACK_USD
+        # لا نغلق بالتريلنج على خسارة: التريلنج يحمي الربح، لا يصنع خسائر.
+        # (الخسارة الصغيرة تُترك حتى طبقة max_loss أو الستوب الفعلي)
         if trailing_hit:
-            return True, "trailing"
+            if net_pnl >= 0:
+                return True, "trailing"
+            # net_pnl < 0: نُبقي الصفقة — قد تكون عائدة نحو الربح
+            st_pos["pnl_peak_usd"] = round(peak, 2)
 
         # --- الطبقة 2: تثبيت الأرباح (Profit Target) ---
         # إغلاق فوري عند بلوغ ربح صافي محدد (مثلاً +2$)
@@ -367,7 +372,10 @@ class ClosingManager:
                 if scale > 0:
                     z = (global_price - pos_entry) / scale
                     if z is not None and abs(z) <= self.cfg.Z_EXIT:
-                        return True, "z_revert"
+                        if net_pnl >= 0:
+                            return True, "z_revert"
+                        # إغلاق الفجوة بلا ربح محقق: لا نثبّت الخسارة هنا —
+                        # نترك الحماية الحقيقية (max_loss/max_hold/ستوب السيرفر)
             if abs(global_price - pos_entry) >= self.cfg.MAX_ENTRY_GAP_USD:
                 return True, "gap_exceeded_cap"
             gap_pct = abs(global_price - pos_entry) / pos_entry

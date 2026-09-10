@@ -935,17 +935,15 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     else stats["sd"]
                 )
                 sd = sd or stats["sd"]
-                sl_dist = max(
-                    config.SL_AFTER_ENTRY_USD,
-                    (config.Z_STOP - config.Z_ENTRY) * sd,
-                )
-                min_tp_dist = max(0.3 * sd, 2.0)
+                sl_dist = config.SL_AFTER_ENTRY_USD
+                min_tp_dist = 1.10
                 if side == "SELL":
                     sl = mid + sl_dist
-                    tp = min(mid - min_tp_dist, mid - 0.9 * abs(gap))
+                    # هدف 1.10 نقاط على الأقل (=$1 بعد الرسوم)، لكن لا أكثر من 90% من الفجوة
+                    tp = mid - max(min_tp_dist, 0.9 * abs(gap))
                 else:
                     sl = mid - sl_dist
-                    tp = max(mid + min_tp_dist, mid + 0.9 * abs(gap))
+                    tp = mid + max(min_tp_dist, 0.9 * abs(gap))
                 print(
                     f"order-request side={side} mid={mid:.2f} "
                     f"sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "

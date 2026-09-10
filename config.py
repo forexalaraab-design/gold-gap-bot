@@ -69,7 +69,7 @@ Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)
 Z_STOP = _env_float("STRAT_Z_STOP", 3.5)
 
 # SL_AFTER_ENTRY_USD: المسافة الدنيا لوقف الخسارة بعد الفتح (بالفجوة/الوحدات).
-SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 8.0)
+SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 3.0)
 
 # MAX_ENTRY_GAP_USD: إذا تجاوزت الفجوة هذه القيمة، لا ندخل (لأنها قد تكون خطأً).
 MAX_ENTRY_GAP_USD = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)
@@ -98,7 +98,7 @@ PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
 
 # تثبيت الأرباح: إغلاق فوري عند بلوغ ربح صافي محدد
 # 2.0 → 3.0: نزيد الهدف قليلاً لنحمي الأرباح وتجنب التقلبات.
-PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 5.0)
+PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 1.10)
 
 # TRAILING_ARM_USD: تتبع الأرباح يبدأ عندما يصل الـ PnL الصافي إلى هذه القيمة.
 # 0.30 → 0.30: netting $0.30 以上でトラリング開始（そのまま）
@@ -113,7 +113,7 @@ TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.45)
 MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.5)
 
 # الحد الأقصى للخسارة لصفقة واحدة (إغلاق آلي).
-MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 2.0)
+MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 3.0)
 
 # الحد اليومي للخسارة (دائرة أمان).
 MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)

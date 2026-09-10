@@ -809,9 +809,51 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 })
                 result["close_pnl_usd"] = pnl_net
             except Exception as exc:
-                result["close_failed"] = repr(exc)
-                print(f"close_position failed (layer: {close_reason}): {exc!r}")
-                result["action"] = "close_pending"
+                msg = repr(exc)
+                if "POSITION_NOT_FOUND" in msg:
+                    # الوسيط أغلق الصفقة بنفسه (ستوب/هدف/إيقاف يدوي):
+                    # state قديم، لا ننتظر رنات إضافية تعيد نفس المحاولة
+                    print("  POSITION_NOT_FOUND — broker already closed "
+                          "the position; reconciling state (external close)",
+                          flush=True)
+                    entry_x = st_pos.get("entry_price")
+                    if entry_x:
+                        close_x = mid
+                        diff = close_x - entry_x
+                        if _side_name(pos.tradeData.tradeSide) == "SELL":
+                            diff = -diff
+                        pnl_x = round((diff * volume) / (10.0 ** (digits or 2)), 2)
+                        if pnl_x > 0:
+                            closing_mgr.record_win()
+                        else:
+                            closing_mgr.record_loss()
+                        closing_mgr.save_perf_to_state(state)
+                        _record_close(state, {
+                            "ts_open": st_pos.get("opened_at"),
+                            "ts_close": utcnow_iso(),
+                            "side": _side_name(pos.tradeData.tradeSide),
+                            "entry_gap": st_pos.get("entry_gap"),
+                            "close_gap": gap,
+                            "entry_price": entry_x,
+                            "close_price": close_x,
+                            "pnl_units": pnl_x,
+                            "pnl_usd": pnl_x,
+                            "fees_usd": 0,
+                            "pnl_net_usd": pnl_x,
+                            "reason": "external-close-reconciled",
+                            "pnl_peak_usd": round(
+                                float(st_pos.get("pnl_peak_usd") or 0), 2,
+                            ),
+                        })
+                    state["position"] = None
+                    state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
+                    result["action"] = "close:external-reconciled"
+                    result["close_pnl_usd"] = round(
+                        locals().get("pnl_x", 0) or 0, 2)
+                else:
+                    result["close_failed"] = repr(exc)
+                    print(f"close_position failed (layer: {close_reason}): {exc!r}")
+                    result["action"] = "close_pending"
         else:
             result["action"] = "hold"
 

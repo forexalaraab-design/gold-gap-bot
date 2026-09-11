@@ -88,7 +88,9 @@ MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 0.60)  # flexion swing بازار
 COOLDOWN_MINUTES = _env_float("STRAT_COOLDOWN_MIN", 3.0)
 
 # MAX_TRADES_PER_DAY: الحد الأقصى لعدد الصفقات في اليوم.
-MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 20))
+# مرفوع عالياً جداً لتعطيل هذا القيد عملياً — الحماية الفعلية هي
+# MAX_DAILY_LOSS_USD (توقف الخسارة اليومية).
+MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 99999))
 
 FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)
 

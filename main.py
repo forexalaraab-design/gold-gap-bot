@@ -327,6 +327,14 @@ class ClosingManager:
                     self.daily_pnl = 0.0
                     self.trade_count_today = 0
                     self.consecutive_losses = 0
+                    # نكتب النتائج فوراً في state حتى يُحفظ بأول
+                    # save_state دوري دون انتظار صفقة/إغلاق
+                    state["perf"] = {
+                        "running_daily_pnl": 0.0,
+                        "consecutive_losses": 0,
+                        "trades_today": 0,
+                        "last_updated": utcnow_iso(),
+                    }
             except (ValueError, TypeError):
                 pass
 

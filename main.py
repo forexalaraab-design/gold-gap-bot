@@ -201,6 +201,49 @@ def in_session(dt):
     return True
 
 
+def in_quality_session(dt):
+    """فلترة جودة الجلسة: نحظر نافذة ضعيفة معروفة (إغلاق لندن والانتقال).
+
+    تحليل الصفقات الحقيقية مع البحث:
+      - 16:00–22:00 UTC: نسبة فوز 56% ومعظم الخسائر (إغلاق لندن، 21-22 تسوية).
+      - 22:00–05:00 UTC: نسبة فوز 80% (سيولة تنظيمية آسيوية).
+      - 09:00–16:00 UTC: نسبة فوز 100% (ذروة لندن + تداخل NY بالسيولة).
+    لذلك نمنع الفتح داخل نافذة [16:00–22:00) افتراضياً.
+    """
+    if not config.SESSION_BLOCK_ON:
+        return True
+    hour = dt.hour + dt.minute / 60.0
+    start = config.SESSION_BLOCK_START_HOUR
+    end = config.SESSION_BLOCK_END_HOUR
+    if start <= end:
+        return not (start <= hour < end)
+    # نافذة ملتفة عبر منتصف الليل (مثال نادر)
+    return not (hour >= start or hour < end)
+
+
+def gap_velocity(rows, max_rows=12):
+    """سرعة تغيّر الفجوة بالدولار/دقيقة من صفوف history الحديثة.
+
+    الفكرة: أثناء التمدّد السريع (خبر/اندفاع قوي) تكون الفجوة ما تزال
+    "تحلق" — الدخول فوراً يعني كلاسيكياً الخسارة (عالجته بياناتنا:
+    أكبر الخسائر حدثت عند تمدد الفجوة). نستبعد الدخول إذا تجاوزت
+    السرعة حد MAX_GAP_VELOCITY.
+    """
+    try:
+        valid = [r for r in rows if isinstance(r.get("gap"), (int, float))]
+        valid = valid[-max_rows:]
+        if len(valid) < 2:
+            return 0.0
+        t0 = datetime.fromisoformat(valid[0]["ts"].replace("Z", "+00:00"))
+        t1 = datetime.fromisoformat(valid[-1]["ts"].replace("Z", "+00:00"))
+        dt = (t1 - t0).total_seconds() / 60.0
+        if dt <= 0:
+            return 0.0
+        return abs(valid[-1]["gap"] - valid[0]["gap"]) / dt
+    except Exception:
+        return 0.0
+
+
 def _side_name(trade_side):
     from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
     for name, num in Models.ProtoOATradeSide.DESCRIPTOR.values_by_name.items():
@@ -917,6 +960,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     if not has_open_position and not closed_this_cycle:
         cooldown_left = state.get("cooldown_until", 0) - now_ts
         in_session_now = in_session(datetime.now(timezone.utc))
+        quality_session_now = in_quality_session(datetime.now(timezone.utc))
 
         can_trade = (
                 config.MODE == "trade"
@@ -931,6 +975,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 and result.get("balance_usd", 0) >= config.MIN_BALANCE_TO_TRADE
                 and cooldown_left <= 0
                 and in_session_now
+                and quality_session_now
+                and result.get("gap_velocity", 0.0) <= config.MAX_GAP_VELOCITY
                 and state_pos is None
                 and closing_mgr.can_trade_today()
             )
@@ -1094,6 +1140,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 reasons.append("cooldown_min")
             if not in_session_now:
                 reasons.append("session_closed")
+            if not quality_session_now:
+                reasons.append("session_quality_blocked")
+            if result.get("gap_velocity", 0.0) > config.MAX_GAP_VELOCITY:
+                reasons.append("gap_fast")
             # دائرة Daily Loss و Consecutive Losses
             if not closing_mgr.can_trade_today():
                 reasons.append("circuit_breaker")

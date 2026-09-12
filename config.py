@@ -60,7 +60,7 @@ Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.0)
 
 # Z_ENTRY_SOFT: مستوى ثاني أقل — دخول إذا |z| ≥ Z_ENTRY_SOFT مع شروط إضافية
 # (مثلاً: الفجوة واضحة والسرعة غير خطرة).
-Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.0)
+Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.2)
 
 # Z_EXIT: إغلاق إذا عاد |z| إلى هذا المستوى (عندما يتراجع الانحراف).
 Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)
@@ -81,7 +81,7 @@ MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)  # رفض/تجاهل ملاحظ
 
 # FLTR ضوضاء السوق: لا تدخل صفقة إلا إذا كانت الفجوة ≥ قيمة واضحة
 # 0.50 → 1.00: نزيد عتبة الدخول لتقليل الدخول في تذبذبات صغيرة.
-MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 0.60)  # flexion swing بازار
+MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 1.20)  # جودة أعلى: فجوة أعمق = فرصة أنظف
 
 # COOLDOWN_MINUTES: انتظار بعد إغلاق صفقة قبل فتح أخرى (تجنب المتتابعات الخاطئة).
 # 5.0 → 3.0: عدد أقل لكنه لا يزال واقعيًا.
@@ -127,7 +127,16 @@ SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"
 LIVE_TRADING_START_HOUR = _env_float("STRAT_SESSION_START", 22.0)
 LIVE_TRADING_END_HOUR = _env_float("STRAT_SESSION_END", 5.0)
 
-MAX_GAP_VELOCITY = _env_float("STRAT_MAX_VELOCITY", 5.0)
+# فلترة جودة الجلسة: تحليل الصفقات أظهر أن نافذة 16:00–22:00 UTC
+# (إغلاق لندن والانتقال) أسوأ نافذة (نسبة فوز 56% وتكبد معظم الخسائر)،
+# بينما 22:00–05:00 (80%) و09:00–16:00 (100%) الأفضل — ويوافقه البحث
+# (12:30–16:00 ذروة السيولة وأضيق السبريد، و21:00–22:00 تسوية تقتل).
+# فعّال افتراضياً؛ يُعطَّل بالـ env التالي.
+SESSION_BLOCK_ON = os.environ.get("STRAT_SESSION_BLOCK_ON", "1") == "1"
+SESSION_BLOCK_START_HOUR = _env_float("STRAT_SESSION_BLOCK_START", 16.0)
+SESSION_BLOCK_END_HOUR = _env_float("STRAT_SESSION_BLOCK_END", 22.0)
+
+MAX_GAP_VELOCITY = _env_float("STRAT_MAX_VELOCITY", 2.0)
 USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"
 
 # Stats

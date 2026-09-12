@@ -338,6 +338,7 @@ def live_loop():
             # ----- تنفيذ دورة التداول الكاملة (فتح + إغلاق) -----
             closing_mgr_full = _main.ClosingManager(state, config)
             closing_mgr_full.init_from_state(state)
+            result["gap_velocity"] = _main.gap_velocity(rows)
             try:
                 yield _main.run_trade_cycle(
                     sess, mid, global_price, stats,

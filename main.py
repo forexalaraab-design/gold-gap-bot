@@ -383,17 +383,17 @@ class ClosingManager:
             return False
         return True
 
-    def record_loss(self):
-        """تسجيل خسارة وتحديث العدادات."""
+    def record_loss(self, pnl_usd=0.0):
+        """تسجيل خسارة وتحديث العدادات بقيمة حقيقية بالدولار."""
         self.consecutive_losses += 1
         self.trade_count_today += 1
-        self.daily_pnl -= 1  # تقريب
+        self.daily_pnl -= abs(pnl_usd) if pnl_usd else 1.0
 
-    def record_win(self):
-        """تسجيل ربح وإعادة تعيين عداد الخسائر."""
+    def record_win(self, pnl_usd=0.0):
+        """تسجيل ربح وإعادة تعيين عداد الخسائر بقيمة حقيقية بالدولار."""
         self.consecutive_losses = 0
         self.trade_count_today += 1
-        self.daily_pnl += 1  # تقريب
+        self.daily_pnl += pnl_usd if pnl_usd else 1.0
 
     def check_close(self, position, mid, global_price, stats,
                     st_pos, now, money_digits):
@@ -483,12 +483,12 @@ class ClosingManager:
 
         return False, None
 
-    def record_close(self, state, win):
-        """تسجيل نتائج الصفقة المغلقة."""
+    def record_close(self, state, win, pnl_usd=0.0):
+        """تسجيل نتائج الصفقة المغلقة بالربح الفعلي."""
         if win:
-            self.record_win()
+            self.record_win(pnl_usd)
         else:
-            self.record_loss()
+            self.record_loss(pnl_usd)
         self.save_perf_to_state(state)
 
 
@@ -740,9 +740,9 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                             state["position"] = None
                             state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
                             if pnl_net_close > 0:
-                                closing_mgr.record_win()
+                                closing_mgr.record_win(pnl_net_close)
                             else:
-                                closing_mgr.record_loss()
+                                closing_mgr.record_loss(pnl_net_close)
                             closing_mgr.save_perf_to_state(state)
                             _record_close(state, {
                                 "ts_open": sp.get("opened_at"),
@@ -904,9 +904,9 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 state["position"] = None
                 state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
                 if pnl_net > 0:
-                    closing_mgr.record_win()
+                    closing_mgr.record_win(pnl_net)
                 else:
-                    closing_mgr.record_loss()
+                    closing_mgr.record_loss(pnl_net)
                 closing_mgr.save_perf_to_state(state)
                 _record_close(state, {
                     "ts_open": st_pos.get("opened_at"),
@@ -942,9 +942,9 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                             diff = -diff
                         pnl_x = round((diff * volume) / (10.0 ** (digits or 2)), 2)
                         if pnl_x > 0:
-                            closing_mgr.record_win()
+                            closing_mgr.record_win(pnl_x)
                         else:
-                            closing_mgr.record_loss()
+                            closing_mgr.record_loss(pnl_x)
                         closing_mgr.save_perf_to_state(state)
                         _record_close(state, {
                             "ts_open": st_pos.get("opened_at"),

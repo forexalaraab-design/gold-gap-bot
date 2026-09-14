@@ -74,13 +74,13 @@ Z_STOP = _env_float("STRAT_Z_STOP", 3.5)
 # عند 0.01 لوت (نقطة=$1) خُفّض من 3.0 إلى 2.5: مخاطرة أصغر ≈ $2.5/صفقة (طلب المستخدم).
 SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 2.5)
 
-# MAX_ENTRY_GAP_USD: إذا تجاوزت الفجوة هذه القيمة، لا ندخل (لأنها قد تكون خطأً).
+# MAX_ENTRY_GAP_USD: إذا ابتعد سعر المنصة عن السعر الخارجي (global) بهذا
+# المقدار الكبير جداً، نغلق كحارس أمان (خلل بيانات/سيولة شاذة). لم يعد
+# شرط دخول — الدخول يُحدد الآن بانحراف سعر المنصة عن وسطه (z-score على mid).
 MAX_ENTRY_GAP_USD = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)
 
-# gap_max_gap_pct: إغلاق إذا تجاوزت الفجوة نسبة مئوية من سعر الصرف (للحماية).
-gap_max_gap_pct = 0.10  # 10% من سعر الصرف
-
-MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)  # رفض/تجاهل ملاحظات خارج هذا المدى
+# MIN_GAP_USD: لم يعد شرط دخول (كان دخولاً على الفجوة فقط). تُركت القيمة
+# للرصد/السجلات وكمؤشر في لوغ الصفقات. إشارة الدخول الحقيقية = z-score على mid.
 
 # FLTR ضوضاء السوق: لا تدخل صفقة إلا إذا كانت الفجوة ≥ قيمة واضحة
 # 0.50 → 1.00: نزيد عتبة الدخول لتقليل الدخول في تذبذبات صغيرة.
@@ -164,10 +164,13 @@ TREND_WINDOW_ROWS = int(_env_float("STRAT_TREND_WINDOW", 300))
 TREND_MAX_SLOPE_USD = _env_float("STRAT_TREND_SLOPE", 0.55)
 USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"
 
-# Stats
+# Stats (إشارة الدخول الآن على انحراف سعر المنصة mid-About متوسطه — وليس الفجوة)
 ROLLING_WINDOW = int(_env_float("STRAT_WINDOW", 48))
 MIN_SAMPLES = int(_env_float("STRAT_MIN_SAMPLES", 8))
 MIN_BALANCE_TO_TRADE = 200.0
+# نطاق معقول لسعر XAUUSD — نستبعد الملاحظات التالفة من الإحصاءات
+MIN_PLATFORM_PRICE = 4000.0
+MAX_PLATFORM_PRICE = 5000.0
 
 # Files / state
 HISTORY_FILE = os.path.join(BASE_DIR, "data", "gap_history.csv")

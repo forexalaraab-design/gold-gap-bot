@@ -14,6 +14,11 @@ main.py — استراتيجية احترافية مع إغلاق متعدد ا�
   9. حفظ state شمولي يشمل كل الطبقات وبيانات الأداء
   10. حساب PnL للإغلاق يستخدم نفس الصيغة الموحدة
   11. إصلاح جذري: منع تعدد الصفقات، إغلاق عند فشل API، تتبع الربح الصحيح
+  12. [2026-09-14] إعادة بناء جذرية للخوارزمية: إشارة الدخول أصبحت
+      انحراف سعر المنصة (mid) عن وسطه المتداول (z-score على mid) بدلاً من
+      الفجوة (mid - global_price) بعدما أظهر التحليل أن الفجوة لا ترتد
+      للصفر فعلياً (+0.04 فقط بعد الدخول). global_price يبقى للرصد
+      ولحارس البيانات الشاذة فقط.
 """
 
 import csv
@@ -153,13 +158,24 @@ def save_state(state):
 
 
 def compute_stats(rows, verbose=True):
-    valid = [r for r in rows if abs(r["gap"]) <= config.MAX_GAP_USD]
+    """إحصاءات على سعر المنصة (platform/mid) نفسه — وليس الفجوة.
+
+    تغيير جوهري (2026-09-14): تحليل البيانات أظهر أن الفجوة
+    (mid - global price من مصدر خارجي غير متزامن) لا ترتد إلى الصفر
+    فعلياً (متوسط تغير السعر بعد فجوة<-1.5 = +0.04 فقط). لذلك أصبحت
+    إشارة الدخول تعتمد على انحراف سعر المنصة عن وسطه المتداول (z-score
+    على mid) بدلاً من حجم الفجوة. الفجوة تبقى فقط للرصد.
+    """
+    valid = [
+        r for r in rows
+        if config.MIN_PLATFORM_PRICE <= r["platform"] <= config.MAX_PLATFORM_PRICE
+    ]
     valid = valid[-config.ROLLING_WINDOW:]
     if verbose:
         print(f"stats: valid samples in window = {len(valid)}")
     if len(valid) < config.MIN_SAMPLES:
         return None
-    gaps = sorted(r["gap"] for r in valid)
+    gaps = sorted(r["platform"] for r in valid)
     n = len(gaps)
     mean = sum(gaps) / n
     if n > 1:
@@ -222,15 +238,14 @@ def in_quality_session(dt):
 
 
 def gap_velocity(rows, max_rows=12):
-    """سرعة تغيّر الفجوة بالدولار/دقيقة من صفوف history الحديثة.
+    """سرعة تغيّر سعر المنصة (mid) بالدولار/دقيقة من صفوف history الحديثة.
 
-    الفكرة: أثناء التمدّد السريع (خبر/اندفاع قوي) تكون الفجوة ما تزال
-    "تحلق" — الدخول فوراً يعني كلاسيكياً الخسارة (عالجته بياناتنا:
-    أكبر الخسائر حدثت عند تمدد الفجوة). نستبعد الدخول إذا تجاوزت
-    السرعة حد MAX_GAP_VELOCITY.
+    الفكرة: أثناء الاندفاع السريع (خبر/قوة) يكون السعر "يحلق" — الدخول
+    فوراً يعني كلاسيكياً الخسارة (أكبر الخسائر حدثت أثناء الاندفاعات).
+    نستبعد الدخول إذا تجاوزت السرعة حد MAX_GAP_VELOCITY.
     """
     try:
-        valid = [r for r in rows if isinstance(r.get("gap"), (int, float))]
+        valid = [r for r in rows if isinstance(r.get("platform"), (int, float))]
         valid = valid[-max_rows:]
         if len(valid) < 2:
             return 0.0
@@ -245,18 +260,21 @@ def gap_velocity(rows, max_rows=12):
 
 
 def trend_slope(rows, max_rows=None):
-    """انحدار سعر المرجع (global) بالدولار/دقيقة خلال نافذة حديثة.
+    """انحدار سعر المنصة (platform/mid) بالدولار/دقيقة خلال نافذة حديثة.
+
+    أُعيدت صياغته (2026-09-14): كان يقيس انحدار سعر المرجع الخارجي
+    (global) ويمنع الدخول حين aligns مع الفجوة. الآن الإشارة على سعر
+    المنصة نفسه، فالمنع يجب أن يقاس على نفس السلسلة التي نتداولها.
 
     القيمة الموجبة = السعر صاعد، السالبة = هابط. تُستعمل مع
-    TREND_MAX_SLOPE_USD لمنع الدخول ضد اتجاه قوي (يوم 2026-09-14:
-    6 خسائر max_loss بواقع -57$ لأن الاتجاه كان ~0.25$/دقيقة).
+    TREND_MAX_SLOPE_USD لمنع الدخول ضد اتجاه قوي.
     """
     if not config.TREND_ON:
         return 0.0
     if max_rows is None:
         max_rows = config.TREND_WINDOW_ROWS
     try:
-        valid = [r for r in rows if isinstance(r.get("global"), (int, float))]
+        valid = [r for r in rows if isinstance(r.get("platform"), (int, float))]
         valid = valid[-max_rows:]
         if len(valid) < 2:
             return 0.0
@@ -265,7 +283,7 @@ def trend_slope(rows, max_rows=None):
         dt = (t1 - t0).total_seconds() / 60.0
         if dt <= 0:
             return 0.0
-        return (valid[-1]["global"] - valid[0]["global"]) / dt
+        return (valid[-1]["platform"] - valid[0]["platform"]) / dt
     except Exception:
         return 0.0
 
@@ -448,28 +466,34 @@ class ClosingManager:
             if open_hours >= self.cfg.MAX_HOLD_HOURS:
                 return True, "max_hold_time"
 
-        # --- الطبقة 5: عودة الفجوة (Mean Reversion) ---
-        # إغلاق إذا عاد z للقرب من الصفر (Z_EXIT) أو إذا تجاوزت الفجوة الحد الأقصى
-        # ملاحظة: نستخدم position.price من server بدلاً من st_pos.get("entry_price")
-        pos_entry = getattr(position, "price", None)
-        if pos_entry is None:
-            pos_entry = st_pos.get("entry_price")
-        if pos_entry and pos_entry > 0:
-            if stats:
-                scale = (stats.get("mad") if self.cfg.USE_MAD and stats.get("mad") else 0) or stats["sd"]
-                centre = stats["median"] if self.cfg.USE_MAD and stats.get("mad") else stats["mean"]
-                if scale > 0:
-                    z = (global_price - pos_entry) / scale
-                    if z is not None and abs(z) <= self.cfg.Z_EXIT:
-                        if net_pnl >= 0:
-                            return True, "z_revert"
-                        # إغلاق الفجوة بلا ربح محقق: لا نثبّت الخسارة هنا —
-                        # نترك الحماية الحقيقية (max_loss/max_hold/ستوب السيرفر)
-            if abs(global_price - pos_entry) >= self.cfg.MAX_ENTRY_GAP_USD:
-                return True, "gap_exceeded_cap"
-            gap_pct = abs(global_price - pos_entry) / pos_entry
-            if gap_pct >= self.cfg.gap_max_gap_pct:
-                return True, "gap_cap_pct"
+        # --- الطبقة 5: عودة السعر إلى وسطه المتداول (Mean Reversion) ---
+        # إغلاق إذا عاد mid إلى مركز قناته الحالي (Z_EXIT) أي أن السعر تلاشى
+        # انحراف إشارة الدخول. تُحسب على سعر المنصة نفسه (mid) وليس على
+        # السعر الخارجي global (غير متزامن وقد تحرك دون أن يتحرك mid).
+        # ملاحظة: لا نغلق بخسارة هنا ما لم تكن الحماية الأخرى (max_loss.
+        stats = st_pos.get("_stats") or stats
+        cur_scale = 0.0
+        cur_centre = None
+        if stats is not None:
+            cur_scale = (
+                stats.get("mad") if self.cfg.USE_MAD and stats.get("mad") else 0
+            ) or stats.get("sd", 0.0)
+            cur_centre = (
+                stats["median"] if self.cfg.USE_MAD and stats.get("mad")
+                else stats.get("mean")
+            )
+        if cur_scale > 0 and cur_centre is not None:
+            z_now = (mid - cur_centre) / cur_scale
+            if abs(z_now) <= self.cfg.Z_EXIT:
+                if net_pnl >= 0:
+                    return True, "z_revert"
+                # إغلاق الانحراف بلا ربح محقق: لا نثبّت الخسارة هنا —
+                # نترك الحماية الحقيقية (max_loss/max_hold/ستوب السيرفر)
+        # حارس أمان شاذ: لو ابتعد سعر المنصة عن السعر الخارجي بمقدار
+        # خارجي كبير جداً (22$)، يوجد خلل في البيانات أو سيولة شاذة —
+        # نغلق لحماية الصفقة حتى لو كانت في الثناء.
+        if abs(global_price - mid) >= self.cfg.MAX_ENTRY_GAP_USD:
+            return True, "gap_exceeded_cap"
 
         # --- الطبقة 6: Daily Loss / Consecutive Losses Circuit Breaker ---
         # لا تطبق هنا لأنها تؤثر على الفتح وليس الإغلاق
@@ -634,7 +658,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             stats["median"] if config.USE_MAD and stats.get("mad") else stats["mean"]
         )
         if scale > 0:
-            result["z"] = (gap - centre) / scale
+            result["z"] = (mid - centre) / scale
 
     now_ts = time.time()
     md = state.get("money_digits")
@@ -996,27 +1020,25 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         in_session_now = in_session(datetime.now(timezone.utc))
         quality_session_now = in_quality_session(datetime.now(timezone.utc))
 
-        # حارس الاتجاه: نمنع الدخول عندما ينجرف السعر المرجعي بثبات
-        # في اتجاه مكافئ للفجوة (مشتري السكين الساقط / معاكس اتجاه
-        # يوم قوي). الشرط: slope * gap > 0 يعني نفس الاتجاه، ومقدار
-        # الانحدار يتجاوز الحد.
+        # حارس الاتجاه: نمنع الدخول عندما ينجرف سعر المنصة بثبات في نفس
+        # اتجاه إشارتنا (مشتري السكين الساقط / معاكس اتجاه يوم قوي).
+        # الشرط: slope * z < 0 يعني الدخول ضد الانحراف القوي.
         trend = result.get("trend_slope", 0.0)
+        slope_agrees_signal = (
+            result["z"] is not None
+            and (trend * result["z"]) > 0
+        )
         trend_against = (
             config.TREND_ON
-            and (trend * gap) > 0
+            and slope_agrees_signal
             and abs(trend) > config.TREND_MAX_SLOPE_USD
         )
 
         can_trade = (
                 config.MODE == "trade"
                 and stats is not None
-                and (
-                    (result["z"] is not None
-                     and abs(result["z"]) >= config.Z_ENTRY_SOFT)
-                    or abs(gap) >= config.MIN_GAP_USD * 1.2
-                )
-                and abs(gap) <= config.MAX_ENTRY_GAP_USD
-                and abs(gap) >= config.MIN_GAP_USD
+                and result["z"] is not None
+                and abs(result["z"]) >= config.Z_ENTRY_SOFT
                 and result.get("balance_usd", 0) >= config.MIN_BALANCE_TO_TRADE
                 and cooldown_left <= 0
                 and in_session_now
@@ -1033,7 +1055,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 result["open_positions"] = len(positions)
             else:
                 # --- فتح صفقة جديدة ---
-                side = "SELL" if gap > 0 else "BUY"
+                # الإشارة = انحراف السعر عن وسطه المتداول: z>0 يعني
+                # السعر مرتفع فوق متوسطه → SELL (نتوقع ارتداداً للأسفل)،
+                # z<0 يعني السعر منخفض → BUY.
+                side = "SELL" if result["z"] > 0 else "BUY"
                 sd = (
                     stats.get("mad") if config.USE_MAD
                     else stats["sd"]
@@ -1041,13 +1066,18 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 sd = sd or stats["sd"]
                 sl_dist = config.SL_AFTER_ENTRY_USD
                 min_tp_dist = 1.60
+                centre = (
+                    stats["median"] if config.USE_MAD
+                    else stats["mean"]
+                )
+                # الهدف = عودة السعر إلى مركز القناة (متوسطه المتداول)
+                dev_from_centre = abs(mid - centre)
                 if side == "SELL":
                     sl = mid + sl_dist
-                    # هدف 1.10 نقاط على الأقل (=$1 بعد الرسوم)، لكن لا أكثر من 90% من الفجوة
-                    tp = mid - max(min_tp_dist, 0.9 * abs(gap))
+                    tp = mid - max(min_tp_dist, 0.9 * dev_from_centre)
                 else:
                     sl = mid - sl_dist
-                    tp = mid + max(min_tp_dist, 0.9 * abs(gap))
+                    tp = mid + max(min_tp_dist, 0.9 * dev_from_centre)
                 print(
                     f"order-request side={side} mid={mid:.2f} "
                     f"sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "
@@ -1177,10 +1207,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 reasons.append("warmup")
             elif result["z"] is not None and abs(result["z"]) < config.Z_ENTRY:
                 reasons.append("z_below_entry")
+            if result["z"] is None:
+                reasons.append("z_unavailable")
             if abs(gap) > config.MAX_ENTRY_GAP_USD:
-                reasons.append("gap_above_cap")
-            if abs(gap) < config.MIN_GAP_USD:
-                reasons.append("gap_to_small")
+                reasons.append("data_anomaly_gap")
             if result.get("balance_usd", 0) < config.MIN_BALANCE_TO_TRADE:
                 reasons.append("balance_low")
             if cooldown_left > 0:
@@ -1190,7 +1220,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             if not quality_session_now:
                 reasons.append("session_quality_blocked")
             if result.get("gap_velocity", 0.0) > config.MAX_GAP_VELOCITY:
-                reasons.append("gap_fast")
+                reasons.append("price_fast")
             if trend_against:
                 reasons.append("trend_against")
             # دائرة Daily Loss و Consecutive Losses

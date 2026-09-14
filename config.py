@@ -136,7 +136,7 @@ LIVE_TRADING_END_HOUR = _env_float("STRAT_SESSION_END", 5.0)
 # بينما 22:00–05:00 (80%) و09:00–16:00 (100%) الأفضل — ويوافقه البحث
 # (12:30–16:00 ذروة السيولة وأضيق السبريد، و21:00–22:00 تسوية تقتل).
 # فعّال افتراضياً؛ يُعطَّل بالـ env التالي.
-SESSION_BLOCK_ON = os.environ.get("STRAT_SESSION_BLOCK_ON", "1") == "1"
+SESSION_BLOCK_ON = os.environ.get("STRAT_SESSION_BLOCK_ON", "0") == "1"
 SESSION_BLOCK_START_HOUR = _env_float("STRAT_SESSION_BLOCK_START", 16.0)
 SESSION_BLOCK_END_HOUR = _env_float("STRAT_SESSION_BLOCK_END", 22.0)
 

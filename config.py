@@ -118,10 +118,14 @@ MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.5)
 MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 6.0)
 
 # الحد اليومي للخسارة (دائرة أمان).
-MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 30.0)
+# مرفوع عالياً جداً عملياً لتعطيل التوقف اليومي (طلب المستخدم: لا
+# أمان/عداد خسائر — التداول مستمر دائماً). القيمة الفعلية ممنوعة فقط
+# في الخسارة الكارثية النادرة جداً.
+MAX_DAILY_LOSS_USD = _env_float("STRAT_MAX_DAILY_LOSS_USD", 99999.0)
 
 # أقصى عدد من الخسائر المتتالية قبل التوقف (دائرة أمان).
-MAX_CONSECUTIVE_LOSSES = int(_env_float("STRAT_MAX_CONSEC_LOSSES", 3.0))
+# مرفوع عالياً جداً عملياً لتعطيل العداد (طلب المستخدم).
+MAX_CONSECUTIVE_LOSSES = int(_env_float("STRAT_MAX_CONSEC_LOSSES", 99999.0))
 
 SESSION_GUARD = os.environ.get("STRAT_SESSION_GUARD", "1") == "1"
 LIVE_TRADING_START_HOUR = _env_float("STRAT_SESSION_START", 22.0)

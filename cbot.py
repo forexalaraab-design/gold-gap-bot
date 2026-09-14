@@ -291,12 +291,19 @@ class CtraderSession:
                 raise
             # بعض البروكرات (FP Markets) قد ترفض الستوب/الهدف داخل أمر
             # الفتح (TRADING_BAD_STOPS). لا نوفق الصفقة كلها — نعيد المحاولة
-            # بدون ستوب/هدف، وتكون الحماية برمجية فقط.
+            # بدون ستوب/هدف (بلا تعيين الحقول أصلاً، تماماً كالكود الأصلي)،
+            # وتكون الحماية برمجية فقط.
             print(f"open_market with stops rejected ({exc!r}); "
                   f"retrying without SL/TP", flush=True)
-            req.stopLoss = 0
-            req.takeProfit = 0
-            res = yield self._send(req, 30)
+            new_req = ProtoMsgs.ProtoOANewOrderReq()
+            new_req.ctidTraderAccountId = self.account_id
+            new_req.symbolId = symbol_id
+            new_req.tradeSide = side_enum
+            new_req.orderType = 1  # MARKET
+            new_req.volume = volume
+            new_req.label = label or random_label()
+            new_req.comment = comment or ""
+            res = yield self._send(new_req, 30)
             res = _unwrap(res)
             code_val = getattr(res, "errorCode", "N/A")
             desc_val = getattr(res, "error_description", "") or getattr(res, "message", "")

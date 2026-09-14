@@ -44,8 +44,9 @@ YAHOO_OFFSET_USD = 0.0  # GC=F is futures; add offset to approximate spot if nee
 SYMBOL = "XAUUSD"
 
 # الحجم: 0.01 لوت ثابت فقط (ممنوع تغييره من env أو أي مصدر)
-# تريد كل الصفقات بلوت 0.01 — إغلاق أي محاولة تغيير خارجي
-LOT = 0.02
+# خُفّض من 0.02 إلى 0.01 لخفض المخاطرة لكل صفقة لنصفها (طلب المستخدم:
+# "اللوت عالي"). عند 0.01 لوت = 100 وحدة → 1 نقطة سعر = $1.
+LOT = 0.01
 
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
 SPOT_SCALE = 100000.0
@@ -59,8 +60,9 @@ MODE = os.environ.get("CBOT_MODE", "trade")  # trade = نفّذ صفقات حق�
 Z_ENTRY = _env_float("STRAT_Z_ENTRY", 2.0)
 
 # Z_ENTRY_SOFT: مستوى ثاني أقل — دخول إذا |z| ≥ Z_ENTRY_SOFT مع شروط إضافية
-# (مثلاً: الفجوة واضحة والسرعة غير خطرة).
-Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.2)
+# (مثلاً: الفجوة واضحة والسرعة غير خطرة). 1.2 → 1.5: رفع جودة الدخول
+# لتقليل نقاط الدخول الفاشلة (طلب المستخدم).
+Z_ENTRY_SOFT = _env_float("STRAT_Z_ENTRY_SOFT", 1.5)
 
 # Z_EXIT: إغلاق إذا عاد |z| إلى هذا المستوى (عندما يتراجع الانحراف).
 Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)
@@ -69,7 +71,8 @@ Z_EXIT = _env_float("STRAT_Z_EXIT", 0.5)
 Z_STOP = _env_float("STRAT_Z_STOP", 3.5)
 
 # SL_AFTER_ENTRY_USD: المسافة الدنيا لوقف الخسارة بعد الفتح (بالفجوة/الوحدات).
-SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 3.0)
+# عند 0.01 لوت (نقطة=$1) خُفّض من 3.0 إلى 2.5: مخاطرة أصغر ≈ $2.5/صفقة (طلب المستخدم).
+SL_AFTER_ENTRY_USD = _env_float("STRAT_SL_USD", 2.5)
 
 # MAX_ENTRY_GAP_USD: إذا تجاوزت الفجوة هذه القيمة، لا ندخل (لأنها قد تكون خطأً).
 MAX_ENTRY_GAP_USD = _env_float("STRAT_MAX_ENTRY_GAP", 22.0)
@@ -81,7 +84,7 @@ MAX_GAP_USD = _env_float("STRAT_MAX_GAP", 100.0)  # رفض/تجاهل ملاحظ
 
 # FLTR ضوضاء السوق: لا تدخل صفقة إلا إذا كانت الفجوة ≥ قيمة واضحة
 # 0.50 → 1.00: نزيد عتبة الدخول لتقليل الدخول في تذبذبات صغيرة.
-MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 1.20)  # جودة أعلى: فجوة أعمق = فرصة أنظف
+MIN_GAP_USD = _env_float("STRAT_MIN_GAP", 1.50)  # جودة أعلى: فجوة أعمق = فرصة أنظف (رفعت من 1.20)
 
 # COOLDOWN_MINUTES: انتظار بعد إغلاق صفقة قبل فتح أخرى (تجنب المتتابعات الخاطئة).
 # 5.0 → 3.0: عدد أقل لكنه لا يزال واقعيًا.
@@ -99,23 +102,25 @@ DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)
 PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
 
 # تثبيت الأرباح: إغلاق فوري عند بلوغ ربح صافي محدد
-# 2.0 → 3.0: نزيد الهدف قليلاً لنحمي الأرباح وتجنب التقلبات.
-PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 3.15)
+# 3.15 → 1.60: أُنصف لأن اللوت أصبح 0.01 (نقطة=$1) للحفاظ على نفس
+# المسافة بالنقاط (~1.6 نقطة) دون المطالبة بحركة سعر أكبر.
+PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 1.60)
 
 # TRAILING_ARM_USD: تتبع الأرباح يبدأ عندما يصل الـ PnL الصافي إلى هذه القيمة.
-# 0.30 → 0.30: netting $0.30 以上でトラリング開始（そのまま）
-TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 1.50)
+# أُنصف (1.50 → 0.75) موازنة لخفض اللوت.
+TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.75)
 
 # TRAILING_BACK_USD: إذا تراجع الربح من ذروته بهذا المقدار، نغلق الصفقة.
-# 0.50 → 0.30: نغلق أسرع عند تراجع الأرباح (حماية من العودة الخاسرة).
-TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.60)
+# أُنصف (0.60 → 0.30) موازنة لخفض اللوت.
+TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.30)
 
 # MAX_HOLD_HOURS: أقصى وقت للحفاظ على الصفقة مفتوحة قبل الإغلاق الإلزامي.
 # 2.0 → 4.0: وقت أطول قليلاً لإعطاء الفرصة للاستعادة، لكن نغلق في النهاية.
 MAX_HOLD_HOURS = _env_float("STRAT_MAX_HOLD_HOURS", 2.5)
 
 # الحد الأقصى للخسارة لصفقة واحدة (إغلاق آلي).
-MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 6.0)
+# 6.0 → 3.0: أُنصف مع خفض اللوت (3 نقاط سعر = 3$) — مخاطرة أقل لكل صفقة.
+MAX_LOSS_USD = _env_float("STRAT_MAX_LOSS_USD", 3.0)
 
 # الحد اليومي للخسارة (دائرة أمان).
 # مرفوع عالياً جداً عملياً لتعطيل التوقف اليومي (طلب المستخدم: لا

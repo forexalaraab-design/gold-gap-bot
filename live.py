@@ -361,7 +361,7 @@ def live_loop():
                           config.USE_MAD and stats.get("mad")
                           else stats["mean"])
                 if sd > 0:
-                    z_val = (gap - centre) / sd
+                    z_val = (mid - centre) / sd
 
             action_str = "none"
             if pos_id is not None:

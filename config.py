@@ -137,6 +137,15 @@ SESSION_BLOCK_START_HOUR = _env_float("STRAT_SESSION_BLOCK_START", 16.0)
 SESSION_BLOCK_END_HOUR = _env_float("STRAT_SESSION_BLOCK_END", 22.0)
 
 MAX_GAP_VELOCITY = _env_float("STRAT_MAX_VELOCITY", 2.0)
+
+# فلتر الاتجاه القوي: في أيام الاتجاه (هبوط/صعود متواصل) يكون الذهب
+# خارج نطاق الارتداد، والدخول ضده = خسائر متتالية. نمنع الدخول إذا
+# تحرك سعر المرجع (global) بشكل ثابت في اتجاه مكافئ لـ mini-trend
+# يتجاوز الحد بالدولار/دقيقة خلال نافذة حديثة (قيمة متحفظة: يوم
+# 2026-09-14 خسر -57$ في 6 max_loss لأن الاتجاه كان ~0.25$/دقيقة).
+TREND_ON = os.environ.get("STRAT_TREND_ON", "1") == "1"
+TREND_WINDOW_ROWS = int(_env_float("STRAT_TREND_WINDOW", 150))
+TREND_MAX_SLOPE_USD = _env_float("STRAT_TREND_SLOPE", 0.12)
 USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"
 
 # Stats

@@ -276,15 +276,33 @@ class CtraderSession:
         req.volume = volume
         req.label = label or random_label()
         req.comment = comment or ""
-        # Note: SL/TP not sent — broker rejects them (TRADING_BAD_STOPS).
-        # Closure relies solely on internal software layers.
-        res = yield self._send(req, 30)
-        res = _unwrap(res)
-        # DEBUG: print raw response fields before _check_error
-        code_val = getattr(res, "errorCode", "N/A")
-        desc_val = getattr(res, "error_description", "") or getattr(res, "message", "")
-        print(f"DEBUG open_market: errorCode={code_val!r} desc={desc_val!r}", flush=True)
-        _check_error(res, "open_market")
+        req.stopLoss = sl
+        req.takeProfit = tp
+        try:
+            res = yield self._send(req, 30)
+            res = _unwrap(res)
+            code_val = getattr(res, "errorCode", "N/A")
+            desc_val = getattr(res, "error_description", "") or getattr(res, "message", "")
+            print(f"DEBUG open_market: errorCode={code_val!r} desc={desc_val!r}",
+                  f"sl={sl} tp={tp}", flush=True)
+            _check_error(res, "open_market")
+        except Exception as exc:
+            if sl is None and tp is None:
+                raise
+            # بعض البروكرات (FP Markets) قد ترفض الستوب/الهدف داخل أمر
+            # الفتح (TRADING_BAD_STOPS). لا نوفق الصفقة كلها — نعيد المحاولة
+            # بدون ستوب/هدف، وتكون الحماية برمجية فقط.
+            print(f"open_market with stops rejected ({exc!r}); "
+                  f"retrying without SL/TP", flush=True)
+            req.stopLoss = 0
+            req.takeProfit = 0
+            res = yield self._send(req, 30)
+            res = _unwrap(res)
+            code_val = getattr(res, "errorCode", "N/A")
+            desc_val = getattr(res, "error_description", "") or getattr(res, "message", "")
+            print(f"DEBUG open_market(retry): errorCode={code_val!r} desc={desc_val!r}",
+                  flush=True)
+            _check_error(res, "open_market")
         # Accept response even if executionPrice/positionId is missing;
         # we will verify/fetch the position via open_positions() after a short delay.
         pos_id = getattr(res, "positionId", None)

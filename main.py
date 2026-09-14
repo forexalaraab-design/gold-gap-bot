@@ -244,6 +244,32 @@ def gap_velocity(rows, max_rows=12):
         return 0.0
 
 
+def trend_slope(rows, max_rows=None):
+    """انحدار سعر المرجع (global) بالدولار/دقيقة خلال نافذة حديثة.
+
+    القيمة الموجبة = السعر صاعد، السالبة = هابط. تُستعمل مع
+    TREND_MAX_SLOPE_USD لمنع الدخول ضد اتجاه قوي (يوم 2026-09-14:
+    6 خسائر max_loss بواقع -57$ لأن الاتجاه كان ~0.25$/دقيقة).
+    """
+    if not config.TREND_ON:
+        return 0.0
+    if max_rows is None:
+        max_rows = config.TREND_WINDOW_ROWS
+    try:
+        valid = [r for r in rows if isinstance(r.get("global"), (int, float))]
+        valid = valid[-max_rows:]
+        if len(valid) < 2:
+            return 0.0
+        t0 = datetime.fromisoformat(valid[0]["ts"].replace("Z", "+00:00"))
+        t1 = datetime.fromisoformat(valid[-1]["ts"].replace("Z", "+00:00"))
+        dt = (t1 - t0).total_seconds() / 60.0
+        if dt <= 0:
+            return 0.0
+        return (valid[-1]["global"] - valid[0]["global"]) / dt
+    except Exception:
+        return 0.0
+
+
 def _side_name(trade_side):
     from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
     for name, num in Models.ProtoOATradeSide.DESCRIPTOR.values_by_name.items():
@@ -970,6 +996,17 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         in_session_now = in_session(datetime.now(timezone.utc))
         quality_session_now = in_quality_session(datetime.now(timezone.utc))
 
+        # حارس الاتجاه: نمنع الدخول عندما ينجرف السعر المرجعي بثبات
+        # في اتجاه مكافئ للفجوة (مشتري السكين الساقط / معاكس اتجاه
+        # يوم قوي). الشرط: slope * gap > 0 يعني نفس الاتجاه، ومقدار
+        # الانحدار يتجاوز الحد.
+        trend = result.get("trend_slope", 0.0)
+        trend_against = (
+            config.TREND_ON
+            and (trend * gap) > 0
+            and abs(trend) > config.TREND_MAX_SLOPE_USD
+        )
+
         can_trade = (
                 config.MODE == "trade"
                 and stats is not None
@@ -985,6 +1022,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 and in_session_now
                 and quality_session_now
                 and result.get("gap_velocity", 0.0) <= config.MAX_GAP_VELOCITY
+                and not trend_against
                 and state_pos is None
                 and closing_mgr.can_trade_today()
             )
@@ -1152,6 +1190,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 reasons.append("session_quality_blocked")
             if result.get("gap_velocity", 0.0) > config.MAX_GAP_VELOCITY:
                 reasons.append("gap_fast")
+            if trend_against:
+                reasons.append("trend_against")
             # دائرة Daily Loss و Consecutive Losses
             if not closing_mgr.can_trade_today():
                 reasons.append("circuit_breaker")

@@ -2,15 +2,15 @@
   "position": null,
   "stats": {
     "n": 48,
-    "mean": -1.0872321458335439,
-    "sd": 0.8664337829844251,
-    "median": -1.0549999999998363,
-    "mad": 0.9120881070011376
+    "mean": -1.2895347499997645,
+    "sd": 0.38098671429914044,
+    "median": -1.2100979999995616,
+    "mad": 0.4822794017998134
   },
-  "last_run": "2026-09-14T06:41:15Z",
+  "last_run": "2026-09-14T06:44:44Z",
   "money_digits": 2,
-  "entry_balance_units": 1002476,
-  "cooldown_until": 1789368214.0495648,
+  "entry_balance_units": 1002564,
+  "cooldown_until": 1789369480.0847077,
   "closed_trades": [
     {
       "ts_open": "2026-08-31T15:38:37Z",
@@ -761,13 +761,28 @@
       "pnl_net_usd": 0.69,
       "reason": "z_revert",
       "pnl_peak_usd": 1.36
+    },
+    {
+      "ts_open": "2026-09-14T06:43:38Z",
+      "ts_close": "2026-09-14T06:44:41Z",
+      "side": "2",
+      "entry_gap": -1.4848050000000512,
+      "close_gap": 0.8899019999998927,
+      "entry_price": 4325.815,
+      "close_price": 4327.49,
+      "pnl_units": 3.19,
+      "pnl_usd": 3.19,
+      "fees_usd": 0.16,
+      "pnl_net_usd": 3.19,
+      "reason": "profit_target",
+      "pnl_peak_usd": 2.37
     }
   ],
   "perf": {
-    "running_daily_pnl": 1.0,
+    "running_daily_pnl": 2.0,
     "consecutive_losses": 0,
-    "trades_today": 14,
-    "last_updated": "2026-09-14T06:23:35Z"
+    "trades_today": 16,
+    "last_updated": "2026-09-14T06:44:41Z"
   },
   "cleanup_done_internal": true
 }

@@ -286,6 +286,7 @@ class CtraderSession:
             print(f"DEBUG open_market: errorCode={code_val!r} desc={desc_val!r}",
                   f"sl={sl} tp={tp}", flush=True)
             _check_error(res, "open_market")
+            stops_set = True
         except Exception as exc:
             if sl is None and tp is None:
                 raise
@@ -310,12 +311,13 @@ class CtraderSession:
             print(f"DEBUG open_market(retry): errorCode={code_val!r} desc={desc_val!r}",
                   flush=True)
             _check_error(res, "open_market")
+            stops_set = False
         # Accept response even if executionPrice/positionId is missing;
         # we will verify/fetch the position via open_positions() after a short delay.
         pos_id = getattr(res, "positionId", None)
         if not pos_id:
             print("  WARN: open_market response has no positionId; will verify via positions list", flush=True)
-        defer.returnValue({"positionId": pos_id, "order": getattr(res, "order", None), "position": getattr(res, "position", None)})
+        defer.returnValue({"positionId": pos_id, "order": getattr(res, "order", None), "position": getattr(res, "position", None), "stops_set": stops_set})
 
     # ── close position ────────────────────────────────────────────────
     @defer.inlineCallbacks

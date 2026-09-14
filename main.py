@@ -1070,6 +1070,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     label=cbot.random_label(),
                     comment="",
                 )
+                stops_set = res.get("stops_set", True) if isinstance(res, dict) else True
                 order = res["order"] if isinstance(res, dict) else res.order
                 # تسجيل entry_price من order.executionPrice أو res.position.price
                 order_exec_price = (
@@ -1130,7 +1131,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     "pnl_track": [],
                     "stop_loss": float(sl),
                     "take_profit": float(tp),
-                    "sltp_set": True,
+                    "sltp_set": bool(stops_set),
                 }
                 state["position"] = new_st_pos
                 state["entry_balance_units"] = (

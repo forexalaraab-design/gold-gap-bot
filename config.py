@@ -148,8 +148,12 @@ MAX_GAP_VELOCITY = _env_float("STRAT_MAX_VELOCITY", 2.0)
 # يتجاوز الحد بالدولار/دقيقة خلال نافذة حديثة (قيمة متحفظة: يوم
 # 2026-09-14 خسر -57$ في 6 max_loss لأن الاتجاه كان ~0.25$/دقيقة).
 TREND_ON = os.environ.get("STRAT_TREND_ON", "1") == "1"
-TREND_WINDOW_ROWS = int(_env_float("STRAT_TREND_WINDOW", 150))
-TREND_MAX_SLOPE_USD = _env_float("STRAT_TREND_SLOPE", 0.12)
+TREND_WINDOW_ROWS = int(_env_float("STRAT_TREND_WINDOW", 900))
+# العتبة معايرة على بيانات حقيقية: الذهب يتحرك طبيعياً بميل 0.20-0.45$
+# /دقيقة حتى في السوق المتراوح (p50~0.19, p90~0.36, max~0.45 على نافذة
+# 60 دقيقة من 2026-09-14). القيمة 0.12 السابقة كانت تحجب 84% من الوقت
+# بلا داعٍ. 0.50 يقصي فقط الأيام الكارثية شديدة الانحراف.
+TREND_MAX_SLOPE_USD = _env_float("STRAT_TREND_SLOPE", 0.50)
 USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"
 
 # Stats

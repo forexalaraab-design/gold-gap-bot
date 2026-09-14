@@ -1,59 +1,16 @@
 {
-  "position": {
-    "positionId": 41544502,
-    "side": "2",
-    "entry_gap": -1.65509800000018,
-    "entry_price": 4330.945,
-    "opened_at": "2026-09-14T04:30:39Z",
-    "pnl_peak_usd": 0.19,
-    "pnl_track": [
-      -0.7,
-      -0.08,
-      0.11,
-      0.19,
-      0.06,
-      -0.29,
-      -0.32,
-      0.19,
-      -0.39,
-      -0.13,
-      -0.24,
-      0.18,
-      -0.24,
-      -0.2,
-      -0.1,
-      -0.36,
-      -0.38,
-      -0.5,
-      -0.5,
-      -1.48,
-      -0.67,
-      -1.0,
-      -0.9,
-      -1.43,
-      -1.43,
-      -1.37,
-      -1.2,
-      -1.68,
-      -2.38,
-      -2.5
-    ],
-    "stop_loss": 4327.945,
-    "take_profit": 4332.545,
-    "sltp_set": true,
-    "pnl_last_usd": -2.5
-  },
+  "position": null,
   "stats": {
     "n": 48,
-    "mean": -1.1564992083333436,
-    "sd": 0.3357980336453792,
-    "median": -1.1424999999999272,
-    "mad": 0.2633067948003208
+    "mean": -1.0151043333332457,
+    "sd": 0.5169985861664115,
+    "median": -1.0025000000000546,
+    "mad": 0.4262474999998651
   },
-  "last_run": "2026-09-14T04:32:44Z",
+  "last_run": "2026-09-14T04:36:06Z",
   "money_digits": 2,
   "entry_balance_units": 1002004,
-  "cooldown_until": 0,
+  "cooldown_until": 1789361589.7193472,
   "closed_trades": [
     {
       "ts_open": "2026-08-31T15:38:37Z",
@@ -714,13 +671,28 @@
       "pnl_net_usd": 2.03,
       "reason": "trailing",
       "pnl_peak_usd": 2.88
+    },
+    {
+      "ts_open": "2026-09-14T04:30:39Z",
+      "ts_close": "2026-09-14T04:33:11Z",
+      "side": "2",
+      "entry_gap": -1.65509800000018,
+      "close_gap": -1.0399999999999636,
+      "entry_price": 4330.945,
+      "close_price": 4329.46,
+      "pnl_units": -2.97,
+      "pnl_usd": -2.97,
+      "fees_usd": 0,
+      "pnl_net_usd": -2.97,
+      "reason": "state-force-close",
+      "pnl_peak_usd": 0.19
     }
   ],
   "perf": {
-    "running_daily_pnl": 1.0,
-    "consecutive_losses": 0,
-    "trades_today": 3,
-    "last_updated": "2026-09-14T04:30:39Z"
+    "running_daily_pnl": 0.0,
+    "consecutive_losses": 1,
+    "trades_today": 4,
+    "last_updated": "2026-09-14T04:33:11Z"
   },
   "cleanup_done_internal": true
 }

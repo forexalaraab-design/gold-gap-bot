@@ -237,15 +237,37 @@ def in_quality_session(dt):
     return not (hour >= start or hour < end)
 
 
-def gap_velocity(rows, max_rows=12):
-    """سرعة تغيّر سعر المنصة (mid) بالدولار/دقيقة من صفوف history الحديثة.
+def platform_momentum(rows, max_rows=None):
+    """زخم سعر المنصة (mid) بالدولار خلال نافذة حديثة — إشارة الدخول.
 
-    الفكرة: أثناء الاندفاع السريع (خبر/قوة) يكون السعر "يحلق" — الدخول
-    فوراً يعني كلاسيكياً الخسارة (أكبر الخسائر حدثت أثناء الاندفاعات).
-    نستبعد الدخول إذا تجاوزت السرعة حد MAX_GAP_VELOCITY.
+    مفهوم 2026-09-14 "لحاق المنصة": تحليل السببية (lead-lag) على
+    gap_history أظهر أن سعر المنصة يتقدم والمصدر العالمي يتأخر
+    (mid_lead: اتفاق يصعد 3%→20% مع الإزاحة الزمنية). كما أن زخم
+    المنصة نفسه يستمر: بعد حركة صاعدة ≥1.5$ يكمل السعر الصعود 87%
+    (متوسط +2.74$) وبعد هابطة يكمل 74%. لذلك إشارة الدخول = اتجاه
+    زخم سعر المنصة (وليس الفجوة ولا المصدر العالمي).
+
+    القيمة الموجبة = زخم صاعد (NUFFER على الشراء)، السالبة = هابط.
     """
+    if max_rows is None:
+        max_rows = config.MOMENTUM_WINDOW_ROWS
     try:
         valid = [r for r in rows if isinstance(r.get("platform"), (int, float))]
+        valid = valid[-max_rows:]
+        if len(valid) < 2:
+            return 0.0
+        return valid[-1]["platform"] - valid[0]["platform"]
+    except Exception:
+        return 0.0
+
+
+def gap_velocity(rows, max_rows=12):
+    """سرعة تغيّر الفجوة بالدولار/دقيقة (تأثيرات اللحاق).
+
+    تُستخدم كمؤشر نشاط فقط، وليست شرط دخول. يحسب |Δgap|/دقيقة.
+    """
+    try:
+        valid = [r for r in rows if isinstance(r.get("gap"), (int, float))]
         valid = valid[-max_rows:]
         if len(valid) < 2:
             return 0.0
@@ -711,51 +733,80 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                         print(f"state positionId recovered: {p_id}", flush=True)
                         state["position"] = sp
                 if p_id:
-                    # القواعد الطبيعية من state وحده (لا positions من API):
-                    # أغلق فقط عند انغلاق الفجوة أو تجاوز سقف المدة
-                    # (أو فجوة شاذة كبيرة). وإلا نبقى متمسكين بالصفقة.
+                    # القواعد من state وحده (لا positions من API) — الوضع
+                    # "local-state" هو الوضع الفعلي (open_positions لا يعيد
+                    # قائمة)، لذلك يجب أن تُطبّق هنا طبقات الحماية الكاملة
+                    # (max_loss / profit_target / trailing / z_revert / سقف
+                    # المدة / شذوذ البيانات). الإغلاق القديم كان ينتظر فقط
+                    # جبرياً gap_closed (متعطل sltp_set) أو 2.5 ساعة أو 22$
+                    # أي خسارة -24.12 في 09:18 بدل قطعها عند -6.
                     try:
                         age_sec_now = (datetime.now(timezone.utc)
                                        - opened_dt).total_seconds()
                     except Exception:
                         age_sec_now = 1e9
-                    # لا نغلق بسبب إغلاق الفجوة إلا بعد تثبيت وقف السيرفر،
-                    # وإلا قد تُغلق الصفقة بخسارة بدون أي حماية إطلاقاً
-                    # (آلية stop_loss/take_profit على الوسيط يجب أن تأخذ دورها)
-                    gap_closed = (
-                        abs(gap) <= config.MIN_GAP_USD * 1.2
-                        and bool(state["position"].get("sltp_set"))
+                    entry_price = sp.get("entry_price")
+                    side_name = str(sp.get("side", "BUY")).upper()
+                    digits = state.get("money_digits", 2) or 2
+                    volume_close = int(round(
+                        (getattr(config, "LOT", 0.01) or 0.01) * 10000.0
+                    )) or result.get("volume", 100)
+                    pnl_now = 0.0
+                    if entry_price:
+                        price_diff = mid - entry_price
+                        if side_name == "SELL":
+                            price_diff = -price_diff
+                        pnl_now = (price_diff * volume_close) / (10.0 ** digits)
+                    peak_now = float(sp.get("pnl_peak_usd") or 0)
+                    peak_now = max(peak_now, pnl_now)
+                    # طبقات الإغلاق — نفس معايير ClosingManager.check_close
+                    close_reason_state = None
+                    trailing_armed = (
+                        config.TRAILING_ARM_USD > 0
+                        and peak_now >= config.TRAILING_ARM_USD
+                        and config.TRAILING_BACK_USD > 0
                     )
+                    if trailing_armed and pnl_now >= 0 and \
+                            (peak_now - pnl_now) >= config.TRAILING_BACK_USD:
+                        close_reason_state = "trailing"
+                    if close_reason_state is None and \
+                            config.PROFIT_TARGET_USD > 0 and \
+                            pnl_now >= config.PROFIT_TARGET_USD:
+                        close_reason_state = "profit_target"
+                    if close_reason_state is None and \
+                            pnl_now <= -config.MAX_LOSS_USD:
+                        close_reason_state = "max_loss"
+                    if close_reason_state is None and age_sec_now > max_age:
+                        close_reason_state = "max_hold_time"
+                    # الارتداد: عودة سعر المنصة إلى مركز قنته الحالي
+                    if close_reason_state is None and stats:
+                        _scale = (
+                            stats.get("mad") if config.USE_MAD
+                            and stats.get("mad") else 0
+                        ) or stats.get("sd", 0.0)
+                        _centre = (
+                            stats["median"] if config.USE_MAD
+                            and stats.get("mad") else stats.get("mean")
+                        )
+                        if _scale > 0 and _centre is not None:
+                            z_now = (mid - _centre) / _scale
+                            if pnl_now >= 0 and abs(z_now) <= config.Z_EXIT:
+                                close_reason_state = "z_revert"
                     max_age = config.MAX_HOLD_HOURS * 3600
                     gap_anomaly = abs(gap) >= config.MAX_ENTRY_GAP_USD
-                    if not (gap_closed or age_sec_now > max_age
-                            or gap_anomaly):
-                        print(f"state-hold: gap={gap:.2f} not closed, "
-                              f"age={age_sec_now/3600:.1f}h — keeping",
-                              flush=True)
-                        result["action"] = "hold:state"
-                        closed_this_cycle = False
-                    else:
+                    if close_reason_state is not None or gap_anomaly:
                         try:
                             yield sess.close_position(
                                 p_id,
                                 volume=None,
                                 max_retries=3,
                             )
-                            entry_price = sp.get("entry_price")
-                            side_name = sp.get("side", "BUY")
-                            digits = state.get("money_digits", 2) or 2
-                            volume_close = result.get("volume", 100)
-                            mid_close = mid
                             if entry_price:
-                                price_diff = mid_close - entry_price
-                                if str(side_name).upper() == "SELL":
-                                    price_diff = -price_diff
                                 gross_pnl_close = (price_diff * volume_close) / (10.0 ** digits)
                                 pnl_net_close = round(gross_pnl_close, 2)
                                 sp["pnl_last_usd"] = pnl_net_close
                                 sp["pnl_peak_usd"] = max(float(sp.get("pnl_peak_usd", 0)), pnl_net_close)
-                                print(f"✓ CLOSED (state-force-close): pnl={pnl_net_close:.2f} USD")
+                                print(f"✓ CLOSED (state-force-close/{close_reason_state or 'gap_anomaly'}): pnl={pnl_net_close:.2f} USD")
                             else:
                                 pnl_net_close = 0.0
                                 print("✓ CLOSED (state-force-close): no entry_price — PnL=0")
@@ -775,12 +826,12 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                                 "entry_gap": sp.get("entry_gap"),
                                 "close_gap": gap,
                                 "entry_price": entry_price,
-                                "close_price": mid_close,
+                                "close_price": mid,
                                 "pnl_units": pnl_net_close,
                                 "pnl_usd": pnl_net_close,
                                 "fees_usd": 0,
                                 "pnl_net_usd": pnl_net_close,
-                                "reason": "state-force-close",
+                                "reason": close_reason_state or "gap_anomaly",
                                 "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
                             })
                             result["close_pnl_usd"] = pnl_net_close
@@ -799,6 +850,12 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                             else:
                                 print(f"state-force-close failed: {exc!r}")
                                 result["action"] = "close_pending:state"
+                    else:
+                        print(f"state-hold: pnl={pnl_now:.2f} "
+                              f"age={age_sec_now/3600:.1f}h — keeping",
+                              flush=True)
+                        result["action"] = "hold:state"
+                        closed_this_cycle = False
                 else:
                     print("state position: no positionId and none recoverable — cannot close yet", flush=True)
                     result["action"] = "hold:no-posid"
@@ -1020,25 +1077,28 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         in_session_now = in_session(datetime.now(timezone.utc))
         quality_session_now = in_quality_session(datetime.now(timezone.utc))
 
-        # حارس الاتجاه: نمنع الدخول عندما ينجرف سعر المنصة بثبات في نفس
-        # اتجاه إشارتنا (مشتري السكين الساقط / معاكس اتجاه يوم قوي).
-        # الشرط: slope * z < 0 يعني الدخول ضد الانحراف القوي.
+        # حارس الاتجاه: نمنع الدخول عندما يكون انحدار سعر المنصة (المدى الطويل)
+        # معاكساً لاتجاه زخم الدخول بقوة (كسر اللحاق المؤكد). الشرط:
+        # slope * momentum < 0 و abs(slope) يتجاوز الحد.
         trend = result.get("trend_slope", 0.0)
-        slope_agrees_signal = (
-            result["z"] is not None
-            and (trend * result["z"]) > 0
+        momentum = result.get("momentum", 0.0)
+        slope_against_signal = (
+            (trend * momentum) < 0
         )
         trend_against = (
             config.TREND_ON
-            and slope_agrees_signal
+            and slope_against_signal
             and abs(trend) > config.TREND_MAX_SLOPE_USD
+        )
+
+        signal_ready = (
+            config.MOMENTUM_ON and abs(momentum) >= config.MOMENTUM_MIN_USD
         )
 
         can_trade = (
                 config.MODE == "trade"
                 and stats is not None
-                and result["z"] is not None
-                and abs(result["z"]) >= config.Z_ENTRY_SOFT
+                and signal_ready
                 and result.get("balance_usd", 0) >= config.MIN_BALANCE_TO_TRADE
                 and cooldown_left <= 0
                 and in_session_now
@@ -1055,33 +1115,32 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 result["open_positions"] = len(positions)
             else:
                 # --- فتح صفقة جديدة ---
-                # الإشارة = انحراف السعر عن وسطه المتداول: z>0 يعني
-                # السعر مرتفع فوق متوسطه → SELL (نتوقع ارتداداً للأسفل)،
-                # z<0 يعني السعر منخفض → BUY.
-                side = "SELL" if result["z"] > 0 else "BUY"
+                # الإشارة = زخم سعر المنصة: momentum>0 (السعر يصعد
+                # بقوة) → BUY (تكملة اللحاق لأعلى)، momentum<0 → SELL.
+                side = "SELL" if momentum < 0 else "BUY"
                 sd = (
                     stats.get("mad") if config.USE_MAD
                     else stats["sd"]
                 )
                 sd = sd or stats["sd"]
                 sl_dist = config.SL_AFTER_ENTRY_USD
-                min_tp_dist = 1.60
-                centre = (
-                    stats["median"] if config.USE_MAD
-                    else stats["mean"]
-                )
-                # الهدف = عودة السعر إلى مركز القناة (متوسطه المتداول)
-                dev_from_centre = abs(mid - centre)
+                min_tp_dist = 1.00
+                # الهدف = تمدد زخم الدخول: متوسط الإكمال بعد حركة ≥1.2$
+                # يبلغ أحياناً +2.7 بعد صعود 1.5، لكن نلتزم جزءاً محافظاً
+                # من الزخم نفسه (45% منه، بحد أدنى 1.00$) لتثبيت الربح
+                # قبل أي انعكاس.
+                tp_ext = max(min_tp_dist, 0.45 * abs(momentum))
                 if side == "SELL":
                     sl = mid + sl_dist
-                    tp = mid - max(min_tp_dist, 0.9 * dev_from_centre)
+                    tp = mid - tp_ext
                 else:
                     sl = mid - sl_dist
-                    tp = mid + max(min_tp_dist, 0.9 * dev_from_centre)
+                    tp = mid + tp_ext
                 print(
                     f"order-request side={side} mid={mid:.2f} "
                     f"sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "
-                    f"gap={gap:.2f} tp_dist={(mid - tp) if side == 'SELL' else (tp - mid):.2f}"
+                    f"gap={gap:.2f} mom={momentum:+.2f} "
+                    f"tp_dist={tp_ext:.2f}"
                 )
                 try:
                     trad_pre = yield sess.get_trader()
@@ -1205,10 +1264,9 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 reasons.append("mode!=trade")
             if stats is None:
                 reasons.append("warmup")
-            elif result["z"] is not None and abs(result["z"]) < config.Z_ENTRY:
-                reasons.append("z_below_entry")
-            if result["z"] is None:
-                reasons.append("z_unavailable")
+            elif config.MOMENTUM_ON and \
+                    abs(result.get("momentum", 0.0)) < config.MOMENTUM_MIN_USD:
+                reasons.append("momentum_small")
             if abs(gap) > config.MAX_ENTRY_GAP_USD:
                 reasons.append("data_anomaly_gap")
             if result.get("balance_usd", 0) < config.MIN_BALANCE_TO_TRADE:

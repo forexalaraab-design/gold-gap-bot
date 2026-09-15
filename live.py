@@ -340,6 +340,7 @@ def live_loop():
             closing_mgr_full.init_from_state(state)
             result["gap_velocity"] = _main.gap_velocity(rows)
             result["trend_slope"] = _main.trend_slope(rows)
+            result["momentum"] = _main.platform_momentum(rows)
             try:
                 yield _main.run_trade_cycle(
                     sess, mid, global_price, stats,

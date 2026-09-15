@@ -2,12 +2,12 @@
   "position": null,
   "stats": {
     "n": 48,
-    "mean": 4293.877916666667,
-    "sd": 0.26766093455442447,
+    "mean": 4294.09,
+    "sd": 0.0,
     "median": 4294.09,
     "mad": 0.0
   },
-  "last_run": "2026-09-15T21:03:04Z",
+  "last_run": "2026-09-15T21:06:35Z",
   "money_digits": 2,
   "entry_balance_units": 996770,
   "cooldown_until": 1789507092.4760787,

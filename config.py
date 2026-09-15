@@ -239,5 +239,10 @@ HUMAN_REACTION_SEC_MIN = _env_float("STRAT_HUMAN_REACT_MIN", 2.0)
 HUMAN_REACTION_SEC_MAX = _env_float("STRAT_HUMAN_REACT_MAX", 7.0)
 HUMAN_SL_TP_JITTER_USD = _env_float("STRAT_HUMAN_SLTP_JITTER", 0.08)
 HUMAN_VOLUME_JITTER_FRAC = _env_float("STRAT_HUMAN_VOL_JITTER", 0.05)
+# خطوة الحجم الصالحة عند الوسيط بوحدات cTrader (XAUUSD: 1.0 لوت = 10000
+# وحدة → 0.01 لوت = 100، والتركيبات الصالحة بمضاعفات 100 فقط). يُكمَّل
+# الحجم المُشوش إلى أقرب مضاعف لها حتى لا يرفض الوسيط (TRADING_BAD_VOLUME)
+# — عند لوت 0.01 (100) يبقى الحجم كما هو والجتر مدور تلقائياً.
+VOLUME_STEP_UNITS = int(_env_float("STRAT_VOLUME_STEP", 100))
 HUMAN_SKIP_SIGNAL_PROB = _env_float("STRAT_HUMAN_SKIP", 0.12)
 HUMAN_POLL_JITTER_SEC = _env_float("STRAT_HUMAN_POLL_JITTER", 1.0)

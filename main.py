@@ -389,14 +389,20 @@ def _jittered_volume(base_volume):
     """حجم عشوائي بسيط حول الأساس (±HUMAN_VOLUME_JITTER_FRAC).
 
     القاعدة 1: غير ثابت دائماً منذ البداية؛ بروكر يرى أحجاماً متنوعة.
-    يبقى ضمن نطاق أمان مستدير لقبول البروكر.
+    يُكمَّل عند الوسيط إلى أقرب مضاعف لخطوة الحجم الصالحة
+    (VOLUME_STEP_UNITS) حتى لا يرُفض الأمر بـ TRADING_BAD_VOLUME
+    (حجم داخل درجة الوسيط). عند اللوت الأساسي 0.01 (=100 وحدة) يبقى
+    100 كما هو لأن أي قيوم أخرى بلا مضاعف خطوة.
     """
     import random as _r
     if not config.HUMANIZE_ON or base_volume <= 0:
         return base_volume
     jit = _r.uniform(-config.HUMAN_VOLUME_JITTER_FRAC,
                      config.HUMAN_VOLUME_JITTER_FRAC)
-    return max(1, int(round(base_volume * (1 + jit))))
+    step = max(1, int(getattr(config, "VOLUME_STEP_UNITS", 100) or 1))
+    raw = base_volume * (1 + jit)
+    snapped = int(round(raw / step)) * step
+    return max(step, snapped)
 
 
 def _poll_jitter():

@@ -2,12 +2,12 @@
   "position": null,
   "stats": {
     "n": 48,
-    "mean": 4301.222916666667,
-    "sd": 0.6436249017745758,
-    "median": 4301.3025,
-    "mad": 0.7820715000002157
+    "mean": 4300.643645833333,
+    "sd": 1.0487311175908691,
+    "median": 4300.78,
+    "mad": 1.2750359999995144
   },
-  "last_run": "2026-09-15T19:18:32Z",
+  "last_run": "2026-09-15T19:22:02Z",
   "money_digits": 2,
   "entry_balance_units": 996382,
   "cooldown_until": 1789500054.0077224,
@@ -1909,5 +1909,6 @@
     "trades_today": 98,
     "last_updated": "2026-09-15T19:00:56Z"
   },
-  "cleanup_done_internal": true
+  "cleanup_done_internal": true,
+  "_last_spread_usd": 0.0
 }

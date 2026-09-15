@@ -36,6 +36,7 @@ from cbot import CtraderSession
 from ctrader_open_api import Auth
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.task import deferLater
 
 # ============================================================================
 # helpers
@@ -237,18 +238,34 @@ def in_quality_session(dt):
     return not (hour >= start or hour < end)
 
 
-def platform_momentum(rows, max_rows=None):
-    """زخم سعر المنصة (mid) بالدولار خلال نافذة حديثة — إشارة الدخول.
+def yahoo_momentum(rows, max_rows=None):
+    """زخم ياهو GC=F (العقود الآجلة — القائد الفعلي).
 
-    مفهوم 2026-09-14 "لحاق المنصة": تحليل السببية (lead-lag) على
-    gap_history أظهر أن سعر المنصة يتقدم والمصدر العالمي يتأخر
-    (mid_lead: اتفاق يصعد 3%→20% مع الإزاحة الزمنية). كما أن زخم
-    المنصة نفسه يستمر: بعد حركة صاعدة ≥1.5$ يكمل السعر الصعود 87%
-    (متوسط +2.74$) وبعد هابطة يكمل 74%. لذلك إشارة الدخول = اتجاه
-    زخم سعر المنصة (وليس الفجوة ولا المصدر العالمي).
+    البحث الحي (2026-09-15): ياهو GC=F يحدث سعره كل 1-3 ثوانٍ
+    بـ 28 تغيراً في 60 ثانية، بينما gold-api يحدث مرة كل 30 ثانية
+    بتغير واحد فقط. ياهو هو السوق الأكثر سيولة عالمياً للذهب.
 
-    القيمة الموجبة = زخم صاعد (NUFFER على الشراء)، السالبة = هابط.
+    البنية: Yahoo(عقود آجلة 4343$) → gold-api(سبوت 4306$) →
+    المنصة(cTrader XAUUSD 4306$). الفرق البنوي ~37$ (لفائدة+تكلفة
+    حمل) يتغير ببطء.
+
+    الاستراتيجية: نتداول باتجاه زخم ياهو (القائد) متوقعين لحاق
+    المنصة. القيمة = Δglobal (الآن = Yahoo) خلال آخر N صفوف.
     """
+    if max_rows is None:
+        max_rows = config.MOMENTUM_WINDOW_ROWS
+    try:
+        valid = [r for r in rows if isinstance(r.get("global"), (int, float))]
+        valid = valid[-max_rows:]
+        if len(valid) < 2:
+            return 0.0
+        return valid[-1]["global"] - valid[0]["global"]
+    except Exception:
+        return 0.0
+
+
+def platform_momentum(rows, max_rows=None):
+    """زخم سعر المنصة (mid) — مؤشر تأكيدollower. القيمة الإيجابية = صاعد."""
     if max_rows is None:
         max_rows = config.MOMENTUM_WINDOW_ROWS
     try:
@@ -261,22 +278,22 @@ def platform_momentum(rows, max_rows=None):
         return 0.0
 
 
-def gap_velocity(rows, max_rows=12):
-    """سرعة تغيّر الفجوة بالدولار/دقيقة (تأثيرات اللحاق).
+def platform_anomaly_usd(rows, span_rows=20):
+    """قفزة غير صحّية في سعر المنصة (خلل شريط/سيولة شاذة) — بالدولار.
 
-    تُستخدم كمؤشر نشاط فقط، وليست شرط دخول. يحسب |Δgap|/دقيقة.
+    مفهوم 2026-09-14: لما لم تعد الفجوة إشارة دخول (الزخم هو الإشارة)،
+    حارس الشذوذ يجب ألا يعتمد على |gap| إطلاقاً — الفجوة تختلف جذرياً
+    حسب المصدر (السبوت gold-api≈4306 مقابل GC=F ياهو≈4338: فرق بنيوي
+    ~32$). لو سقط gold-api ورجعنا لـ Yahoo ستكون |gap|≈32 دائماً وكان
+    سيغلق كل صفقة خطأً. الحارس الصحيح = مقدار تحرك mid خلال ثوانٍ
+    (≈span_rows × 4s): قفزات غير طبيعية تُرصد مباشرة من سعر المنصة.
     """
     try:
-        valid = [r for r in rows if isinstance(r.get("gap"), (int, float))]
-        valid = valid[-max_rows:]
+        valid = [r for r in rows if isinstance(r.get("platform"), (int, float))]
+        valid = valid[-span_rows:]
         if len(valid) < 2:
             return 0.0
-        t0 = datetime.fromisoformat(valid[0]["ts"].replace("Z", "+00:00"))
-        t1 = datetime.fromisoformat(valid[-1]["ts"].replace("Z", "+00:00"))
-        dt = (t1 - t0).total_seconds() / 60.0
-        if dt <= 0:
-            return 0.0
-        return abs(valid[-1]["gap"] - valid[0]["gap"]) / dt
+        return abs(valid[-1]["platform"] - valid[0]["platform"])
     except Exception:
         return 0.0
 
@@ -310,6 +327,107 @@ def trend_slope(rows, max_rows=None):
         return 0.0
 
 
+# ===== إنسانية التنفيذ =====
+_HUMAN_WORDS_A = ("clear", "trade", "gold", "steady", "manual", "afx",
+                  "alpha", "delta", "prime", "north", "silver", "cartel",
+                  "keeper", "bridge", "market", "haven")
+_HUMAN_WORDS_B = ("one", "two", "five", "main", "quick", "echo", "nova",
+                  "sun", "moon", "peak", "core", "swift", "round", "solid")
+_HUMAN_WORDS_B = ("one", "two", "five", "main", "quick", "echo", "nova",
+                  "sun", "moon", "peak", "core", "swift", "round", "solid")
+
+
+def _human_label():
+    """اسم صفقة مقروء يشبه تعليق المتداول اليدوي — ليس رموزاً عشوائية.
+
+    القاعدة 3: لا يظهر في label/comment أي شيء يدل على البوت أو على
+    منطق الفجوة/القائد-التابع. عينة: "gold steady" / "afx one".
+    """
+    import random as _r
+    w = _r.choice(_HUMAN_WORDS_A) + " " + _r.choice(_HUMAN_WORDS_B)
+    return w
+
+
+def _jitter_usd(base, max_jit):
+    """يرجع base مضافاً/منقوصاً قليلاً ضمن ±max_jit — تشتت بشري.
+
+    القاعدة 1: لا أوامر SL/TP متطابقة حرفياً كل مرة، بل مسافات
+    قريبة مع تشتت طبيعي (ضمن حدود أمان).
+    """
+    import random as _r
+    if not config.HUMANIZE_ON or max_jit <= 0:
+        return base
+    return base + _r.uniform(-max_jit, max_jit)
+
+
+def _human_reaction():
+    """تأخير بشري قبل إرسال الأمر (محاكاة تفكير/تنفيذ يدوي).
+
+    القاعدة 2: تأخير عشوائي ضمن نطاق إعدادات HUMAN_REACTION_SEC.
+    يرجع 0 إذا كانت الإنسانية معطلة.
+    """
+    import random as _r
+    if not config.HUMANIZE_ON:
+        return 0.0
+    return _r.uniform(config.HUMAN_REACTION_SEC_MIN,
+                      config.HUMAN_REACTION_SEC_MAX)
+
+
+def _skip_signal():
+    """يُفوّت الإنسان أحياناً إشارة صالحة. يرجع True للتفويت.
+
+    القاعدة 4: احتمال HUMAN_SKIP_SIGNAL_PROB لتخطي دخول — يبعد
+    "التقاط كل شيء" الآلي عن البصمة البوتية.
+    """
+    import random as _r
+    if not config.HUMANIZE_ON:
+        return False
+    return _r.random() < config.HUMAN_SKIP_SIGNAL_PROB
+
+
+def _jittered_volume(base_volume):
+    """حجم عشوائي بسيط حول الأساس (±HUMAN_VOLUME_JITTER_FRAC).
+
+    القاعدة 1: غير ثابت دائماً منذ البداية؛ بروكر يرى أحجاماً متنوعة.
+    يبقى ضمن نطاق أمان مستدير لقبول البروكر.
+    """
+    import random as _r
+    if not config.HUMANIZE_ON or base_volume <= 0:
+        return base_volume
+    jit = _r.uniform(-config.HUMAN_VOLUME_JITTER_FRAC,
+                     config.HUMAN_VOLUME_JITTER_FRAC)
+    return max(1, int(round(base_volume * (1 + jit))))
+
+
+def _poll_jitter():
+    """تشتت صغير على فترة الجرد — لا دورة آلية ثابتة النبض.
+
+    القاعدة 5: GLOBAL_POLL_SEC ± HUMAN_POLL_JITTER_SEC.
+    """
+    import random as _r
+    if not config.HUMANIZE_ON:
+        return config.GLOBAL_POLL_SEC
+    jit = _r.uniform(-config.HUMAN_POLL_JITTER_SEC,
+                     config.HUMAN_POLL_JITTER_SEC)
+    return max(1.0, config.GLOBAL_POLL_SEC + jit)
+
+
+def _stable_jitter(seed, span_frac):
+    """تشتت ثابت لكل صفقة في المدى [-span_frac, +span_frac].
+
+    يُشتق من معرّف الصفقة (positionId) فيبقى ثابتاً طول عمر الصفقة،
+    فلا يتردد قرار الإغلاق بين دورة وأخرى. القاعدة 1 (لا عتبات
+    أرباح متطابقة دقیقاً كل صفقة).
+    """
+    if not config.HUMANIZE_ON or not seed:
+        return 0.0
+    try:
+        h = abs(hash(str(seed))) % 10000
+        return ((h / 10000.0) * 2.0 - 1.0) * span_frac
+    except Exception:
+        return 0.0
+
+
 def _side_name(trade_side):
     from ctrader_open_api.messages import OpenApiModelMessages_pb2 as Models
     for name, num in Models.ProtoOATradeSide.DESCRIPTOR.values_by_name.items():
@@ -318,20 +436,95 @@ def _side_name(trade_side):
     return str(trade_side)
 
 
-def position_fees_usd(pos, md):
-    """تكلفة الصفقة الإجمالية (عمولة + سواب + spread مقدر)."""
-    commission = getattr(pos, "commission", None) or 0
-    swap = getattr(pos, "swap", None) or 0
-    if md:
-        commission = commission / (10 ** md)
-        swap = swap / (10 ** md)
-    # حجمنا ثابت: config.LOT (=0.01). الرسوم لكل لوت × عدد اللوتات.
+def _detected_spread_usd(result=None):
+    """يرجع السبريد الحي (bid→ask) من آخر دورة، أو 0 إن غاب.
+
+    القاعدة المرجعية 2026-09-15: التكلفة الفعلية للصفقة تشمل السبريد
+    الحي (المقيس من cTrader bid/ask) + العمولة الفعلية + السواب. لا
+    نستخدم تقديراً ثابتاً للسبريد بعد الآن.
+    """
+    try:
+        if result is not None:
+            return float(result.get("spread_usd") or 0.0)
+    except (TypeError, ValueError):
+        pass
+    try:
+        if result is not None:
+            _rs = result.get("_spread_live") or 0.0
+            if _rs:
+                return float(_rs)
+    except (TypeError, ValueError):
+        pass
+    return 0.0
+
+
+def _spread_from_state_res(state=None):
+    """قراءة السبريد الحي من state (الصق من آخر دورة تقييم)."""
+    if state is None:
+        return 0.0
+    try:
+        return float(state.get("_last_spread_usd") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _commission_usd(pos, md=None, state=None):
+    """عمولة الصفقة بالدولار.
+
+    الأولوية: العمولة الفعلية من كائن الصفقة (pos.commission) إن وُجدت
+    وقابلة للاستخدام؛ وإلا معايرة من متوسط العمولة الفعلية المسجلة في
+    الصفقات المغلقة (state.perf.measured_commission_usd)؛ وإلا تقدير
+    الثابت TRADING_FEES_PER_TRADE_LOT لكل لوت.
+    """
+    commission = 0.0
+    try:
+        commission = float(getattr(pos, "commission", None) or 0.0)
+        if md and commission:
+            commission = commission / (10.0 ** md)
+    except (TypeError, ValueError):
+        commission = 0.0
+    if commission and commission > 0:
+        return commission
+    # معايرة ذاتية من الصفقات المغلقة الفعلية
+    perf = {}
+    if state is not None:
+        perf = state.get("perf") or {}
+    cal = float(perf.get("measured_commission_usd") or 0.0)
+    if cal and cal > 0:
+        return cal
     vol_lots = float(config.LOT) if getattr(config, "LOT", None) else 0.01
-    spread_est = config.TRADING_FEES_PER_TRADE_LOT * max(vol_lots, 0.01)
+    return config.TRADING_FEES_PER_TRADE_LOT * max(vol_lots, 0.01)
+
+
+def position_fees_usd(pos, md, result=None, state=None):
+    """تكلفة الصفقة الإجمالية (عمولة + سواب + السبريد الحي المقيس).
+
+    2026-09-15: لم نعد نقدّر السبريد ثابتاً — نقيسها حياً من bid/ask
+    عبر result["spread_usd"].
+    """
+    commission = _commission_usd(pos, md, state=state)
+    swap = getattr(pos, "swap", None) or 0
+    if not swap:
+        try:
+            swap = float(getattr(pos, "swap", 0) or 0)
+        except (TypeError, ValueError):
+            swap = 0.0
+    if md:
+        swap = swap / (10.0 ** md)
+    else:
+        try:
+            swap = float(swap)
+        except (TypeError, ValueError):
+            swap = 0.0
+    spread_est = _detected_spread_usd(result)
+    if spread_est <= 0:
+        # fallback: تقدير متحفظ (عرض نموذجي للذهب ~0.35$) إن غاب القياس
+        spread_est = config.SPREAD_GUARD_USD * 0.5
     return commission + swap + spread_est
 
 
-def dynamic_pnl_usd(pos, mid, digits, md, st_pos=None):
+def dynamic_pnl_usd(pos, mid, digits, md, st_pos=None, result=None,
+                    state=None):
     """PnL صافي (بعد الرسوم) من mid الحالي والصفقة المفتوحة.
     الصيغة: PnL = (mid - entry) × volume / (10^md)
     حيث md=2 لكل صغيرة → القسم 100
@@ -358,7 +551,7 @@ def dynamic_pnl_usd(pos, mid, digits, md, st_pos=None):
         raw = -raw
     # القسمة على 10^md فقط - هذا هو الحساب الصحيح
     gross = raw / (10.0 ** (md or 2))
-    fees = position_fees_usd(pos, md)
+    fees = position_fees_usd(pos, md, result=result, state=state)
     return gross - fees, gross, fees
 
 # ============================================================================
@@ -443,9 +636,13 @@ class ClosingManager:
         """
         side_name = _side_name(position.tradeData.tradeSide)
         digits = getattr(position, "digits", 2) or 2
-        net_pnl, gross_pnl, fees = dynamic_pnl_usd(position, mid,
-                                                     digits, money_digits,
-                                                     st_pos)
+        # التكلفة الفعلية: عمولة (فعلية/معايرة) + سواب + السبريد الحي
+        # المقيس من cTrader bid/ask (آخر دورة).
+        net_pnl, gross_pnl, fees = dynamic_pnl_usd(
+            position, mid, digits, money_digits, st_pos,
+            result={"_spread_live": _spread_from_state_res(self.state)},
+            state=self.state,
+        )
         entry_gap = st_pos.get("entry_gap")
         entry_price = st_pos.get("entry_price")
         opened_at = st_pos.get("opened_at")
@@ -454,16 +651,25 @@ class ClosingManager:
         peak = float(st_pos.get("pnl_peak_usd") or net_pnl)
         peak = max(peak, net_pnl)
 
+        # إنسانية: عتبات الربح/التريلنج تختلف قليلاً من صفقة لأخرى (ثابتة
+        # لكل صفقة) حتى لا تبدو الأرباح المثبّتة متطابقة بالبنس دائماً.
+        # max_loss يبقى صارماً بلا تشتت (حد أمان لا يُمَس).
+        _seed = getattr(position, "positionId", None)
+        _bias = _stable_jitter(_seed, 0.15)
+        prof_target = self.cfg.PROFIT_TARGET_USD * (1.0 + _bias)
+        trail_arm = self.cfg.TRAILING_ARM_USD * (1.0 + _bias)
+        trail_back = self.cfg.TRAILING_BACK_USD * (1.0 + _bias)
+
         # --- الطبقة 0: فلترة ضوضاء - لا شيء هنا، سنطبق في الفتح ---
 
         # --- الطبقة 1: إغلاق بالربح (Trailing) ---
         # تفعيل الترهل: profit >= TRAILING_ARM_USD
         trailing_armed = (
             self.cfg.TRAILING_ARM_USD > 0
-            and peak >= self.cfg.TRAILING_ARM_USD
+            and peak >= trail_arm
             and self.cfg.TRAILING_BACK_USD > 0
         )
-        trailing_hit = trailing_armed and (peak - net_pnl) >= self.cfg.TRAILING_BACK_USD
+        trailing_hit = trailing_armed and (peak - net_pnl) >= trail_back
         # لا نغلق بالتريلنج على خسارة: التريلنج يحمي الربح، لا يصنع خسائر.
         # (الخسارة الصغيرة تُترك حتى طبقة max_loss أو الستوب الفعلي)
         if trailing_hit:
@@ -474,7 +680,7 @@ class ClosingManager:
 
         # --- الطبقة 2: تثبيت الأرباح (Profit Target) ---
         # إغلاق فوري عند بلوغ ربح صافي محدد (مثلاً +2$)
-        if self.cfg.PROFIT_TARGET_USD > 0 and net_pnl >= self.cfg.PROFIT_TARGET_USD:
+        if prof_target > 0 and net_pnl >= prof_target:
             return True, "profit_target"
 
         # --- الطبقة 3: الحد الأقصى للخسارة (Max Loss) ---
@@ -511,11 +717,12 @@ class ClosingManager:
                     return True, "z_revert"
                 # إغلاق الانحراف بلا ربح محقق: لا نثبّت الخسارة هنا —
                 # نترك الحماية الحقيقية (max_loss/max_hold/ستوب السيرفر)
-        # حارس أمان شاذ: لو ابتعد سعر المنصة عن السعر الخارجي بمقدار
-        # خارجي كبير جداً (22$)، يوجد خلل في البيانات أو سيولة شاذة —
-        # نغلق لحماية الصفقة حتى لو كانت في الثناء.
-        if abs(global_price - mid) >= self.cfg.MAX_ENTRY_GAP_USD:
-            return True, "gap_exceeded_cap"
+        # حارس أمان شاذ: قفزة تلقائية من إشارة الزخم (تُملأ على النحو
+        # التالي live/state). لو كانت حركة mid خلال ~80 ثانية غير معقولة
+        # فهذا خلل شريط — نغلق لحماية الصفقة.
+        jump = abs(self.state.get("_anomaly_jump", 0.0) or 0.0)
+        if jump >= self.cfg.PRICE_JUMP_ANOMALY_USD:
+            return True, "price_anomaly"
 
         # --- الطبقة 6: Daily Loss / Consecutive Losses Circuit Breaker ---
         # لا تطبق هنا لأنها تؤثر على الفتح وليس الإغلاق
@@ -548,6 +755,22 @@ def _record_close(state, rec):
     trades.append(rec)
     if len(trades) > config.MAX_CLOSED_TRADES:
         state["closed_trades"] = trades[-config.MAX_CLOSED_TRADES:]
+    # معايرة ذاتية للعمولة الفعلية (التكلفة الحية تُقسم بين عمولة + سواب
+    # + سبريد؛ نعاير متوسط العمولة من الصفقات المغلقة الفعلية ليصبح
+    # التقدير اللاحق أدق). تُخزن في state.perf.measured_commission_usd.
+    try:
+        _fees = rec.get("fees_usd")
+        if _fees is not None:
+            _fees = float(_fees)
+        if _fees and _fees > 0:
+            perf = state.setdefault("perf", {})
+            _n = int(perf.get("measured_count") or 0)
+            _old = float(perf.get("measured_commission_usd") or 0.0)
+            _new = (_old * _n + _fees) / (_n + 1)
+            perf["measured_count"] = _n + 1
+            perf["measured_commission_usd"] = round(_new, 4)
+    except (TypeError, ValueError):
+        pass
     try:
         os.makedirs(os.path.dirname(config.TRADES_FILE), exist_ok=True)
         new = not os.path.exists(config.TRADES_FILE)
@@ -659,6 +882,9 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     5. عدم مسح state["position"] إلا بعد التأكد من عدم وجود صفقة فعليّة
     """
     symbol_id = result["symbol_id"]
+    # تخزين السبريد الحي في state ليُستخدم من check_close (بلا تمرير result)
+    # ومن state-force-close — قياس التكلفة دائماً من آخر bid/ask.
+    state["_last_spread_usd"] = _detected_spread_usd(result)
     try:
         # IMPORTANT: open_positions(account_id) — نمرر self.account_id لا symbol_id!
         positions = yield sess.open_positions(sess.account_id, max_age=86400.0)
@@ -752,11 +978,25 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                         (getattr(config, "LOT", 0.01) or 0.01) * 10000.0
                     )) or result.get("volume", 100)
                     pnl_now = 0.0
+                    _sfees = 0.0
                     if entry_price:
                         price_diff = mid - entry_price
                         if side_name == "SELL":
                             price_diff = -price_diff
-                        pnl_now = (price_diff * volume_close) / (10.0 ** digits)
+                        gross_now = (price_diff * volume_close) / (10.0 ** digits)
+                        # التكلفة الفعلية للصفقة: عمولة (فعلية/معايرة) +
+                        # سواب + السبريد الحي المقيس — تُخصم دائماً من الربح
+                        # ليُقرر الإغلاق على الربح الصافي بعد التكلفة.
+                        pos_fake = types.SimpleNamespace(
+                            price=entry_price, tradeData=types.SimpleNamespace(
+                                volume=volume_close,
+                                tradeSide=(2 if side_name == "SELL" else 1)),
+                            commission=getattr(sp, "commission", 0),
+                            swap=getattr(sp, "swap", 0),
+                        )
+                        _sfees = position_fees_usd(
+                            pos_fake, digits, result=result, state=state)
+                        pnl_now = gross_now - _sfees
                     peak_now = float(sp.get("pnl_peak_usd") or 0)
                     peak_now = max(peak_now, pnl_now)
                     # طبقات الإغلاق — نفس معايير ClosingManager.check_close
@@ -793,8 +1033,15 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                             if pnl_now >= 0 and abs(z_now) <= config.Z_EXIT:
                                 close_reason_state = "z_revert"
                     max_age = config.MAX_HOLD_HOURS * 3600
-                    gap_anomaly = abs(gap) >= config.MAX_ENTRY_GAP_USD
-                    if close_reason_state is not None or gap_anomaly:
+                    # حارس شذوذ: قفزة غير صحية في سعر المنصة خلال ~80 ثانية
+                    # (تكاد مستحيلة في الذهب) — تعني خلل شريط/سيولة. لا نستخدم
+                    # |gap| لأن الفجوة تختلف بنيوياً حسب مصدر global (ياهو
+                    # GC=F ≈ 37$ أعلى من السبوت) وستُغلق كل صفقة خطأً.
+                    # قفزة ياهو (momentum) = سوق حقيقي، لذلك نعتمد على قفزة
+                    # المنصة نفسها فقط لالتقاط أخطاء بيانات cTrader.
+                    price_jump = abs(result.get("platform_momentum", 0.0))
+                    price_anomaly = price_jump >= config.PRICE_JUMP_ANOMALY_USD
+                    if close_reason_state is not None or price_anomaly:
                         try:
                             yield sess.close_position(
                                 p_id,
@@ -803,10 +1050,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                             )
                             if entry_price:
                                 gross_pnl_close = (price_diff * volume_close) / (10.0 ** digits)
-                                pnl_net_close = round(gross_pnl_close, 2)
+                                pnl_net_close = round(gross_pnl_close - _sfees, 2)
                                 sp["pnl_last_usd"] = pnl_net_close
                                 sp["pnl_peak_usd"] = max(float(sp.get("pnl_peak_usd", 0)), pnl_net_close)
-                                print(f"✓ CLOSED (state-force-close/{close_reason_state or 'gap_anomaly'}): pnl={pnl_net_close:.2f} USD")
+                                print(f"✓ CLOSED (state-force-close/{close_reason_state or 'price_anomaly'}): pnl={pnl_net_close:.2f} USD (fees={_sfees:.2f})")
                             else:
                                 pnl_net_close = 0.0
                                 print("✓ CLOSED (state-force-close): no entry_price — PnL=0")
@@ -829,9 +1076,9 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                                 "close_price": mid,
                                 "pnl_units": pnl_net_close,
                                 "pnl_usd": pnl_net_close,
-                                "fees_usd": 0,
+                                "fees_usd": round(_sfees, 2),
                                 "pnl_net_usd": pnl_net_close,
-                                "reason": close_reason_state or "gap_anomaly",
+                                "reason": close_reason_state or "price_anomaly",
                                 "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
                             })
                             result["close_pnl_usd"] = pnl_net_close
@@ -919,6 +1166,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
     # إذا كانت هناك صفقة مفتوحة (من API أو حالة قسريّة)، فحص الإغلاق
     # =========================================================================
     if pos_for_close is not None:
+        # حارس الشذوذ: ملء قفزة سعر المنصة اللحظية في الحالة ليستخدمها
+        # check_close و state-force-close. نعتمد على platform_momentum فقط
+        # (قفزة ياهو = سوق حقيقي لا تُغلق).
+        state["_anomaly_jump"] = abs(result.get("platform_momentum", 0.0))
         pos = pos_for_close
         st_pos = state.get("position")
         if st_pos is None:
@@ -952,6 +1203,15 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         }
 
         if should_close and close_reason:
+            # إنسانية: تأخير رد فعل قبل الإغلاق الاختياري (ربح/تريلنج/
+            # ارتداد) ليبدو القرار بشرياً. أما حدود الأمان (max_loss/
+            # price_anomaly) فتُنفّذ فوراً بلا تأخير — حماية رأس المال
+            # لا تُمَس. القاعدة 2.
+            if (close_reason in ("trailing", "profit_target", "z_revert")
+                    and config.HUMANIZE_ON):
+                _rclose = _human_reaction() * 0.5
+                if _rclose > 0:
+                    yield deferLater(reactor, _rclose, lambda: None)
             try:
                 yield sess.close_position(
                     pos.positionId,
@@ -971,7 +1231,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 if side_name == "SELL":
                     price_diff = -price_diff
                 gross_pnl = (price_diff * volume) / (10.0 ** digits)
-                fees_est = position_fees_usd(pos, digits) if digits else 0
+                fees_est = position_fees_usd(
+                    pos, digits, result=result, state=state) if digits else 0
                 pnl_net = round(gross_pnl - fees_est, 2)
 
                 print(
@@ -983,7 +1244,13 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
 
                 result["action"] = "close:" + close_reason
                 state["position"] = None
-                state["cooldown_until"] = now_ts + config.COOLDOWN_MINUTES * 60
+                # إنسانية (القاعدة 1): فترة التهدئة ليست ثابتة بالثانية —
+                # تشتت ±15% حتى لا تظهر أنماط إعادة دخول منتظمة.
+                _cd = config.COOLDOWN_MINUTES * 60
+                if config.HUMANIZE_ON:
+                    import random as _rr
+                    _cd *= _rr.uniform(0.85, 1.15)
+                state["cooldown_until"] = now_ts + _cd
                 if pnl_net > 0:
                     closing_mgr.record_win(pnl_net)
                 else:
@@ -1079,11 +1346,16 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
 
         # حارس الاتجاه: نمنع الدخول عندما يكون انحدار سعر المنصة (المدى الطويل)
         # معاكساً لاتجاه زخم الدخول بقوة (كسر اللحاق المؤكد). الشرط:
-        # slope * momentum < 0 و abs(slope) يتجاوز الحد.
+        # slope * signal < 0 و abs(slope) يتجاوز الحد.
         trend = result.get("trend_slope", 0.0)
-        momentum = result.get("momentum", 0.0)
+        momentum = result.get("momentum", 0.0)       # زخم ياهو GC=F (القائد)
+        plat_mom = result.get("platform_momentum", 0.0)  # زخم المنصة (التابع)
+        # إشارة اللحاق: الفرق بين حركة ياهو وحركة المنصة على نفس النافذة.
+        # ياهو (عقود آجلة COMEX) يتحرك أولاً والمنصة (سبوت) تلحق متأخرة —
+        # فإذا تقدم ياهو +2$ والمنصة +0.5$ فقط، بقي +1.5$ لحاقاً محتملاً.
+        catch_up = momentum - plat_mom
         slope_against_signal = (
-            (trend * momentum) < 0
+            (trend * catch_up) < 0
         )
         trend_against = (
             config.TREND_ON
@@ -1091,19 +1363,44 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             and abs(trend) > config.TREND_MAX_SLOPE_USD
         )
 
+        # التكلفة الفعلية للصفقة المتوقعة من آخر قياس (سبريد حي + عمولة
+        # معايرة/فعلية + سواب). تُستخدم للتأكد أن الإشارة تتجاوز التكلفة
+        # — وإلا تكون الصفقة خاسرة من البداية (2026-09-15).
+        _live_spread = _detected_spread_usd(result)
+        _est_fees = _live_spread + _commission_usd(None, state=state) \
+            if _live_spread > 0 else 0.0
+
         signal_ready = (
-            config.MOMENTUM_ON and abs(momentum) >= config.MOMENTUM_MIN_USD
+            config.MOMENTUM_ON
+            and abs(catch_up) >= config.MOMENTUM_MIN_USD
+            and abs(momentum) >= 0.5 * config.MOMENTUM_MIN_USD
+            # الإشارة يجب أن تغطي التكلفة (سبريد+عمولة) وتبقى ربحاً محتملاً:
+            # نمنع الدخول عندما تلتهم التكلفة الزخم (جودة سلبية مضمونة).
+            and abs(catch_up) > (_est_fees * 2.0)
+        )
+
+        # إنسانية (القاعدة 4): أحياناً يُفوّت المتداول إشارة صالحة —
+        # لا يلتقط كل شيء بصورة آلية. يُقيَّم مرة لكل دورة.
+        human_skip = _skip_signal()
+
+        # حارس السبريد: لا ندخل إذا كان السبريد الحي واسعاً جداً (تذبذب
+        # لحظي خارجي/سيولة شاذة) — البيت السعري مكلف زائداً (2026-09-15).
+        spread_wide = (
+            config.SPREAD_GUARD_USD > 0
+            and _live_spread >= config.SPREAD_GUARD_USD
         )
 
         can_trade = (
                 config.MODE == "trade"
                 and stats is not None
                 and signal_ready
+                and not human_skip
+                and not spread_wide
                 and result.get("balance_usd", 0) >= config.MIN_BALANCE_TO_TRADE
                 and cooldown_left <= 0
                 and in_session_now
                 and quality_session_now
-                and result.get("gap_velocity", 0.0) <= config.MAX_GAP_VELOCITY
+                and result.get("platform_jump", 0.0) < config.PRICE_JUMP_ANOMALY_USD
                 and not trend_against
                 and state_pos is None
                 and closing_mgr.can_trade_today()
@@ -1115,21 +1412,25 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 result["open_positions"] = len(positions)
             else:
                 # --- فتح صفقة جديدة ---
-                # الإشارة = زخم سعر المنصة: momentum>0 (السعر يصعد
-                # بقوة) → BUY (تكملة اللحاق لأعلى)، momentum<0 → SELL.
-                side = "SELL" if momentum < 0 else "BUY"
+                # الإشارة = مقدار اللحاق المتبقي (catch_up):
+                #   catch_up = زخم ياهو − زخم المنصة.
+                # ياهو GC=F (عقود آجلة COMEX) يقود والمنصة (سبوت) تلحق،
+                # فإذا تحرك ياهو والمنصة لم تلحق بعد → نفتح باتجاه ياهو
+                # متوقعين لحاق المنصة. catch_up>0 → BUY، <0 → SELL.
+                side = "SELL" if catch_up < 0 else "BUY"
                 sd = (
                     stats.get("mad") if config.USE_MAD
                     else stats["sd"]
                 )
                 sd = sd or stats["sd"]
-                sl_dist = config.SL_AFTER_ENTRY_USD
+                # إنسانية: لا يضع المتداول وقفاً عند نفس المسافة الحرفية
+                # كل مرة — تشتت بسيط على المسافة ضمن حدود آمنة (القاعدة 1).
+                sl_dist = _jitter_usd(config.SL_AFTER_ENTRY_USD,
+                                      config.HUMAN_SL_TP_JITTER_USD)
                 min_tp_dist = 1.00
-                # الهدف = تمدد زخم الدخول: متوسط الإكمال بعد حركة ≥1.2$
-                # يبلغ أحياناً +2.7 بعد صعود 1.5، لكن نلتزم جزءاً محافظاً
-                # من الزخم نفسه (45% منه، بحد أدنى 1.00$) لتثبيت الربح
-                # قبل أي انعكاس.
-                tp_ext = max(min_tp_dist, 0.45 * abs(momentum))
+                # الهدف = جزء محافظ من مقدار اللحاق المتوقع (45% منه،
+                # بحد أدنى 1.00$) لتثبيت الربح قبل أي انعكاس.
+                tp_ext = max(min_tp_dist, 0.45 * abs(catch_up))
                 if side == "SELL":
                     sl = mid + sl_dist
                     tp = mid - tp_ext
@@ -1139,24 +1440,35 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 print(
                     f"order-request side={side} mid={mid:.2f} "
                     f"sl={sl:.2f} tp={tp:.2f} sl_dist={sl_dist:.2f} "
-                    f"gap={gap:.2f} mom={momentum:+.2f} "
+                    f"gap={gap:.2f} yahoo_mom={momentum:+.2f} "
+                    f"plat_mom={plat_mom:+.2f} catch_up={catch_up:+.2f} "
+                    f"spread={_live_spread:.2f} fees~{_est_fees:.2f} "
                     f"tp_dist={tp_ext:.2f}"
                 )
+                # إنسانية: تأخير بشري قبل التنفيذ (محاكاة قرار المتداول)
+                # — القاعدة 2. يؤخّر إرسال الطلب دون تغيير منطق الإشارة.
+                _react = _human_reaction()
+                if _react > 0:
+                    print(f"human-reaction: waiting {_react:.1f}s "
+                          f"before order", flush=True)
+                    yield deferLater(reactor, _react, lambda: None)
                 try:
                     trad_pre = yield sess.get_trader()
                 except Exception:
                     trad_pre = None
-                vol = result["volume"]
+                vol = _jittered_volume(result["volume"])
                 # هام: البروكر (FP Markets) يرفض تعديل السول/الهدف بعد الفتح
                 # (ProtoOAAmendPositionSLTPReq -> TRADING_BAD_STOPS دائماً؛
                 #  تم التحقق تجريبياً بكل المقاييس والمسافات)، لذلك نرسل
                 # الـ stopLoss/takeProfit داخل طلب الفتح نفسه، ويُقبل فوراً.
+                # إنسانية (القاعدة 3): ملصق مقروء يشبه الاسم اليدوي — لا
+                # يكشف المنطق (عدم ذكر yahoo/gap/momentum/الفجوة إطلاقاً).
                 sl_units = _to_int(sl)
                 tp_units = _to_int(tp)
                 res = yield sess.open_market(
                     symbol_id, side, vol,
                     sl=sl_units, tp=tp_units,
-                    label=cbot.random_label(),
+                    label=_human_label(),
                     comment="",
                 )
                 stops_set = res.get("stops_set", True) if isinstance(res, dict) else True
@@ -1265,10 +1577,15 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             if stats is None:
                 reasons.append("warmup")
             elif config.MOMENTUM_ON and \
-                    abs(result.get("momentum", 0.0)) < config.MOMENTUM_MIN_USD:
-                reasons.append("momentum_small")
-            if abs(gap) > config.MAX_ENTRY_GAP_USD:
-                reasons.append("data_anomaly_gap")
+                    abs(result.get("catch_up", 0.0)) < config.MOMENTUM_MIN_USD:
+                reasons.append("catchup_small")
+            elif config.MOMENTUM_ON and \
+                    abs(result.get("catch_up", 0.0)) <= (_est_fees * 2.0):
+                reasons.append("fees_cover")
+            if spread_wide:
+                reasons.append("spread_wide")
+            if human_skip:
+                reasons.append("human_skip")
             if result.get("balance_usd", 0) < config.MIN_BALANCE_TO_TRADE:
                 reasons.append("balance_low")
             if cooldown_left > 0:
@@ -1277,8 +1594,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 reasons.append("session_closed")
             if not quality_session_now:
                 reasons.append("session_quality_blocked")
-            if result.get("gap_velocity", 0.0) > config.MAX_GAP_VELOCITY:
-                reasons.append("price_fast")
+            if result.get("platform_jump", 0.0) >= config.PRICE_JUMP_ANOMALY_USD:
+                reasons.append("price_anomaly")
             if trend_against:
                 reasons.append("trend_against")
             # دائرة Daily Loss و Consecutive Losses

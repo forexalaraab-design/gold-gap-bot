@@ -83,6 +83,11 @@ MOMENTUM_WINDOW_ROWS = int(_env_float("STRAT_MOMENTUM_WINDOW", 24))
 # الحركات ≥1.5$ هي الأكثر استمرارية، نطلب عتبة أدنى قليلاً لضمان
 # تكرار مقبول مع جودة دخول أعلى من فقط ≥1.5.
 MOMENTUM_MIN_USD = _env_float("STRAT_MOMENTUM_MIN", 1.20)
+# حارس شذوذ السعر: إذا تحرك سعر المنصة أكثر من هذا القدر خلال نافذة
+# الزخم (~80 ثانية) فهذا خلل شريط/سيولة — نغلق. قفزة ≥ 6$ في 80 ثانية
+# تكاد مستحيلة في XAUUSD السائل؛ القيمة مبنية على ملاحظة أن أكبر حركة
+# طبيعية ≈ 0.9$/دقيقة.
+PRICE_JUMP_ANOMALY_USD = _env_float("STRAT_PRICE_JUMP_ANOMALY", 6.0)
 
 # SL_AFTER_ENTRY_USD: المسافة الدنيا لوقف الخسارة بعد الفتح (بالفجوة/الوحدات).
 # عند 0.01 لوت (نقطة=$1) خُفّض من 3.0 إلى 2.5: مخاطرة أصغر ≈ $2.5/صفقة (طلب المستخدم).
@@ -112,6 +117,16 @@ MAX_TRADES_PER_DAY = int(_env_float("STRAT_MAX_TRADES_PER_DAY", 99999))
 FORCE_TEST_OPEN = _env_bool("STRAT_FORCE_TEST_OPEN", False)
 
 TRADING_FEES_PER_TRADE_LOT = _env_float("STRAT_FEES_PER_LOT", 8.0)
+# ===== اكتشاف العمولة والسبريد تلقائياً (2026-09-15) =====
+# السبريد يُقيس حياً كل دورة من (ask - bid) على cTrader — لا تقدير ثابت.
+# العمولة تُقرأ من كائن الصفقة (pos.commission) إن كانت متاحة، وإلا
+# تُقدَّر من TRADING_FEES_PER_TRADE_LOT (عمولة لكل لوت) وتُعيَّر عبر
+# متوسط العمولة الفعلية المسجلة من الصفقات المغلقة.
+# التكلفة الكلية (سبريد + عمولة) تُقيد من كل قرار: الدخول (فلكي يظل
+# |catch_up| > العتبة والتكلفة)، والإغلاق (net PnL يعكسها دائماً).
+SPREAD_GUARD_USD = _env_float("STRAT_SPREAD_GUARD", 0.80)
+COMMISSION_MIN_USD = _env_float("STRAT_COMMISSION_MIN", 0.05)
+# منع الدخول إذا فاق السبريد هذا الحد (تذبذب لحظي خارجي / سيولة شاذة).
 DYNAMIC_PROFIT_FLOOR_USD = _env_float("STRAT_PROFIT_FLOOR", 2.0)
 PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
 
@@ -159,7 +174,9 @@ SESSION_BLOCK_ON = os.environ.get("STRAT_SESSION_BLOCK_ON", "0") == "1"
 SESSION_BLOCK_START_HOUR = _env_float("STRAT_SESSION_BLOCK_START", 16.0)
 SESSION_BLOCK_END_HOUR = _env_float("STRAT_SESSION_BLOCK_END", 22.0)
 
-MAX_GAP_VELOCITY = _env_float("STRAT_MAX_VELOCITY", 2.0)
+# ملاحظة: MAX_GAP_VELOCITY أُلغي (02/02) — الحارس يستخدم الآن
+# PRICE_JUMP_ANOMALY_USD على platform_momentum، وحركة الذهب الطبيعية
+# (0.5-1$/دقيقة) لا تُشغّل النظام الجديد (6$ في ~80 ثانية = خلل بيانات).
 
 # فلتر الاتجاه القوي: في أيام الاتجاه (هبوط/صعود متواصل) يكون الذهب
 # خارج نطاق الارتداد، والدخول ضده = خسائر متتالية. نمنع الدخول إذا
@@ -203,3 +220,24 @@ MAX_HISTORY_ROWS = 2000
 # ===== Misc =====
 VERSION_REQ = True
 CONNECT_TIMEOUT = 30
+
+# ===== إنسانية التنفيذ (HUMANIZATION) — قواعد مرجعية ثابتة =====
+# الغرض: ألا يميز البروكر تلقائيَّاً أن الصفقات يديرها بوت (أنماط
+# الطلب المنتظمة، الملصقات العشوائية، الحجم الثابت، التوقيت المثالي
+# كلها "بصمات" آلية). هذه القواعد تُطبق على كل التحديثات القادمة.
+#
+# القاعدة 1: لا متطابق في الأوامر — التشتت العشوائي على SL/TP/الحجم
+#   ضمن حدودتي آمَن (لا تماس الضمانات).
+# القاعدة 2: تأخير بشري قبل الفتح/الإغلاق يعاير به المستخدم (رد فعل).
+# القاعدة 3: ملصق-اسم إنساني مقروء (ليس 6 رموز عشوائية آليّة).
+# القاعدة 4: أحياناً نُفوّت إشارة صالحة (الإنسان لا يلتقط كل شيء).
+# القاعدة 5: زمن حلقة غير صارم (تشتت بسيط في فترة الجرد).
+# القاعدة 6: لا نكشف أبداً منطق "الفجوة/القائد-التابع" في أي حقل
+#   يُرسل للبروكر (label/comment/clientIds) — لا ذكر لـ yahoo/gap/momentum.
+HUMANIZE_ON = _env_bool("STRAT_HUMANIZE_ON", True)
+HUMAN_REACTION_SEC_MIN = _env_float("STRAT_HUMAN_REACT_MIN", 2.0)
+HUMAN_REACTION_SEC_MAX = _env_float("STRAT_HUMAN_REACT_MAX", 7.0)
+HUMAN_SL_TP_JITTER_USD = _env_float("STRAT_HUMAN_SLTP_JITTER", 0.08)
+HUMAN_VOLUME_JITTER_FRAC = _env_float("STRAT_HUMAN_VOL_JITTER", 0.05)
+HUMAN_SKIP_SIGNAL_PROB = _env_float("STRAT_HUMAN_SKIP", 0.12)
+HUMAN_POLL_JITTER_SEC = _env_float("STRAT_HUMAN_POLL_JITTER", 1.0)

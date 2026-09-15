@@ -208,16 +208,23 @@ def live_loop():
                 global_price, source, source_ts = gp
             except Exception as exc:
                 print(f"{_ts(now)} global error: {exc!r}", flush=True)
-                yield deferLater(reactor, config.GLOBAL_POLL_SEC,
+                yield deferLater(reactor, _main._poll_jitter(),
                                 lambda: None)
                 continue
 
             spot = sess.latest_spot(symbol_id)
             if spot is None:
-                yield deferLater(reactor, config.GLOBAL_POLL_SEC,
+                yield deferLater(reactor, _main._poll_jitter(),
                                 lambda: None)
                 continue
             bid, ask, sp_ts = spot
+            # اكتشاف السبريد الحي (بالدولار/أونصة) من bid/ask cTrader —
+            # التكلفة الفعلية للدخول/الخروج. تُخزَّن لاستخدامها دائماً في
+            # حساب الرسوم وقرارات الفتح/الإغلاق.
+            result["spread_usd"] = (
+                (ask - bid) / config.SPOT_SCALE if (bid and ask)
+                else 0.0
+            )
             # الحماية: أحياناً يصل bid=0 (قبل أول تحديث). لا نحسب mid
             # من (bid+ask)/2 مع bid=0 — كان ينتج أسعاراً منتصفة في سجل
             # الصفقات القديمة. نستخدم المتاح فقط.
@@ -228,14 +235,14 @@ def live_loop():
                     mid = ask / config.SPOT_SCALE
                 else:
                     print(f"  SKIP tick: bid={bid} ask={ask} both zero", flush=True)
-                    yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+                    yield deferLater(reactor, _main._poll_jitter(), lambda: None)
                     continue
             else:
                 mid = (bid + ask) / 2 / config.SPOT_SCALE
             # Sanity check: XAUUSD should be around 4000-5000
             if not (4000 <= mid <= 5000):
                 print(f"  SKIP tick: mid={mid:.2f} out of range, bid={bid} ask={ask}", flush=True)
-                yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+                yield deferLater(reactor, _main._poll_jitter(), lambda: None)
                 continue
             gap = mid - global_price
 
@@ -338,9 +345,11 @@ def live_loop():
             # ----- تنفيذ دورة التداول الكاملة (فتح + إغلاق) -----
             closing_mgr_full = _main.ClosingManager(state, config)
             closing_mgr_full.init_from_state(state)
-            result["gap_velocity"] = _main.gap_velocity(rows)
             result["trend_slope"] = _main.trend_slope(rows)
-            result["momentum"] = _main.platform_momentum(rows)
+            result["momentum"] = _main.yahoo_momentum(rows)
+            result["platform_momentum"] = _main.platform_momentum(rows)
+            result["platform_jump"] = abs(result["platform_momentum"])
+            result["catch_up"] = result["momentum"] - result["platform_momentum"]
             try:
                 yield _main.run_trade_cycle(
                     sess, mid, global_price, stats,
@@ -377,7 +386,8 @@ def live_loop():
                 z_str = "-"
 
             print(f"{_ts(now)} mid={mid:.2f} global={global_price:.2f} "
-                  f"gap={gap:.2f} z={z_str} action={action_str}", flush=True)
+                  f"gap={gap:.2f} spread={result.get('spread_usd', 0):.2f} "
+                  f"z={z_str} action={action_str}", flush=True)
 
             # ----- الحفظ الدوري كل 30 ثانية -----
             if now - last_save >= 30:
@@ -402,7 +412,7 @@ def live_loop():
                 _main.save_state(state)
                 last_save = now
 
-            yield deferLater(reactor, config.GLOBAL_POLL_SEC, lambda: None)
+            yield deferLater(reactor, _main._poll_jitter(), lambda: None)
 
         # --- نهاية الدورة: نحافظ على الصفقة المفتوحة في الحالة؛
         #     لا نُغلقها زوراً (هذا كان يسبب تسجيل إغلاقات وهمية وفتح

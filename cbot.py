@@ -56,7 +56,20 @@ def _is_open_position(order):
 
 
 def random_label(n=6):
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
+    """اسم صفقة بشري مقروء (وليس رموزاً عشوائية آليّة).
+
+    القاعدة 3 المرجعية: ألا تفضح ملصقات الأوامر أنها من بوت. نولّد
+    اسماً يشبه تعليق متداول يدوي، ونحافظ على التوقيع (n مُتجاهَل).
+    """
+    try:
+        import main as _m
+        return _m._human_label()
+    except Exception:
+        first = ("clear", "trade", "gold", "steady", "manual", "afx",
+                 "alpha", "delta", "prime", "north", "silver")
+        second = ("one", "two", "five", "main", "quick", "echo", "nova",
+                  "sun", "moon", "peak", "core", "swift", "round")
+        return random.choice(first) + " " + random.choice(second)
 
 
 def _unwrap(msg):

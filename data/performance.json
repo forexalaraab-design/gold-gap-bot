@@ -1,12 +1,12 @@
 {
-  "trades": 106,
-  "wins": 66,
+  "trades": 107,
+  "wins": 67,
   "losses": 40,
-  "win_rate": 62.26,
-  "total_pnl_usd": -240.41,
-  "avg_pnl_usd": -2.268,
+  "win_rate": 62.62,
+  "total_pnl_usd": -238.63,
+  "avg_pnl_usd": -2.23,
   "best_usd": 61.6,
   "worst_usd": -121.14,
   "max_drawdown_usd": -256.77,
-  "updated": "2026-09-15T10:23:04Z"
+  "updated": "2026-09-15T10:51:15Z"
 }

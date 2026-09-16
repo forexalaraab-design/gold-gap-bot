@@ -1,0 +1,66 @@
+name: watchdog
+
+on:
+  schedule:
+    # يفحص كل 20 دقيقة — أوسع من سلسلة البوت (~3.5د) فلا يتعارض،
+    # ويتدخل فقط إذا صمت البوت أكثر من الحد (15 دقيقة افتراضياً).
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+    inputs:
+      max_silence_min:
+        description: "أقصى صمت (دقائق) قبل إعادة الإطلاق" 
+        required: false
+        default: "15"
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  heal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Detect silence and re-dispatch bot
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
+        run: |
+          MAX="${{ github.event.inputs.max_silence_min }}"
+          if [ -z "$MAX" ]; then MAX=15; fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "DISPATCH_PAT not set; watchdog is read-only, relying on cron only"
+            exit 0
+          fi
+          NOW=$(date +%s)
+          LAST=$(
+            gh api "repos/${{ github.repository }}/commits?path=data/&per_page=1" \
+              --jq '.[0].commit.committer.date' 2>/dev/null
+          )
+          if [ -z "$LAST" ] || [ "$LAST" = "null" ]; then
+            echo "no data commits found -> treating chain as dead"
+            TS=0
+          else
+            TS=$(date -d "$LAST" +%s)
+          fi
+          AGE=$(( (NOW - TS) / 60 ))
+          if [ "$AGE" -lt 0 ]; then AGE=0; fi
+          echo "last_data_commit_min_ago=$AGE max_silence_min=$MAX"
+          if [ "$AGE" -le "$MAX" ]; then
+            echo "bot alive ($AGE min <= $MAX) — nothing to do"
+            exit 0
+          fi
+          echo "BOT SILENT for $AGE min (> $MAX) — re-dispatching"
+          for i in 1 2 3; do
+            if gh workflow run goldgap.yml --ref main 2>/dev/null; then
+              echo "re-dispatch OK on attempt $i; chain healed automatically"
+              exit 0
+            fi
+            echo "re-dispatch attempt $i failed, retrying"
+            sleep 8
+          done
+          echo "re-dispatch FAILED after 3 attempts — manual intervention required"
+          exit 1

@@ -12,7 +12,12 @@ permissions:
 
 concurrency:
   group: goldgap
-  cancel-in-progress: false
+  # ملاحظة 2026-09-15: كانت false وسبّبت وقفاً دائماً — دورة عالقة في
+  # "queued" احتكرت قفل المجموعة فاصطفّت خلفها كل الدورات اللاحقة
+  # وأُلغيت (توقف البوت من 21:20). الآن true: أي دورة جديدة تنتزع من
+  # الدورة العالقة/المعلّقة وتنطلق — السلسلة لا تموت أبداً. التداخل
+  # الحقيقي يتجنّبه أصلاً حارس overlap في خطوة Self-dispatch أدناه.
+  cancel-in-progress: true
 
 jobs:
   run-bot:

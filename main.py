@@ -447,20 +447,19 @@ def _detected_spread_usd(result=None):
 
     القاعدة المرجعية 2026-09-15: التكلفة الفعلية للصفقة تشمل السبريد
     الحي (المقيس من cTrader bid/ask) + العمولة الفعلية + السواب. لا
-    نستخدم تقديراً ثابتاً للسبريد بعد الآن.
+    نستخدم تقديراً ثابتاً للسبريد بعد الآن — ونقرأ القياس من أي مصدر
+    متاح (spread_usd ثم _spread_live) دون عودة مبكرة بـ 0 تُفقد المصدر
+    الثاني (كانت تُسقط التقدير الثابت 0.40 على check_close المارر عبر
+    _spread_live — فأُصبح التريلنج يتطلب ربحاً أعلى بكثير).
     """
-    try:
-        if result is not None:
-            return float(result.get("spread_usd") or 0.0)
-    except (TypeError, ValueError):
-        pass
-    try:
-        if result is not None:
-            _rs = result.get("_spread_live") or 0.0
-            if _rs:
-                return float(_rs)
-    except (TypeError, ValueError):
-        pass
+    if result is not None:
+        for key in ("spread_usd", "_spread_live"):
+            try:
+                v = float(result.get(key) or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if v > 0:
+                return v
     return 0.0
 
 
@@ -653,8 +652,12 @@ class ClosingManager:
         entry_price = st_pos.get("entry_price")
         opened_at = st_pos.get("opened_at")
 
-        # طพวกติดตามกำไร
-        peak = float(st_pos.get("pnl_peak_usd") or net_pnl)
+        # تتبع الأرباح: أعلى صافي ربح بلغته الصفقة منذ فتحها. تبدأ من
+        # 0.0 ولا تنزل تحت الصفر (القمة الحقيقية، لا القيمة الحالية
+        # السالبة) حتى يعمل التريلنج صحيحاً عند وصول الربح لدرجة التفعيل.
+        _stored_peak = st_pos.get("pnl_peak_usd")
+        peak = float(_stored_peak) if _stored_peak is not None else 0.0
+        peak = max(peak, 0.0)
         peak = max(peak, net_pnl)
 
         # إنسانية: عتبات الربح/التريلنج تختلف قليلاً من صفقة لأخرى (ثابتة
@@ -761,18 +764,20 @@ def _record_close(state, rec):
     trades.append(rec)
     if len(trades) > config.MAX_CLOSED_TRADES:
         state["closed_trades"] = trades[-config.MAX_CLOSED_TRADES:]
-    # معايرة ذاتية للعمولة الفعلية (التكلفة الحية تُقسم بين عمولة + سواب
-    # + سبريد؛ نعاير متوسط العمولة من الصفقات المغلقة الفعلية ليصبح
-    # التقدير اللاحق أدق). تُخزن في state.perf.measured_commission_usd.
+    # معايرة ذاتية لعمولة الصفقة الفعلية: نعاير متوسط الفرق (الرسوم
+    # الكلية − السبريد المقيس عند الإغلاق) لأنه المكوّن الذي يمثل
+    # العمولة فعلاً (السواب صفر هنا). تُخزَّن في state.perf
+    # كـ measured_commission_usd ليصبح التقدير اللاحق أدق.
     try:
         _fees = rec.get("fees_usd")
         if _fees is not None:
             _fees = float(_fees)
-        if _fees and _fees > 0:
+        comm_est = max(0.0, _fees - float(rec.get("spread_usd") or 0.0))
+        if comm_est and comm_est > 0:
             perf = state.setdefault("perf", {})
             _n = int(perf.get("measured_count") or 0)
             _old = float(perf.get("measured_commission_usd") or 0.0)
-            _new = (_old * _n + _fees) / (_n + 1)
+            _new = (_old * _n + comm_est) / (_n + 1)
             perf["measured_count"] = _n + 1
             perf["measured_commission_usd"] = round(_new, 4)
     except (TypeError, ValueError):
@@ -1003,7 +1008,12 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                         _sfees = position_fees_usd(
                             pos_fake, digits, result=result, state=state)
                         pnl_now = gross_now - _sfees
-                    peak_now = float(sp.get("pnl_peak_usd") or 0)
+                    # القمة تُقرأ من الحالة وتبدأ من 0.0 (صافي أعلى ربح)
+                    # وتُحفظ في فرع الاحتفاظ أدناه حتى لا تبقى قديمة —
+                    # التريلنج يحتاج قمة حية عبر الدورات ليعمل.
+                    _spk = sp.get("pnl_peak_usd")
+                    peak_now = float(_spk) if _spk is not None else 0.0
+                    peak_now = max(peak_now, 0.0)
                     peak_now = max(peak_now, pnl_now)
                     # طبقات الإغلاق — نفس معايير ClosingManager.check_close
                     close_reason_state = None
@@ -1083,6 +1093,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                                 "pnl_units": pnl_net_close,
                                 "pnl_usd": pnl_net_close,
                                 "fees_usd": round(_sfees, 2),
+                                "spread_usd": round(_detected_spread_usd(result), 2),
                                 "pnl_net_usd": pnl_net_close,
                                 "reason": close_reason_state or "price_anomaly",
                                 "pnl_peak_usd": round(float(sp.get("pnl_peak_usd", 0)), 2),
@@ -1104,7 +1115,12 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                                 print(f"state-force-close failed: {exc!r}")
                                 result["action"] = "close_pending:state"
                     else:
+                        # حفظ القمة الحية في الحالة — بعدها يقرأ التريلنج
+                        # القمة الحقيقية الصافية لا القيمة القديمة.
+                        sp["pnl_peak_usd"] = round(peak_now, 2)
+                        sp["pnl_last_usd"] = round(pnl_now, 2)
                         print(f"state-hold: pnl={pnl_now:.2f} "
+                              f"peak={peak_now:.2f} "
                               f"age={age_sec_now/3600:.1f}h — keeping",
                               flush=True)
                         result["action"] = "hold:state"
@@ -1273,6 +1289,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     "pnl_units": pnl_net,
                     "pnl_usd": pnl_net,
                     "fees_usd": round(fees_est, 2),
+                    "spread_usd": round(_detected_spread_usd(result), 2),
                     "pnl_net_usd": pnl_net,
                     "reason": close_reason,
                     "pnl_peak_usd": round(

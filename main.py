@@ -1409,6 +1409,18 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         _est_fees = _live_spread + _commission_usd(None, state=state) \
             if _live_spread > 0 else 0.0
 
+        # تأكيد الدورتين (2026-09-16 — نقاط دخول أقوى): لا ندخل إلا إذا
+        # كانت إشارة اللحاق قوية ومستمرة بنفس الاتجاه في الدورة السابقة
+        # كذلك — يقتل دخول الومضات (whipsaw) مصدر معظم الخسائر الصغيرة.
+        # تُسجَّل كل دورة في state فتبقى مستمرة عبر الجلسات (تُحفظ دورياً).
+        _prev_catch = state.get("_prev_catch_up")
+        _confirm_ok = (
+            _prev_catch is not None
+            and (_prev_catch * catch_up) >= 0
+            and abs(_prev_catch) >= 0.7 * config.MOMENTUM_MIN_USD
+        )
+        state["_prev_catch_up"] = catch_up
+
         signal_ready = (
             config.MOMENTUM_ON
             and abs(catch_up) >= config.MOMENTUM_MIN_USD
@@ -1416,6 +1428,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             # الإشارة يجب أن تغطي التكلفة (سبريد+عمولة) وتبقى ربحاً محتملاً:
             # نمنع الدخول عندما تلتهم التكلفة الزخم (جودة سلبية مضمونة).
             and abs(catch_up) > (_est_fees * 2.0)
+            and _confirm_ok
         )
 
         # إنسانية (القاعدة 4): أحياناً يُفوّت المتداول إشارة صالحة —

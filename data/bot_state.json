@@ -1,36 +1,16 @@
 {
-  "position": {
-    "positionId": 41639343,
-    "side": "2",
-    "entry_gap": -47.54500000000007,
-    "entry_price": 4290.455,
-    "opened_at": "2026-09-17T02:08:40Z",
-    "pnl_peak_usd": 0.0,
-    "pnl_track": [
-      -1.64,
-      -1.32,
-      -1.75,
-      -1.4,
-      -2.08,
-      -2.81,
-      -2.77
-    ],
-    "stop_loss": 4292.8895589784315,
-    "take_profit": 4289.31875,
-    "sltp_set": false,
-    "pnl_last_usd": -2.77
-  },
+  "position": null,
   "stats": {
     "n": 48,
-    "mean": 4292.17,
-    "sd": 3.792103217017021,
-    "median": 4290.535,
-    "mad": 2.4092249999999997
+    "mean": 4287.478854166667,
+    "sd": 1.4058998933761284,
+    "median": 4287.280000000001,
+    "mad": 1.4529479999993526
   },
-  "last_run": "2026-09-17T02:09:08Z",
+  "last_run": "2026-09-17T02:12:34Z",
   "money_digits": 2,
   "entry_balance_units": 997988,
-  "cooldown_until": 0,
+  "cooldown_until": 1789612279.7783332,
   "closed_trades": [
     {
       "ts_open": "2026-08-31T15:38:37Z",
@@ -2365,15 +2345,33 @@
       "pnl_net_usd": -3.17,
       "reason": "max_loss",
       "pnl_peak_usd": 0.0
+    },
+    {
+      "ts_open": "2026-09-17T02:08:40Z",
+      "ts_close": "2026-09-17T02:09:37Z",
+      "side": "2",
+      "entry_gap": -47.54500000000007,
+      "close_gap": -49.93499999999949,
+      "entry_price": 4290.455,
+      "close_price": 4287.465,
+      "pnl_units": -3.18,
+      "pnl_usd": -3.18,
+      "fees_usd": 0.19,
+      "spread_usd": 0.11,
+      "pnl_net_usd": -3.18,
+      "reason": "max_loss",
+      "pnl_peak_usd": 0.0
     }
   ],
   "perf": {
-    "running_daily_pnl": -2.95,
-    "consecutive_losses": 1,
-    "trades_today": 12,
-    "last_updated": "2026-09-17T02:08:40Z"
+    "running_daily_pnl": -6.13,
+    "consecutive_losses": 2,
+    "trades_today": 13,
+    "last_updated": "2026-09-17T02:09:37Z",
+    "measured_count": 1,
+    "measured_commission_usd": 0.08
   },
   "cleanup_done_internal": true,
-  "_last_spread_usd": 0.12,
-  "_anomaly_jump": 0.25500000000010914
+  "_last_spread_usd": 0.09,
+  "_anomaly_jump": 0.8949999999995271
 }

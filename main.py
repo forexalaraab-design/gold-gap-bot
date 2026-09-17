@@ -712,29 +712,11 @@ class ClosingManager:
             if now - opened_dt.timestamp() >= 120:
                 return True, "no_broker_stops"
 
-        # --- الطبقة 5: عودة السعر إلى وسطه المتداول (Mean Reversion) ---
-        # إغلاق إذا عاد mid إلى مركز قناته الحالي (Z_EXIT) أي أن السعر تلاشى
-        # انحراف إشارة الدخول. تُحسب على سعر المنصة نفسه (mid) وليس على
-        # السعر الخارجي global (غير متزامن وقد تحرك دون أن يتحرك mid).
-        # ملاحظة: لا نغلق بخسارة هنا ما لم تكن الحماية الأخرى (max_loss.
-        stats = st_pos.get("_stats") or stats
-        cur_scale = 0.0
-        cur_centre = None
-        if stats is not None:
-            cur_scale = (
-                stats.get("mad") if self.cfg.USE_MAD and stats.get("mad") else 0
-            ) or stats.get("sd", 0.0)
-            cur_centre = (
-                stats["median"] if self.cfg.USE_MAD and stats.get("mad")
-                else stats.get("mean")
-            )
-        if cur_scale > 0 and cur_centre is not None:
-            z_now = (mid - cur_centre) / cur_scale
-            if abs(z_now) <= self.cfg.Z_EXIT:
-                if net_pnl >= 0:
-                    return True, "z_revert"
-                # إغلاق الانحراف بلا ربح محقق: لا نثبّت الخسارة هنا —
-                # نترك الحماية الحقيقية (max_loss/max_hold/ستوب السيرفر)
+        # --- (الطبقة 5 أُزيلت 2026-09-16) عودة السعر لمركز قناته ---
+        # بيانات 185 صفقة: z_revert كان أول نقطة اكتمال للّحاق (مركز قناة
+        # المنصة) — أي بداية الحركة الصحيحة لا نهايتها؛ 44 صفقة متوسطة
+        # +0.48$ فقط = أرباح مبتورة. نظام الإغلاق الجديد يعتمد على ستوب
+        # سيرفر 2.0 + TP سيرفر (1.40+) + تريلنج فوق الهدف لا إغلاق مبكر.
         # حارس أمان شاذ: قفزة تلقائية من إشارة الزخم (تُملأ على النحو
         # التالي live/state). لو كانت حركة mid خلال ~80 ثانية غير معقولة
         # فهذا خلل شريط — نغلق لحماية الصفقة.
@@ -1050,20 +1032,9 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                             not sp.get("sltp_set") and \
                             age_sec_now > 120:
                         close_reason_state = "no_broker_stops"
-                    # الارتداد: عودة سعر المنصة إلى مركز قنته الحالي
-                    if close_reason_state is None and stats:
-                        _scale = (
-                            stats.get("mad") if config.USE_MAD
-                            and stats.get("mad") else 0
-                        ) or stats.get("sd", 0.0)
-                        _centre = (
-                            stats["median"] if config.USE_MAD
-                            and stats.get("mad") else stats.get("mean")
-                        )
-                        if _scale > 0 and _centre is not None:
-                            z_now = (mid - _centre) / _scale
-                            if pnl_now >= 0 and abs(z_now) <= config.Z_EXIT:
-                                close_reason_state = "z_revert"
+                    # (الارتداد z_revert أُزيل 2026-09-16 — مركز القناة نقطة
+                    # بدء اللحاق لا خروجه؛ نظام الإغلاق الجديد: ستوب/TP سيرفر
+                    # + تريلنج فوق الهدف.)
                     max_age = config.MAX_HOLD_HOURS * 3600
                     # حارس شذوذ: قفزة غير صحية في سعر المنصة خلال ~80 ثانية
                     # (تكاد مستحيلة في الذهب) — تعني خلل شريط/سيولة. لا نستخدم
@@ -1479,10 +1450,13 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 # كل مرة — تشتت بسيط على المسافة ضمن حدود آمنة (القاعدة 1).
                 sl_dist = _jitter_usd(config.SL_AFTER_ENTRY_USD,
                                       config.HUMAN_SL_TP_JITTER_USD)
-                min_tp_dist = 1.00
-                # الهدف = جزء محافظ من مقدار اللحاق المتوقع (45% منه،
-                # بحد أدنى 1.00$) لتثبيت الربح قبل أي انعكاس.
-                tp_ext = max(min_tp_dist, 0.45 * abs(catch_up))
+                # الهدف (نظام الإغلاق 2026-09-16): لا نقطع اللحاق عند 1.00
+                # الثابت — نأخذ نصيباً عادلاً منه. حد أدنى 1.40$ (عند لوت
+                # 0.01 = 1.4 نقطة) و50% من مقدار اللحاق للموجات القوية،
+                # فيثبّت ربحاً حقيقياً قبل أي انعكاس (بيانات 185 صففة:
+                # خروج 1.00 يترك 0.2-0.6$ لكل صفقة على الطاولة).
+                min_tp_dist = 1.40
+                tp_ext = max(min_tp_dist, 0.50 * abs(catch_up))
                 if side == "SELL":
                     sl = mid + sl_dist
                     tp = mid - tp_ext

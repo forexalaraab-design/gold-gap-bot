@@ -139,12 +139,13 @@ PROFIT_FLOOR_PER_OLOT_USD = _env_float("STRAT_PROFIT_FLOOR_LOT", 0.2)
 PROFIT_TARGET_USD = _env_float("STRAT_PROFIT_TARGET", 1.60)
 
 # TRAILING_ARM_USD: تتبع الأرباح يبدأ عندما يصل الـ PnL الصافي إلى هذه القيمة.
-# أُنصف (1.50 → 0.75) موازنة لخفض اللوت.
-TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 0.75)
+# 2026-09-16 (نظام الإغلاق الجديد): 0.75 → 1.40 — التريلنج يحمي الفائض فوق
+# الهدف (TP سيرفر ≈ 1.40) ولا يقطع الأرباح الصاعدة قبل بلوغه.
+TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 1.40)
 
-# TRAILING_BACK_USD: إذا تراجع الربح من ذروته بهذا المقدار، نغلق الصفقة.
-# أُنصف (0.60 → 0.30) موازنة لخفض اللوت.
-TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.30)
+# TRAILING_BACK_USD: إذا تراجع الربح من ذروته بهذا المقدار نغلق الصفقة.
+# 2026-09-16: 0.30 → 0.45 — يرتخي قليلاً كي لا يُقطع بقعة سعرية عابرة.
+TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.45)
 
 # MAX_HOLD_HOURS: أقصى وقت للحفاظ على الصفقة مفتوحة قبل الإغلاق الإلزامي.
 # 2026-09-16: 2.5 → 1.0 — خلفية (backstop) أضيق شكلاً مع القاعدة الجذرية

@@ -1,69 +1,17 @@
 {
-  "position": {
-    "positionId": 41664548,
-    "side": "2",
-    "entry_gap": -38.55499999999938,
-    "entry_price": 4344.345,
-    "opened_at": "2026-09-17T23:26:39Z",
-    "pnl_peak_usd": 0.39,
-    "pnl_track": [
-      -0.41,
-      -0.11,
-      -0.05,
-      -0.06,
-      -0.05,
-      0.02,
-      -0.36,
-      -0.24,
-      -0.16,
-      -0.1,
-      -0.9,
-      -1.1,
-      -0.92,
-      -0.73,
-      -0.55,
-      -0.56,
-      -0.44,
-      -0.43,
-      -0.13,
-      0.31,
-      0.34,
-      0.39,
-      0.39,
-      0.19,
-      0.16,
-      0.13,
-      0.19
-    ],
-    "stop_loss": 4342.376291219631,
-    "take_profit": 4345.745,
-    "sltp_set": false,
-    "pnl_last_usd": 0.19
-  },
+  "position": null,
   "stats": {
     "n": 48,
-    "mean": 4345.0346875000005,
-    "sd": 0.23008186852385498,
-    "median": 4345.005,
-    "mad": 0.1927380000001618
+    "mean": 4346.545729166667,
+    "sd": 1.111408436319777,
+    "median": 4346.78,
+    "mad": 1.3269270000006472
   },
-  "last_run": "2026-09-17T23:52:31Z",
+  "last_run": "2026-09-17T23:56:03Z",
   "money_digits": 2,
   "entry_balance_units": 1003346,
-  "cooldown_until": 0,
+  "cooldown_until": 1789690402.7199967,
   "closed_trades": [
-    {
-      "ts_open": "2026-08-31T15:38:37Z",
-      "ts_close": "2026-08-31T15:42:56Z",
-      "side": "BUY",
-      "entry_gap": -3.5649999999996,
-      "close_gap": -0.9899999999997817,
-      "entry_price": null,
-      "close_price": 4430.01,
-      "pnl_units": 0.4,
-      "pnl_usd": 0.4,
-      "reason": "stopped_or_external"
-    },
     {
       "ts_open": "2026-08-31T15:43:41Z",
       "ts_close": "2026-08-31T15:48:20Z",
@@ -3089,16 +3037,34 @@
       "pnl_net_usd": -3.35,
       "reason": "max_loss",
       "pnl_peak_usd": 0.0
+    },
+    {
+      "ts_open": "2026-09-17T23:26:39Z",
+      "ts_close": "2026-09-17T23:53:24Z",
+      "side": "2",
+      "entry_gap": -38.55499999999938,
+      "close_gap": -36.42999999999938,
+      "entry_price": 4344.345,
+      "close_price": 4346.47,
+      "pnl_units": 1.91,
+      "pnl_usd": 1.91,
+      "fees_usd": 0.22,
+      "spread_usd": 0.14,
+      "pnl_net_usd": 1.91,
+      "reason": "profit_target",
+      "pnl_peak_usd": 1.91
     }
   ],
   "perf": {
-    "running_daily_pnl": -34.38,
-    "consecutive_losses": 1,
-    "trades_today": 100,
-    "last_updated": "2026-09-17T23:26:39Z"
+    "running_daily_pnl": -32.47,
+    "consecutive_losses": 0,
+    "trades_today": 101,
+    "last_updated": "2026-09-17T23:53:24Z",
+    "measured_count": 1,
+    "measured_commission_usd": 0.08
   },
   "cleanup_done_internal": true,
-  "_last_spread_usd": 0.0,
+  "_last_spread_usd": 0.09,
   "_anomaly_jump": 0.3000000000001819,
-  "_prev_catch_up": 1.6599999999998545
+  "_prev_catch_up": 1.0
 }

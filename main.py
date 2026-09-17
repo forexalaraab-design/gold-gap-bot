@@ -703,6 +703,15 @@ class ClosingManager:
             if open_hours >= self.cfg.MAX_HOLD_HOURS:
                 return True, "max_hold_time"
 
+        # --- الطبقة 4ب: صفقة بلا وقوف سيرفر (SL/TP) تُغلق فوراً ---
+        # القاعدة الجذرية 2026-09-16: لا يجوز أن تبقى أي صفقة مفتوحة دون
+        # SL/TP مقبول على السيرفر — لو توقف البوت لساعات بقيت معلقة.
+        # أي صفقة من دون الحماية تُغلق قسراً فور تجاوز الدقائق الأولى.
+        if opened_at and not st_pos.get("sltp_set"):
+            opened_dt = datetime.fromisoformat(opened_at)
+            if now - opened_dt.timestamp() >= 120:
+                return True, "no_broker_stops"
+
         # --- الطبقة 5: عودة السعر إلى وسطه المتداول (Mean Reversion) ---
         # إغلاق إذا عاد mid إلى مركز قناته الحالي (Z_EXIT) أي أن السعر تلاشى
         # انحراف إشارة الدخول. تُحسب على سعر المنصة نفسه (mid) وليس على
@@ -1034,6 +1043,13 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                         close_reason_state = "max_loss"
                     if close_reason_state is None and age_sec_now > max_age:
                         close_reason_state = "max_hold_time"
+                    # القاعدة الجذرية 2026-09-16: أي صفقة بلا SL/TP سيرفر
+                    # تُغلق قسراً فور تجاوز الدقائق الأولى — لا معلّق أبداً
+                    # حتى لو توقف البوت بعدها (السيرفر هو الضامن الفعلي).
+                    if close_reason_state is None and \
+                            not sp.get("sltp_set") and \
+                            age_sec_now > 120:
+                        close_reason_state = "no_broker_stops"
                     # الارتداد: عودة سعر المنصة إلى مركز قنته الحالي
                     if close_reason_state is None and stats:
                         _scale = (
@@ -1495,6 +1511,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     comment="",
                 )
                 stops_set = res.get("stops_set", True) if isinstance(res, dict) else True
+                if not stops_set:
+                    print("  WARN: broker did NOT accept SL/TP at open — "
+                          "position will be force-closed within 2 min "
+                          "(no_broker_stops)", flush=True)
                 order = res["order"] if isinstance(res, dict) else res.order
                 # تسجيل entry_price من order.executionPrice أو res.position.price
                 order_exec_price = (

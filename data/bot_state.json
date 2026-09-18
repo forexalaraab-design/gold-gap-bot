@@ -1,16 +1,60 @@
 {
-  "position": null,
+  "position": {
+    "positionId": 41688226,
+    "side": "2",
+    "entry_gap": -36.25,
+    "entry_price": 4386.05,
+    "opened_at": "2026-09-18T17:10:26Z",
+    "pnl_peak_usd": 0.36,
+    "pnl_track": [
+      -0.54,
+      -0.85,
+      -0.62,
+      -0.34,
+      -0.48,
+      -0.4,
+      -0.36,
+      -0.69,
+      -0.12,
+      0.13,
+      -0.09,
+      -0.05,
+      -0.26,
+      -0.13,
+      -0.37,
+      -0.45,
+      -0.93,
+      -1.03,
+      -0.87,
+      -1.11,
+      -0.28,
+      -0.19,
+      0.08,
+      0.36,
+      0.06,
+      -0.19,
+      -0.83,
+      -1.24,
+      -1.24,
+      -1.71,
+      -2.12
+    ],
+    "stop_loss": 4383.999833873166,
+    "take_profit": 4387.45,
+    "sltp_set": false,
+    "pnl_last_usd": -2.12
+  },
   "stats": {
     "n": 48,
-    "mean": 4385.856979166667,
-    "sd": 0.5381407507723921,
-    "median": 4385.637500000001,
-    "mad": 0.5967464999988673
+    "mean": 4385.929270833333,
+    "sd": 0.7467076598937316,
+    "median": 4386.055,
+    "mad": 0.6375179999990831
   },
-  "last_run": "2026-09-18T17:09:36Z",
+  "last_run": "2026-09-18T17:13:00Z",
   "money_digits": 2,
-  "entry_balance_units": 1003554,
-  "cooldown_until": 1789751415.2920868,
+  "entry_balance_units": 1003385,
+  "cooldown_until": 0,
   "closed_trades": [
     {
       "ts_open": "2026-09-11T19:55:09Z",
@@ -3126,13 +3170,11 @@
   "perf": {
     "running_daily_pnl": -11.18,
     "consecutive_losses": 0,
-    "trades_today": 82,
-    "last_updated": "2026-09-18T16:50:17Z",
-    "measured_count": 1,
-    "measured_commission_usd": 0.08
+    "trades_today": 83,
+    "last_updated": "2026-09-18T17:10:26Z"
   },
   "cleanup_done_internal": true,
-  "_last_spread_usd": 0.06,
-  "_anomaly_jump": 0.10500000000047294,
-  "_prev_catch_up": -1.0799999999999272
+  "_last_spread_usd": 0.09,
+  "_anomaly_jump": 1.7349999999996726,
+  "_prev_catch_up": 2.505000000000109
 }

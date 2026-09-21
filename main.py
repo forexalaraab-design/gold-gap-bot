@@ -1380,16 +1380,23 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         _est_fees = _live_spread + _commission_usd(None, state=state) \
             if _live_spread > 0 else 0.0
 
-        # تأكيد الدورتين (2026-09-16 — نقاط دخول أقوى): لا ندخل إلا إذا
-        # كانت إشارة اللحاق قوية ومستمرة بنفس الاتجاه في الدورة السابقة
-        # كذلك — يقتل دخول الومضات (whipsaw) مصدر معظم الخسائر الصغيرة.
-        # تُسجَّل كل دورة في state فتبقى مستمرة عبر الجلسات (تُحفظ دورياً).
+        # تأكيد ثلاث دورات (2026-09-21 — نقاط دخول أقوى دون خفض العدد):
+        # كان تأكيد دورتين. الآن لا ندخل إلا إذا استمرت إشارة اللحاق بنفس
+        # الاتجاه بقوة في الدورات 3 المتتالية الأخيرة (~15 ثانية) — يؤخر
+        # الدخول لحظياً ويقتل الومضات القصيرة جداً دون حرمان كبير من
+        # الدخولات المشروعة (الاتجاه القوي يبقى عدة دقائق). تُخزَّن في
+        # state فتبقى مستمرة عبر الجلسات (تُحفظ دورياً).
+        _prev2_catch = state.get("_prev2_catch_up")
         _prev_catch = state.get("_prev_catch_up")
         _confirm_ok = (
             _prev_catch is not None
+            and _prev2_catch is not None
             and (_prev_catch * catch_up) >= 0
-            and abs(_prev_catch) >= 0.7 * config.MOMENTUM_MIN_USD
+            and (_prev2_catch * catch_up) >= 0
+            and abs(_prev_catch) >= 0.85 * config.MOMENTUM_MIN_USD
+            and abs(_prev2_catch) >= 0.85 * config.MOMENTUM_MIN_USD
         )
+        state["_prev2_catch_up"] = _prev_catch
         state["_prev_catch_up"] = catch_up
 
         signal_ready = (

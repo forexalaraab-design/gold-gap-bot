@@ -147,6 +147,22 @@ TRAILING_ARM_USD = _env_float("STRAT_TRAILING_ARM", 1.40)
 # 2026-09-16: 0.30 → 0.45 — يرتخي قليلاً كي لا يُقطع بقعة سعرية عابرة.
 TRAILING_BACK_USD = _env_float("STRAT_TRAILING_BACK", 0.45)
 
+# NO_PROGRESS_* (2026-09-21 — معالجة الصفقات الخاسرة): صفقة لم تبلغ
+# أي ربح (ذروة < NO_PROGRESS_PEAK_USD) وما تزال خاسرة بعد
+# NO_PROGRESS_AFTER_SEC من الفتح هي صفقة "ميتة" — الركوب بها نحو
+# -3.0 إهدار. نخرجها مبكراً (سبب no_progress) دون أن نمس المتداولات
+# الرابحة (أغلبها تنتهي خلال 3-4 دقائق).
+NO_PROGRESS_AFTER_SEC = _env_float("STRAT_NO_PROGRESS_AFTER_SEC", 300)
+NO_PROGRESS_PEAK_USD = _env_float("STRAT_NO_PROGRESS_PEAK", 0.30)
+NO_PROGRESS_MAX_LOSS_USD = _env_float("STRAT_NO_PROGRESS_MAX_LOSS", 0.45)
+
+# SAME_SIDE_LOSS_GUARD_MIN (2026-09-21): بعد خسارة مغلقة لا نعيد الدخول
+# بنفس الاتجاه خلال هذه النافذة إلا إذا كانت الإشارة الجديدة أقوى بكثير
+# (ضرب SAME_SIDE_LOSS_STRONG_MULT من العتبة). اليوم 33/34 صفقة بنفس
+# الجهة وأغلب الخسائر محاولات متتابعة ميتة — هذا القاطع يفضّ تلك الدورات.
+SAME_SIDE_LOSS_GUARD_MIN = _env_float("STRAT_SAME_SIDE_LOSS_GUARD_MIN", 40.0)
+SAME_SIDE_LOSS_STRONG_MULT = _env_float("STRAT_SAME_SIDE_STRONG_MULT", 1.6)
+
 # MAX_HOLD_HOURS: أقصى وقت للحفاظ على الصفقة مفتوحة قبل الإغلاق الإلزامي.
 # 2026-09-16: 2.5 → 1.0 — خلفية (backstop) أضيق شكلاً مع القاعدة الجذرية
 # "لا صفقة بلا وقوف سيرفر": الحماية الأساسية من السيرفر (SL/TP عند الفتح)،

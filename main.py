@@ -703,6 +703,21 @@ class ClosingManager:
             if open_hours >= self.cfg.MAX_HOLD_HOURS:
                 return True, "max_hold_time"
 
+        # --- الطبقة 4أ: صفقة ميتة (no_progress) 2026-09-21 ---
+        # صفقة لم تبلغ أي ربح خلال الدقائق الأولى وما تزال خاسرة: اللحاق
+        # لم يتحقق ولا جدوى من الركوب بها نحو -3.0. تغادر عند خسارة
+        # صغيرة قبلما يصلها وقف الخسارة. لا تُمس المتداولات الرابحة
+        # (تنتهي أغلبها خلال 3-4 دقائق).
+        if opened_at:
+            opened_dt = datetime.fromisoformat(opened_at)
+            age_sec = now - opened_dt.timestamp()
+            if (
+                age_sec >= self.cfg.NO_PROGRESS_AFTER_SEC
+                and peak < self.cfg.NO_PROGRESS_PEAK_USD
+                and net_pnl < -self.cfg.NO_PROGRESS_MAX_LOSS_USD
+            ):
+                return True, "no_progress"
+
         # --- الطبقة 4ب: صفقة بلا وقوف سيرفر (SL/TP) تُغلق فوراً ---
         # القاعدة الجذرية 2026-09-16: لا يجوز أن تبقى أي صفقة مفتوحة دون
         # SL/TP مقبول على السيرفر — لو توقف البوت لساعات بقيت معلقة.
@@ -1420,6 +1435,38 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             and _live_spread >= config.SPREAD_GUARD_USD
         )
 
+        # حارس الخسارة (2026-09-21): لا نعيد الدخول بنفس اتجاه خسارة
+        # حديثة إلا بإشارة أقوى بكثير — يكسر دورات المحاولات الميتة
+        # المتتابعة (اليوم 33/34 صفقة بنفس الجهة وأغلب الخسائر كانت
+        # محاولات مكررة في دورات يضربها السوق حدةً خلف حدة).
+        _cside = "SELL" if catch_up < 0 else "BUY"
+        _same_side_blocked = False
+        _closes = state.get("closed_trades") or []
+        if _closes:
+            _last = _closes[-1]
+            _lp0 = _last.get("pnl_net_usd")
+            if _lp0 is None:
+                _lp0 = _last.get("pnl_usd", 0.0)
+            _ep = _last.get("entry_price") or 0.0
+            _cp = _last.get("close_price") or 0.0
+            _ts = _last.get("ts_close") or _last.get("closed_at")
+            if (_lp0 or 0) < 0 and _ep and _cp and _ts:
+                _last_side = "BUY" if _cp > _ep else "SELL"
+                try:
+                    _close_dt = datetime.fromisoformat(
+                        _ts.replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    _close_dt = None
+                if (_last_side == _cside and _close_dt is not None and
+                        time.time() - _close_dt.timestamp() <
+                        config.SAME_SIDE_LOSS_GUARD_MIN * 60.0):
+                    _same_side_blocked = (
+                        abs(catch_up) <
+                        config.MOMENTUM_MIN_USD * config.SAME_SIDE_LOSS_STRONG_MULT
+                    )
+                    if _same_side_blocked:
+                        result["action"] = "skip_same_side_loss"
+
         can_trade = (
                 config.MODE == "trade"
                 and stats is not None
@@ -1432,6 +1479,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 and quality_session_now
                 and result.get("platform_jump", 0.0) < config.PRICE_JUMP_ANOMALY_USD
                 and not trend_against
+                and not _same_side_blocked
                 and state_pos is None
                 and closing_mgr.can_trade_today()
             )

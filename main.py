@@ -1419,8 +1419,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             and _prev2_catch is not None
             and (_prev_catch * catch_up) >= 0
             and (_prev2_catch * catch_up) >= 0
-            and abs(_prev_catch) >= 0.85 * config.MOMENTUM_MIN_USD
-            and abs(_prev2_catch) >= 0.85 * config.MOMENTUM_MIN_USD
+            and abs(_prev_catch) >= config.MOMENTUM_MIN_USD
+            and abs(_prev2_catch) >= config.MOMENTUM_MIN_USD
         )
         state["_prev2_catch_up"] = _prev_catch
         state["_prev_catch_up"] = catch_up
@@ -1429,6 +1429,11 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             config.MOMENTUM_ON
             and abs(catch_up) >= config.MOMENTUM_MIN_USD
             and abs(momentum) >= 0.5 * config.MOMENTUM_MIN_USD
+            # جودة الدخول (2026-09-22): التوافق الاتجاهي — يتحرك ياهو
+            # والمنصة بنفس الاتجاه (كلاهما موجب أو كلاهما سالب) حتى نعرف
+            # أن الحركة حقيقية بلا اختلاف اتجاهي مشبوه. "اللحاق" يكون
+            # بفارق الحجم لا بالتعارض.
+            and (momentum * plat_mom) >= 0
             # الإشارة يجب أن تغطي التكلفة (سبريد+عمولة) وتبقى ربحاً محتملاً:
             # نمنع الدخول عندما تلتهم التكلفة الزخم (جودة سلبية مضمونة).
             and abs(catch_up) > (_est_fees * 2.0)
@@ -1496,9 +1501,15 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             )
 
         if can_trade:
-            if positions:
-                result["action"] = "hold:already_open"
-                result["open_positions"] = len(positions)
+            try:
+                broker_open = yield sess.broker_open_position_ids(
+                    sess.account_id, symbol_id)
+            except Exception as exc:
+                print(f"broker-open-check warn: {exc!r}", flush=True)
+                broker_open = []
+            if broker_open:
+                result["action"] = "hold:broker_already_open"
+                result["open_positions"] = len(broker_open)
             else:
                 # --- فتح صفقة جديدة ---
                 # الإشارة = مقدار اللحاق المتبقي (catch_up):

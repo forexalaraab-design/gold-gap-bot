@@ -552,6 +552,55 @@ class CtraderSession:
             print(f"resolve_position_id failed: {exc!r}", flush=True)
             defer.returnValue(None)
 
+    # ── authoritative broker-side open-position count (OrderList) ────
+    @defer.inlineCallbacks
+    def broker_open_position_ids(self, account_id=None, symbol_id=None,
+                                 lookback_hours=72):
+        """يعدّد الصفقات النشطة لدى الوسيط فعلياً عبر OrderList:
+        أمر فتح (positionId + بلا closingOrder) لا يوجد له أمر إغلاق
+        (closingOrder) بنفس positionId = صفقة حيّة. هذا المصدر الموثوق
+        الوحيد لمنع صفقة ثانية (PositionList غير متوفرة في هذه النسخة
+        فيرجع open_positions() دائماً [])."""
+        aid = account_id or self.account_id
+        if not aid:
+            defer.returnValue([])
+        now = time.time()
+        opened = {}
+        closed = set()
+        try:
+            req = ProtoMsgs.ProtoOAOrderListReq()
+            req.ctidTraderAccountId = aid
+            req.fromTimestamp = int((now - lookback_hours * 3600) * 1000)
+            req.toTimestamp = int((now + 60) * 1000)
+            res = yield self._send(req, 20)
+            res = _unwrap(res)
+            orders = list(res.order) if hasattr(res, "order") else []
+            for o in orders:
+                try:
+                    pid = getattr(o, "positionId", None) or 0
+                    if not pid:
+                        continue
+                    if symbol_id is not None:
+                        sym = getattr(o, "symbolId", None)
+                        if sym not in (None, 0) and sym != symbol_id:
+                            continue
+                    if getattr(o, "closingOrder", None):
+                        closed.add(pid)
+                    else:
+                        opened[pid] = getattr(o, "utcLastUpdateTimestamp",
+                                              0) or 0
+                except Exception:
+                    continue
+            open_ids = [p for p in opened if p not in closed]
+            open_ids.sort(key=lambda p: opened.get(p, 0), reverse=True)
+            if open_ids:
+                print(f"broker_open_position_ids: {len(open_ids)} open "
+                      f"({open_ids[:5]})", flush=True)
+            defer.returnValue(open_ids)
+        except Exception as exc:
+            print(f"broker_open_position_ids failed: {exc!r}", flush=True)
+            defer.returnValue([])
+
     # ── stop ─────────────────────────────────────────────────────────
     def stop(self):
         try:

@@ -1033,6 +1033,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     peak_now = max(peak_now, 0.0)
                     peak_now = max(peak_now, pnl_now)
                     # طبقات الإغلاق — نفس معايير ClosingManager.check_close
+                    max_age = config.MAX_HOLD_HOURS * 3600
                     close_reason_state = None
                     trailing_armed = (
                         config.TRAILING_ARM_USD > 0

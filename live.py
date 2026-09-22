@@ -146,7 +146,26 @@ def live_loop():
                         pos_id = getattr(pos_obj, "positionId", None)
                         entry0p = getattr(pos_obj, "price", None)
                         entry0 = float(entry0p) if entry0p else mid
-                    print(f"FORCE-TEST OPEN OK positionId={pos_id}", flush=True)
+                    if entry0 > 1e5:
+                        entry0 = entry0 / config.SPOT_SCALE
+                    if not pos_id:
+                        try:
+                            yield deferLater(reactor, 1.5, lambda: None)
+                            if entry0 <= 0:
+                                _spr = sess.latest_spot(symbol_id)
+                                if _spr:
+                                    entry0 = ((_spr[0] + _spr[1]) / 2.0
+                                              / config.SPOT_SCALE)
+                            pos_id = yield sess.resolve_position_id(
+                                sess.account_id, _now_unix(), entry0,
+                                "BUY", 50.0)
+                            print(f"FORCE-TEST RESOLVED positionId={pos_id}",
+                                  flush=True)
+                        except Exception as exc:
+                            print(f"FORCE-TEST resolve FAIL: {exc!r}",
+                                  flush=True)
+                    print(f"FORCE-TEST OPEN OK positionId={pos_id} "
+                          f"entry0={entry0:.2f}", flush=True)
                     if pos_id:
                         for dist, scale in (
                             (5.0, config.SPOT_SCALE),
@@ -170,6 +189,36 @@ def live_loop():
                                       f"{exc!r}", flush=True)
                         yield sess.close_position(pos_id)
                         print("FORCE-TEST CLOSE OK", flush=True)
+                    for units_label, unsc in (
+                        ("100", 100.0),
+                        ("100000", config.SPOT_SCALE),
+                    ):
+                        try:
+                            res2 = yield sess.open_market(
+                                symbol_id, "BUY", volume,
+                                sl=int(round((entry0 - 2.0) * unsc)),
+                                tp=int(round((entry0 + 1.5) * unsc)),
+                                label="FORCE-TEST", comment="",
+                            )
+                            ss2 = (res2.get("stops_set", True)
+                                   if isinstance(res2, dict) else True)
+                            pid2 = (res2.get("positionId")
+                                    if isinstance(res2, dict) else None)
+                            print(f"FORCE-TEST OPEN-WITH-STOPS(unit={units_label}) "
+                                  f"stops_set={bool(ss2)} posId={pid2}",
+                                  flush=True)
+                            if not pid2:
+                                yield deferLater(reactor, 1.5, lambda: None)
+                                pid2 = yield sess.resolve_position_id(
+                                    sess.account_id, _now_unix(), entry0,
+                                    "BUY", 50.0)
+                            if pid2:
+                                yield sess.close_position(pid2)
+                                print(f"FORCE-TEST CLOSE2(unit={units_label}) OK",
+                                      flush=True)
+                        except Exception as exc:
+                            print(f"FORCE-TEST OPEN-WITH-STOPS(unit={units_label}) "
+                                  f"EXC: {exc!r}", flush=True)
             except Exception as exc:
                 print(f"FORCE-TEST FAIL: {exc!r}", flush=True)
 

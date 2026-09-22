@@ -51,6 +51,11 @@ LOT = 0.01
 # cTrader delivers spot prices for XAUUSD scaled by 10**5 internally
 SPOT_SCALE = 100000.0
 
+# وحدة السعر في أوامر SL/TP عبر الـ API: الرمز digits=2 → السعر بالدولار ×100.
+# (أوامر الفتح بتوقفات مقيّسة بـ SPOT_SCALE كانت تُرفض بـ TRADING_BAD_STOPS؛
+#  الواجهة اليدوية الناجحة تستخدم هذه الوحدة.)
+PRICE_UNIT = 100.0
+
 # Modes: "log" = record gaps only; "trade" = open/close demo positions
 MODE = os.environ.get("CBOT_MODE", "trade")  # trade = نفّذ صفقات حقيقية
 

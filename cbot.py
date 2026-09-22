@@ -289,8 +289,10 @@ class CtraderSession:
         req.volume = volume
         req.label = label or random_label()
         req.comment = comment or ""
-        req.stopLoss = sl
-        req.takeProfit = tp
+        if sl is not None:
+            req.stopLoss = sl
+        if tp is not None:
+            req.takeProfit = tp
         try:
             res = yield self._send(req, 30)
             res = _unwrap(res)
@@ -391,6 +393,7 @@ class CtraderSession:
         req = ProtoMsgs.ProtoOAAmendPositionSLTPReq()
         req.ctidTraderAccountId = self.account_id
         req.positionId = position_id
+        req.stopLossTriggerMethod = 1  # TRADE
         req.stopLoss = sl
         req.takeProfit = tp
         res = yield self._send(req, 15)

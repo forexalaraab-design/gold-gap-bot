@@ -1549,14 +1549,16 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 except Exception:
                     trad_pre = None
                 vol = _jittered_volume(result["volume"])
-                # هام: البروكر (FP Markets) يرفض تعديل السول/الهدف بعد الفتح
-                # (ProtoOAAmendPositionSLTPReq -> TRADING_BAD_STOPS دائماً؛
-                #  تم التحقق تجريبياً بكل المقاييس والمسافات)، لذلك نرسل
-                # الـ stopLoss/takeProfit داخل طلب الفتح نفسه، ويُقبل فوراً.
+                # هام: البروكر (FP Markets) يرفض تعديل SL/TP بعد الفتح دائماً
+                # (ProtoOAAmendPositionSLTPReq -> TRADING_BAD_STOPS مهما كانت
+                #  الوحدة/المسافة وحتى مع stopLossTriggerMethod=TRADE؛ التحقق
+                #  تجريبي). لذا نرسل الـ stopLoss/takeProfit داخل طلب الفتح
+                # نفسه. الوحدات: السعر بالدولار × PRICE_UNIT (digits=2) —
+                # كانت ×SPOT_SCALE وسبب رفض TRADING_BAD_STOPS تاريخياً.
                 # إنسانية (القاعدة 3): ملصق مقروء يشبه الاسم اليدوي — لا
                 # يكشف المنطق (عدم ذكر yahoo/gap/momentum/الفجوة إطلاقاً).
-                sl_units = _to_int(sl)
-                tp_units = _to_int(tp)
+                sl_units = int(round(sl * config.PRICE_UNIT))
+                tp_units = int(round(tp * config.PRICE_UNIT))
                 res = yield sess.open_market(
                     symbol_id, side, vol,
                     sl=sl_units, tp=tp_units,

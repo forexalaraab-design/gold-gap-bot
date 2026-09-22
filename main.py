@@ -692,6 +692,17 @@ class ClosingManager:
         if prof_target > 0 and net_pnl >= prof_target:
             return True, "profit_target"
 
+        # --- الطبقة 2ب: حماية التراجع بعد القمة (giveback) 2026-09-22 ---
+        # صفقة بلغت ربحاً حقيقياً (peak >= GIVEBACK_ARM) ثم انعكست إلى
+        # خسارة صغيرة — لا نسمح لها بدورها حتى -3.0. البيانات: 15 صفقة
+        # انعكست من +0.5..+1.2 إلى -3.28 (ضياع -49$). تُخرج عند -0.4..
+        # -0.6 وتترك الباقي للمراحل الأدنى.
+        if (
+            peak >= self.cfg.GIVEBACK_ARM_USD
+            and net_pnl <= -self.cfg.GIVEBACK_TRIGGER_USD
+        ):
+            return True, "giveback"
+
         # --- الطبقة 3: الحد الأقصى للخسارة (Max Loss) ---
         if net_pnl <= -self.cfg.MAX_LOSS_USD:
             return True, "max_loss"

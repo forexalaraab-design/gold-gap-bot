@@ -163,6 +163,14 @@ NO_PROGRESS_MAX_LOSS_USD = _env_float("STRAT_NO_PROGRESS_MAX_LOSS", 0.45)
 SAME_SIDE_LOSS_GUARD_MIN = _env_float("STRAT_SAME_SIDE_LOSS_GUARD_MIN", 40.0)
 SAME_SIDE_LOSS_STRONG_MULT = _env_float("STRAT_SAME_SIDE_STRONG_MULT", 1.6)
 
+# GIVEBACK_* (2026-09-22 — حماية التراجع بعد القمة): صفقة بلغت ربحاً
+# حقيقياً (قمة ≥ GIVEBACK_ARM_USD) ثم انعكست إلى خسارة (≤ -GIVEBACK_TRIGGER)
+# تُغلق فوراً — لا نسمح بتحوّل الربح المحقق إلى خسارة كاملة عند -3.0.
+# من تاريخ 200 صفقة: 15 خسارة بلغت قمة +0.5..+1.2 ثم انعكست إلى
+# -3.28 متوسط (ضياع -49$). هذه الطبقة تحوّلها إلى خروج ~-0.4..-0.6.
+GIVEBACK_ARM_USD = _env_float("STRAT_GIVEBACK_ARM", 0.60)
+GIVEBACK_TRIGGER_USD = _env_float("STRAT_GIVEBACK_TRIGGER", 0.40)
+
 # MAX_HOLD_HOURS: أقصى وقت للحفاظ على الصفقة مفتوحة قبل الإغلاق الإلزامي.
 # 2026-09-16: 2.5 → 1.0 — خلفية (backstop) أضيق شكلاً مع القاعدة الجذرية
 # "لا صفقة بلا وقوف سيرفر": الحماية الأساسية من السيرفر (SL/TP عند الفتح)،

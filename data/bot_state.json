@@ -2,12 +2,12 @@
   "position": null,
   "stats": {
     "n": 48,
-    "mean": 4343.661875,
-    "sd": 0.3942696250461971,
-    "median": 4343.6625,
-    "mad": 0.2928135000003236
+    "mean": 4344.671354166667,
+    "sd": 0.6146299176959662,
+    "median": 4344.692499999999,
+    "mad": 0.4633125000013484
   },
-  "last_run": "2026-09-23T04:04:00Z",
+  "last_run": "2026-09-23T04:07:25Z",
   "money_digits": 2,
   "entry_balance_units": 1005050,
   "cooldown_until": 1790135678.9889178,
@@ -3224,6 +3224,6 @@
   "cleanup_done_internal": true,
   "_last_spread_usd": 0.09,
   "_anomaly_jump": 1.2599999999993088,
-  "_prev_catch_up": 0.8299999999999272,
-  "_prev2_catch_up": 0.6700000000009823
+  "_prev_catch_up": -0.6400000000003274,
+  "_prev2_catch_up": -0.6400000000003274
 }

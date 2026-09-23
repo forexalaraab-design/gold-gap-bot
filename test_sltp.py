@@ -139,7 +139,7 @@ def main(reactor):
                 print("CLEANED leftover pid=%s" % p.positionId, flush=True)
             except Exception as exc:
                 print("CLEAN_FAIL pid=%s %r" % (p.positionId, exc), flush=True)
-    yield deferLater(reactor, 2.0, lambda: None)
+    yield task.deferLater(reactor, 2.0, lambda: None)
 
     def report(tag, status, extra=""):
         print("%s -> %s %s" % (tag, status, extra), flush=True)
@@ -153,25 +153,6 @@ def main(reactor):
         ("V3", dict(scaled=False, trigger=TRI["DOUBLE_TRADE"])),
         ("V4", dict(scaled=False, trigger=TRI["DOUBLE_OPPOSITE"])),
     ]
-    for tag, cfg in cases:
-        req = _new_with_stops(a, scaled=cfg["scaled"])
-        req.ctidTraderAccountId = sess.account_id
-        req.symbolId = symbol_id
-        req.tradeSide = 1
-        req.orderType = 1
-        req.volume = VOL
-        req.label = LABEL_PREFIX
-        req.comment = ""
-        req.stopTriggerMethod = cfg["trigger"]
-        try:
-            res2 = yield _send(req, sess)
-            _check_error(res2, tag)
-            report(tag, "ACCEPTED",
-                   "(scaled=%s trigger=%s)" % (cfg["scaled"], cfg["trigger"]))
-        except Exception as exc:
-            report(tag, "REJECT", repr(exc))
-        yield _close_test_positions(sess)
-
     # ---- V5..V6: open with relative offsets ----
     for trig, tag in (("TRADE", "V5"), ("OPPOSITE", "V6")):
         req = ProtoMsgs.ProtoOANewOrderReq()

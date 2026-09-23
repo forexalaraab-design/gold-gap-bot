@@ -336,6 +336,36 @@ def live_loop():
 
             if reconcile_now:
                 last_reconcile = now
+                # ── حارس اليتامى: أي صفقة وسيط غير متتبَّعة في الحالة تُغلق
+                # فوراً (لا نُبقيها بحجة "state kept"). هذا هو المصدر الوحيد
+                # الموثوق (OrderList) لمنع صفقة ثانية معاً ولإيقاف نزيف أي
+                # يتيمة تركها إلغاء جولة مسبق لإعادة التنفيذ.
+                broker_orphan = None
+                try:
+                    b_ok = yield sess.broker_open_position_ids(
+                        sess.account_id, max_age=86400.0)
+                    st_pos_id = None
+                    st_pos = state.get("position")
+                    if isinstance(st_pos, dict):
+                        st_pos_id = st_pos.get("positionId")
+                    for bid in (b_ok or []):
+                        if bid != st_pos_id:
+                            broker_orphan = bid
+                            break
+                except Exception as exc:
+                    print(f"reconcile orphan-warn: {exc!r}", flush=True)
+                if broker_orphan is not None:
+                    print(f"reconcile: closing ORPHAN broker position "
+                          f"{broker_orphan} (untracked in state) — forcing "
+                          f"external close", flush=True)
+                    try:
+                        yield sess.close_position(
+                            sess.account_id, broker_orphan, 0.0, 0)
+                        print(f"reconcile: ORPHAN {broker_orphan} close "
+                              f"sent OK", flush=True)
+                    except Exception as exc:
+                        print(f"reconcile: ORPHAN {broker_orphan} close "
+                              f"FAILED: {exc!r}", flush=True)
                 positions = None
                 try:
                     positions = yield sess.open_positions(

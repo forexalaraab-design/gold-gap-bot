@@ -1,0 +1,30 @@
+name: test-sltp
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: test-sltp
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run SL/TP format matrix
+        run: python test_sltp.py
+        env:
+          CBOT_APP_CLIENT_ID: ${{ secrets.CBOT_APP_CLIENT_ID }}
+          CBOT_APP_CLIENT_SECRET: ${{ secrets.CBOT_APP_CLIENT_SECRET }}
+          CBOT_ACCESS_TOKEN: ${{ secrets.CBOT_ACCESS_TOKEN }}
+          CBOT_REFRESH_TOKEN: ${{ secrets.CBOT_REFRESH_TOKEN }}
+          CBOT_MODE: ${{ secrets.CBOT_MODE }}
+          CBOT_ENVIRONMENT: ${{ secrets.CBOT_ENVIRONMENT }}
+          PYTHONIOENCODING: utf-8
+          PYTHONUNBUFFERED: "1"

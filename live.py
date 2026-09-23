@@ -343,7 +343,7 @@ def live_loop():
                 broker_orphan = None
                 try:
                     b_ok = yield sess.broker_open_position_ids(
-                        sess.account_id, max_age=86400.0)
+                        sess.account_id, lookback_hours=72)
                     st_pos_id = None
                     st_pos = state.get("position")
                     if isinstance(st_pos, dict):

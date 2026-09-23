@@ -49,7 +49,16 @@ jobs:
           CBOT_DURATION_MIN: "3.0"
           CBOT_TOKEN_SYNC: "1"
           GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
-          STRAT_COOLDOWN_MIN: ${{ secrets.STRAT_COOLDOWN_MIN }}
+          # 2026-09-23 الوضع الهجومي (طلب صريح: صفقات كثيرة بنقاط دخول
+          # قوية): عتبة 1.20 + تهدئة 1 د + لا تخطي إشارة + لا انصراف بائع
+          # + تقزيم تذبذب العتبة. طبقات الجودة (تأكيد الدورتين/التوافق
+          # الاتجاهي/تغطية التكلفة/حارس السبريد) تبقى دائماً كما هي.
+          # لإعادتها لأي قيمة سابقاً: عدّل هذه الأسطر فقط.
+          STRAT_COOLDOWN_MIN: "1.0"
+          STRAT_MOMENTUM_MIN: "1.20"
+          STRAT_HUMAN_SKIP: "0"
+          STRAT_HUMAN_AWAY: "0"
+          STRAT_HUMAN_ENTRY_JITTER: "0.03"
           STRAT_FEES_PER_LOT: ${{ secrets.STRAT_FEES_PER_LOT }}
           STRAT_PROFIT_FLOOR: ${{ secrets.STRAT_PROFIT_FLOOR }}
           STRAT_PROFIT_FLOOR_LOT: ${{ secrets.STRAT_PROFIT_FLOOR_LOT }}

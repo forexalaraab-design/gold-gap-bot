@@ -2,32 +2,16 @@
   "position": null,
   "stats": {
     "n": 48,
-    "mean": 4321.871666666667,
-    "sd": 0.9368617449112501,
-    "median": 4321.885,
-    "mad": 1.149015000000809
+    "mean": 4321.04,
+    "sd": 1.2321215054755632,
+    "median": 4320.66,
+    "mad": 1.074884999999191
   },
-  "last_run": "2026-09-23T07:35:35Z",
+  "last_run": "2026-09-23T07:39:01Z",
   "money_digits": 2,
-  "entry_balance_units": 1005303,
-  "cooldown_until": 1790147229.899237,
+  "entry_balance_units": 1005415,
+  "cooldown_until": 1790150173.765252,
   "closed_trades": [
-    {
-      "ts_open": "2026-09-17T02:53:44Z",
-      "ts_close": "2026-09-17T02:55:03Z",
-      "side": "2",
-      "entry_gap": -50.410000000000764,
-      "close_gap": -51.63000000000011,
-      "entry_price": 4278.19,
-      "close_price": 4274.97,
-      "pnl_units": -3.44,
-      "pnl_usd": -3.44,
-      "fees_usd": 0.22,
-      "spread_usd": 0.14,
-      "pnl_net_usd": -3.44,
-      "reason": "max_loss",
-      "pnl_peak_usd": 0.0
-    },
     {
       "ts_open": "2026-09-17T03:14:34Z",
       "ts_close": "2026-09-17T03:14:42Z",
@@ -3211,19 +3195,35 @@
       "pnl_net_usd": 1.69,
       "reason": "profit_target",
       "pnl_peak_usd": 1.65
+    },
+    {
+      "ts_open": "2026-09-23T07:36:31Z",
+      "ts_close": "2026-09-23T07:37:46Z",
+      "side": "2",
+      "entry_gap": -40.63999999999942,
+      "close_gap": -37.1200000000008,
+      "entry_price": 4320.26,
+      "close_price": 4322.48,
+      "pnl_units": 2.02,
+      "pnl_usd": 2.02,
+      "fees_usd": 0.2,
+      "spread_usd": 0.12,
+      "pnl_net_usd": 2.02,
+      "reason": "profit_target",
+      "pnl_peak_usd": 1.1
     }
   ],
   "perf": {
-    "running_daily_pnl": 4.14,
+    "running_daily_pnl": 6.16,
     "consecutive_losses": 0,
-    "trades_today": 24,
-    "last_updated": "2026-09-23T06:48:05Z",
+    "trades_today": 26,
+    "last_updated": "2026-09-23T07:37:46Z",
     "measured_count": 1,
     "measured_commission_usd": 0.08
   },
   "cleanup_done_internal": true,
-  "_last_spread_usd": 0.14,
-  "_anomaly_jump": 3.0850000000000364,
-  "_prev_catch_up": 1.3250000000007276,
-  "_prev2_catch_up": 1.8800000000001091
+  "_last_spread_usd": 0.09,
+  "_anomaly_jump": 2.4349999999994907,
+  "_prev_catch_up": -1.3999999999996362,
+  "_prev2_catch_up": -1.8250000000007276
 }

@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 
 import config
 import gold_price
+import strategy
 import cbot
 from cbot import CtraderSession
 from ctrader_open_api import Auth
@@ -1501,6 +1502,31 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 and closing_mgr.can_trade_today()
             )
 
+        # نموذج v2 (2026-09-23): عند تفعيل STRAT_MODEL=v2 يُستبدل قرار
+        # الفتح بقواعد strategy.v2_decision (غربلة الساعات/المخاطرة/الهدف)؛
+        # لا يُفعَّل للحي إلا بعد forward-test ناجح على الديمو.
+        if can_trade and config.STRATEGY_MODEL == "v2":
+            v2res = strategy.v2_decision(
+                config, catch_up=catch_up, momentum=momentum,
+                plat_mom=plat_mom, spread_usd=_live_spread,
+                fees_usd=_est_fees, state=state, mid=mid,
+                side_hint=("SELL" if catch_up < 0 else "BUY"),
+            )
+            if not v2res["approved"]:
+                result["action"] = "hold:v2_" + v2res["reason"]
+                can_trade = False
+            _v2meta = v2res["meta"]
+            _v2_override = v2res["approved"]
+        else:
+            _v2meta = None
+            _v2_override = False
+
+        # وضع المراقبة (2026-09-23): إيقاف مؤقت للفتح أثناء إعادة البناء —
+        # الصفقة القائمة تُدار (إغلاق/تريلنج) لكن لا فتح جديد إطلاقاً.
+        if config.PAUSE_OPEN and can_trade:
+            can_trade = False
+            result["action"] = "hold:pause_open"
+
         if can_trade:
             try:
                 broker_open = yield sess.broker_open_position_ids(
@@ -1526,15 +1552,19 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 sd = sd or stats["sd"]
                 # إنسانية: لا يضع المتداول وقفاً عند نفس المسافة الحرفية
                 # كل مرة — تشتت بسيط على المسافة ضمن حدود آمنة (القاعدة 1).
-                sl_dist = _jitter_usd(config.SL_AFTER_ENTRY_USD,
-                                      config.HUMAN_SL_TP_JITTER_USD)
-                # الهدف (نظام الإغلاق 2026-09-16): لا نقطع اللحاق عند 1.00
-                # الثابت — نأخذ نصيباً عادلاً منه. حد أدنى 1.40$ (عند لوت
-                # 0.01 = 1.4 نقطة) و50% من مقدار اللحاق للموجات القوية،
-                # فيثبّت ربحاً حقيقياً قبل أي انعكاس (بيانات 185 صففة:
-                # خروج 1.00 يترك 0.2-0.6$ لكل صفقة على الطاولة).
-                min_tp_dist = 1.40
-                tp_ext = max(min_tp_dist, 0.50 * abs(catch_up))
+                if _v2_override:
+                    sl_dist = float(_v2meta["sl_dist"])
+                    tp_ext = float(_v2meta["tp_dist"])
+                else:
+                    sl_dist = _jitter_usd(config.SL_AFTER_ENTRY_USD,
+                                          config.HUMAN_SL_TP_JITTER_USD)
+                    # الهدف (نظام الإغلاق 2026-09-16): لا نقطع اللحاق عند 1.00
+                    # الثابت — نأخذ نصيباً عادلاً منه. حد أدنى 1.40$ (عند لوت
+                    # 0.01 = 1.4 نقطة) و50% من مقدار اللحاق للموجات القوية،
+                    # فيثبّت ربحاً حقيقياً قبل أي انعكاس (بيانات 185 صففة:
+                    # خروج 1.00 يترك 0.2-0.6$ لكل صفقة على الطاولة).
+                    min_tp_dist = 1.40
+                    tp_ext = max(min_tp_dist, 0.50 * abs(catch_up))
                 if side == "SELL":
                     sl = mid + sl_dist
                     tp = mid - tp_ext
@@ -1708,10 +1738,27 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                 reasons.append("price_anomaly")
             if trend_against:
                 reasons.append("trend_against")
+            if config.PAUSE_OPEN:
+                reasons.append("pause_open")
             # دائرة Daily Loss و Consecutive Losses
             if not closing_mgr.can_trade_today():
                 reasons.append("circuit_breaker")
             result["action"] = "none:" + ",".join(reasons) if reasons else "none"
+
+    # التقييم الافتراضي v2 (2026-09-23): بدون أي طلب للوسيط — يحاكي
+        # قرارات v2 وPnL على أسعار mid الحية ليسجل في data/v2_virtual.csv
+        # (مقارنة عادلة مع v1 الحي خلال فترة البناء).
+        if config.STRAT_V2_EVAL:
+            try:
+                strategy.virtual_step(
+                    state, config, mid, catch_up, momentum, plat_mom,
+                    _live_spread, _est_fees,
+                    signal_ok=(signal_ready and not human_skip
+                               and not spread_wide and cooldown_left <= 0),
+                    live_busy=state.get("position") is not None,
+                )
+            except Exception as _vex:
+                print("v2-virtual warn:", repr(_vex), flush=True)
 
     return action
 

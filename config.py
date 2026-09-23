@@ -285,3 +285,43 @@ HUMAN_VOLUME_JITTER_FRAC = _env_float("STRAT_HUMAN_VOL_JITTER", 0.05)
 VOLUME_STEP_UNITS = int(_env_float("STRAT_VOLUME_STEP", 100))
 HUMAN_SKIP_SIGNAL_PROB = _env_float("STRAT_HUMAN_SKIP", 0.12)
 HUMAN_POLL_JITTER_SEC = _env_float("STRAT_HUMAN_POLL_JITTER", 1.0)
+
+# ===== وضع المراقبة (2026-09-23) — إيقاف مؤقت للفتح أثناء إعادة البناء =====
+# STRAT_PAUSE_OPEN=1 → لا تُفتح صفقات جديدة أبداً؛ الصفقة القائمة تُدار
+# (إغلاق/تريلنج/حدود أمان) كما هي. يُفعَّل من الـ workflow حتى يُسلَّم
+# نموذج v2 بعد forward-test ناجح على الديمو.
+PAUSE_OPEN = _env_bool("STRAT_PAUSE_OPEN", False)
+
+# ===== نموذج v2 (إعادة البناء 2026-09-23 — فوق نفس البنية) =====
+# STRATEGY_MODEL: "v1" = النموذج الحالي (زخم اللحاق مع تأكيد الدورتين)؛
+# "v2" = النموذج الجديد المبني على أخطاء 200 صفقة. v2 لا يُفعَّل للحي
+# إلا بعد forward-test ناجح على الديمو.
+STRATEGY_MODEL = os.environ.get("STRAT_MODEL", "v1").strip().lower()
+# STRAT_V2_EVAL: يسجّل قرارات v2 وPnL الافترافي بلا فتح صفقة (بالوازي)،
+# في data/v2_virtual.csv للمقارنة مع v1 الحي. مُفعّل افتراضياً فوق v1.
+STRAT_V2_EVAL = _env_bool("STRAT_V2_EVAL", True)
+# سقف خسارة الصفقة الواحدة في v2 (صافي) — المحقق ≈ القيمة + انزلاق/رسوم.
+# 2.0 (v1) → 1.40: الخسائر v1 المحققة فاقت 2.0 (-2.24/-2.75) بسبب
+# الانزلاق، فنجعل المحرض أبكر كي يبقى المحقق فعلياً قرب 1.5-1.6.
+V2_RISK_PER_TRADE_USD = _env_float("STRAT_V2_RISK", 1.40)
+# نسبة الهدف/المخاطرة: TP = max(V2_TP_MIN_USD, RISK * V2_TP_RISK_RATIO).
+# الخلل الجوهري في v1: ربح أصغر من الخسارة (R:R < 1). v2 يطالب قراراً
+# عكسي (TP ≥ ~2× المخاطرة) ليبقى التوقع إيجابياً عند 40-50% فوز.
+V2_TP_RISK_RATIO = _env_float("STRAT_V2_TP_RATIO", 2.0)
+V2_TP_MIN_USD = _env_float("STRAT_V2_TP_MIN", 2.0)
+# السوق الحي: |زخم المنصة| ≥ هذا الحد وإلا "شريط راكد/سوق ميت" — الدخول
+# في سوق متجمد يمدد زمن الحجز ويخسر الثبات (لا حركة للتلاحق).
+V2_MIN_PLAT_MOMENTUM = _env_float("STRAT_V2_MIN_PLAT_MOM", 0.40)
+# حد الخسارة اليومي في v2 (دائرة أمان حقيقية — يوقف يوم -6$+ بدل
+# التسيب المستمر؛ v1 يستخدم 99999).
+V2_DAILY_MAX_LOSS_USD = _env_float("STRAT_V2_DAILY_STOP", 6.0)
+# غربلة الساعات الموجبة المكتسبة (73% فوز، إيجابية 4/5 أيام):
+# 03,06,07,08,10,14,16,17,22,23 UTC — أكبر رافعة فردية لخفض الخسائر
+# دون لمس بقية القرارات (كانت خياراً مؤجلاً عند المستخدم).
+V2_SESSION_HOURS_ON = _env_bool("STRAT_V2_SESSION_HOURS", True)
+V2_POSITIVE_HOURS = (3, 6, 7, 8, 10, 14, 16, 17, 22, 23)
+# سبريد أقصى للدخول في v2 — أضيق من v1 (0.80) لضمان تنفيذ نظيف
+# (السبريد الواسع يلتهم أول 0.3-0.5$ من أي صفقة).
+V2_MAX_SPREAD_USD = _env_float("STRAT_V2_MAX_SPREAD", 0.30)
+# سجل التقييم الافتراضي v2
+V2_VIRTUAL_FILE = os.path.join(BASE_DIR, "data", "v2_virtual.csv")

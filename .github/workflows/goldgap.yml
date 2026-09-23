@@ -65,6 +65,12 @@ jobs:
           STRAT_MAX_DAILY_LOSS_USD: ${{ secrets.STRAT_MAX_DAILY_LOSS_USD }}
           STRAT_MAX_CONSEC_LOSSES: ${{ secrets.STRAT_MAX_CONSEC_LOSSES }}
           STRAT_MAX_TRADES_PER_DAY: ${{ secrets.STRAT_MAX_TRADES_PER_DAY }}
+          # 2026-09-23 إعادة البناء: إيقاف الفتح افتراضياً (راقب فقط) حتى
+          # تسليم v2 — يُعاد التداول بوضع المتغير (Actions variable):
+          #   STRAT_PAUSE_OPEN=0 في إعدادات الريبو (Settings→Variables).
+          STRAT_MODEL: ${{ vars.STRAT_MODEL || 'v1' }}
+          STRAT_PAUSE_OPEN: ${{ vars.STRAT_PAUSE_OPEN || '1' }}
+          STRAT_V2_EVAL: ${{ vars.STRAT_V2_EVAL || '1' }}
           PYTHONIOENCODING: utf-8
           PYTHONUNBUFFERED: "1"
 

@@ -1,0 +1,20 @@
+[Unit]
+Description=Gold%20Gap%20Bot%20-%20cTrader%20OpenAPI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=goldgap
+Group=goldgap
+WorkingDirectory=/opt/gold-gap-bot
+EnvironmentFile=/opt/gold-gap-bot/.env
+ExecStart=/opt/gold-gap-bot/.venv/bin/python live.py
+Restart=always
+RestartSec=20
+TimeoutStartSec=90
+# الإيقاف النظيف: يرسل للعملية SIGTERM، ينهي Twisted بأمان
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -325,3 +325,15 @@ V2_POSITIVE_HOURS = (3, 6, 7, 8, 10, 14, 16, 17, 22, 23)
 V2_MAX_SPREAD_USD = _env_float("STRAT_V2_MAX_SPREAD", 0.30)
 # سجل التقييم الافتراضي v2
 V2_VIRTUAL_FILE = os.path.join(BASE_DIR, "data", "v2_virtual.csv")
+
+# ===== تمويه إنساني أوسع (2026-09-23 — ألا يبدو التنفيذ بوتاً) =====
+# 1) تذبذب عتبة الدخول: الفلتر الفعلي لكل دورة = MOMENTUM_MIN ± نسبة
+#    (الإنسان لا يثقب حداً حرفياً ثابتاً كل مرة — الأدوات كلها متنوعة).
+HUMAN_ENTRY_JITTER_FRAC = _env_float("STRAT_HUMAN_ENTRY_JITTER", 0.10)
+# 2) "انصراف البائع": الاحتمالية أن يقرر المتداول الانصراف/أخذ استراحة
+#    عشوائية عوض تنفيذ إشارة صالحة تماماً (فترة ترجيح طويلة 25-90 د) —
+#    يكسر إيقاع "أجهز على كل إشارة" نهائياً ويضيف سلوكاً بشرياً واضحاً.
+HUMAN_AWAY_ON = _env_bool("STRAT_HUMAN_AWAY", True)
+HUMAN_AWAY_PROB = _env_float("STRAT_HUMAN_AWAY_PROB", 0.08)
+HUMAN_AWAY_MIN_MIN = _env_float("STRAT_HUMAN_AWAY_MIN", 25.0)
+HUMAN_AWAY_MAX_MIN = _env_float("STRAT_HUMAN_AWAY_MAX", 90.0)

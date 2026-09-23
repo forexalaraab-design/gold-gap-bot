@@ -374,6 +374,21 @@ def _human_reaction():
                       config.HUMAN_REACTION_SEC_MAX)
 
 
+def _entry_floor():
+    """عتبة الزخم الفعلية لكل دورة ≠ ثابتة: تذبذب بشري ± نسبة حول 1.50.
+
+    القاعدة 1: ألا يلتقط البوت الإشارات عند حدٍّ حرفي ثابت كل مرة —
+    عتبة الدخول تنتقل قليلاً بين الجولات كأن المتداول يزن قراره. لا
+    تُمَس طبقة الأمان (لا علاقة لها بحارس الخسارة).
+    """
+    import random as _r
+    f = config.MOMENTUM_MIN_USD
+    frac = getattr(config, "HUMAN_ENTRY_JITTER_FRAC", 0.10) or 0.0
+    if not config.HUMANIZE_ON or frac <= 0:
+        return f
+    return f * _r.uniform(1.0 - frac, 1.0 + frac)
+
+
 def _skip_signal():
     """يُفوّت الإنسان أحياناً إشارة صالحة. يرجع True للتفويت.
 
@@ -1244,7 +1259,8 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
             # ارتداد) ليبدو القرار بشرياً. أما حدود الأمان (max_loss/
             # price_anomaly) فتُنفّذ فوراً بلا تأخير — حماية رأس المال
             # لا تُمَس. القاعدة 2.
-            if (close_reason in ("trailing", "profit_target", "z_revert")
+            if (close_reason in ("trailing", "profit_target", "z_revert",
+                                 "giveback", "no_progress")
                     and config.HUMANIZE_ON):
                 _rclose = _human_reaction() * 0.5
                 if _rclose > 0:
@@ -1427,10 +1443,11 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         state["_prev2_catch_up"] = _prev_catch
         state["_prev_catch_up"] = catch_up
 
+        _efloor = _entry_floor()
         signal_ready = (
             config.MOMENTUM_ON
-            and abs(catch_up) >= config.MOMENTUM_MIN_USD
-            and abs(momentum) >= 0.5 * config.MOMENTUM_MIN_USD
+            and abs(catch_up) >= _efloor
+            and abs(momentum) >= 0.5 * _efloor
             # جودة الدخول (2026-09-22): التوافق الاتجاهي — يتحرك ياهو
             # والمنصة بنفس الاتجاه (كلاهما موجب أو كلاهما سالب) حتى نعرف
             # أن الحركة حقيقية بلا اختلاف اتجاهي مشبوه. "اللحاق" يكون
@@ -1526,6 +1543,18 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         if config.PAUSE_OPEN and can_trade:
             can_trade = False
             result["action"] = "hold:pause_open"
+
+        # "انصراف البائع" (2026-09-23): أحياناً يقرر المتداول الانصراف/
+        # أخذ استراحة عوض تنفيذ إشارة صالحة تماماً — ينطفئ عن الشاشة
+        # 25-90 دقيقة. يكسر إيقاع "أجهز على كل إشارة" الآلي نهائياً.
+        if can_trade and config.HUMAN_AWAY_ON:
+            import random as _ra
+            if _ra.random() < config.HUMAN_AWAY_PROB:
+                can_trade = False
+                _away_min = _ra.uniform(config.HUMAN_AWAY_MIN_MIN,
+                                        config.HUMAN_AWAY_MAX_MIN)
+                state["cooldown_until"] = now_ts + _away_min * 60.0
+                result["action"] = "hold:human_away"
 
         if can_trade:
             try:

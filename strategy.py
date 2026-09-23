@@ -169,11 +169,25 @@ def virtual_step(state, config, mid, catch_up, momentum, plat_mom,
         net = gross - fees
         v["peak_net"] = max(float(v.get("peak_net", 0.0)), net)
         age_sec = time.time() - float(v.get("_ts", 0.0))
+        risk = float(v["risk_usd"])
+        tp = float(v["tp_usd"])
+        peak = float(v["peak_net"])
         reason = None
-        if net <= -float(v["risk_usd"]):
+        if net <= -risk:
             reason = "max_loss_v2"
-        elif net >= float(v["tp_usd"]):
+        elif net >= tp:
             reason = "profit_target_v2"
+        elif (config.NO_PROGRESS_AFTER_SEC
+                and age_sec >= config.NO_PROGRESS_AFTER_SEC
+                and peak < config.NO_PROGRESS_PEAK_USD
+                and net > -config.NO_PROGRESS_MAX_LOSS_USD):
+            reason = "no_progress_v2"
+        elif peak >= config.GIVEBACK_ARM_USD \
+                and net <= -config.GIVEBACK_TRIGGER_USD:
+            reason = "giveback_v2"
+        elif peak >= config.TRAILING_ARM_USD \
+                and net <= peak - config.TRAILING_BACK_USD:
+            reason = "trailing_v2"
         elif age_sec >= config.MAX_HOLD_HOURS * 3600:
             reason = "max_hold_v2"
         if reason:

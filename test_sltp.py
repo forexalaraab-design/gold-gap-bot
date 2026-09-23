@@ -117,6 +117,30 @@ def main(reactor):
              _symvalue(sym, "distanceSetIn")), flush=True)
     print("spot bid=%.2f ask=%.2f" % (b / config.SPOT_SCALE, a / config.SPOT_SCALE), flush=True)
 
+    # ---- dump ALL current open positions (any label) + cleanup leftovers ----
+    try:
+        _poss = yield sess.open_positions(account, max_age=86400.0)
+        poss = list(_poss)
+    except Exception as exc:
+        poss = []
+        print("OPEN_DUMP_FAIL", repr(exc), flush=True)
+    print("OPEN_COUNT=%d" % len(poss), flush=True)
+    for p in poss:
+        tl = getattr(getattr(p, "tradeData", None), "label", "") or ""
+        print("  OPEN pid=%s label=%s side=%s vol=%s" % (
+            getattr(p, "positionId", None), tl,
+            getattr(p, "side", None), getattr(p, "volume", None)), flush=True)
+    for p in poss:
+        tl = getattr(getattr(p, "tradeData", None), "label", "") or ""
+        if tl.startswith(LABEL_PREFIX):
+            try:
+                yield sess.close_position(account, p.positionId,
+                                          0, int(getattr(p, "volume", 0)))
+                print("CLEANED leftover pid=%s" % p.positionId, flush=True)
+            except Exception as exc:
+                print("CLEAN_FAIL pid=%s %r" % (p.positionId, exc), flush=True)
+    yield deferLater(reactor, 2.0, lambda: None)
+
     def report(tag, status, extra=""):
         print("%s -> %s %s" % (tag, status, extra), flush=True)
 

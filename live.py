@@ -359,8 +359,7 @@ def live_loop():
                           f"{broker_orphan} (untracked in state) — forcing "
                           f"external close", flush=True)
                     try:
-                        yield sess.close_position(
-                            sess.account_id, broker_orphan, 0.0, 0)
+                        yield sess.close_position(broker_orphan)
                         print(f"reconcile: ORPHAN {broker_orphan} close "
                               f"sent OK", flush=True)
                     except Exception as exc:

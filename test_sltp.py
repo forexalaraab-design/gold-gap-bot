@@ -2,17 +2,20 @@
 """
 test_sltp.py — مصفوفة اختبار حي (ديمو) لصيغ وضع SL/TP عبر OpenAPI.
 
-الهدف: اكتشاف أي صيغة يقبلها FP Markets على XAUUSD (كسر TRADING_BAD_STOPS):
-  V1   open + absolute sl/tp (double)                     trigger TRADE
-  V2   open + absolute sl/tp (double)                     trigger OPPOSITE
-  V3   open + absolute sl/tp (double)                     trigger DOUBLE_TRADE
-  V4   open + absolute sl/tp (double)                     trigger DOUBLE_OPPOSITE
-  V5   open + relativeStopLoss/TP (int, ×PRICE_UNIT)      trigger TRADE
-  V6   open + relativeStopLoss/TP (int, ×PRICE_UNIT)      trigger OPPOSITE
-  V7   naked open ثم AmendPositionSLTP absolute           trigger TRADE
-  V8   naked open ثم AmendPositionSLTP absolute           trigger OPPOSITE
-  V9   naked open ثم AmendPositionSLTP absolute           trigger DOUBLE_TRADE
-  V10  naked open ثم AmendPositionSLTP absolute           trigger DOUBLE_OPPOSITE
+يُرسل:
+   V0  open + sl/tp = السعر×PRICE_UNIT (int)     = سلوك الإنتاج الحالي (خط أساس)
+   V1  open + absolute double (سعر حقيقي)         trigger TRADE
+   V2  open + absolute double (سعر حقيقي)         trigger OPPOSITE
+   V3  open + absolute double (سعر حقيقي)         trigger DOUBLE_TRADE
+   V4  open + absolute double (سعر حقيقي)         trigger DOUBLE_OPPOSITE
+   V5  open + relativeStopLoss/TP (int xPRICE_UNIT)  trigger TRADE
+   V6  open + relativeStopLoss/TP (int xPRICE_UNIT)  trigger OPPOSITE
+   V7  naked open ثم AmendPositionSLTP السعر المطلق  trigger TRADE
+   V8  naked open ثم AmendPositionSLTP السعر المطلق  trigger OPPOSITE
+   V9  naked open ثم AmendPositionSLTP السعر المطلق  trigger DOUBLE_TRADE
+   V10 naked open ثم AmendPositionSLTP السعر المطلق  trigger DOUBLE_OPPOSITE
+   V11 naked open ثم AmendPositionSLTP السعر×PRICE_UNIT trigger TRADE
+   (V11 يشبه الاتجاه التاريخي المتفرّع من main.py)
 
 كل صفقة تُفتح بملصق TST-SLTP وتُغلق فوراً بعد استخدامها. لا يلمس
 السيجнал/الاستراتيجية إطلاقاً.
@@ -77,10 +80,15 @@ def _open_market(sess, symbol_id):
     defer.returnValue(_unwrap(res))
 
 
-def _new_with_stops(ask_raw):
+def _new_with_stops(ask_raw, scaled=True):
     req = ProtoMsgs.ProtoOANewOrderReq()
-    req.stopLoss = (ask_raw / PRICE_UNIT) - SL_DIST
-    req.takeProfit = (ask_raw / PRICE_UNIT) + TP_DIST
+    px = ask_raw / config.SPOT_SCALE
+    if scaled:
+        req.stopLoss = int(round((px - SL_DIST) * config.PRICE_UNIT))
+        req.takeProfit = int(round((px + TP_DIST) * config.PRICE_UNIT))
+    else:
+        req.stopLoss = px - SL_DIST
+        req.takeProfit = px + TP_DIST
     return req
 
 
@@ -107,16 +115,22 @@ def main(reactor):
           % (_symvalue(sym, "digits"), _symvalue(sym, "lotSize"),
              _symvalue(sym, "slDistance"), _symvalue(sym, "tpDistance"),
              _symvalue(sym, "distanceSetIn")), flush=True)
-    print("spot bid=%.2f ask=%.2f" % (b / PRICE_UNIT, a / PRICE_UNIT), flush=True)
+    print("spot bid=%.2f ask=%.2f" % (b / config.SPOT_SCALE, a / config.SPOT_SCALE), flush=True)
 
     def report(tag, status, extra=""):
         print("%s -> %s %s" % (tag, status, extra), flush=True)
 
-    # ---- V1..V4: open with absolute prices, 4 trigger methods ----
-    for trig, method in TRI.items():
-        tag = "V%s" % ({"TRADE": 1, "OPPOSITE": 2,
-                        "DOUBLE_TRADE": 3, "DOUBLE_OPPOSITE": 4}[trig])
-        req = _new_with_stops(a)
+    # ---- V0..V4: open with scaled vs absolute prices, triggers ----
+    # V0 = current production encoding exactly (sl*PRICE_UNIT int)
+    cases = [
+        ("V0", dict(scaled=True, trigger=1)),
+        ("V1", dict(scaled=False, trigger=TRI["TRADE"])),
+        ("V2", dict(scaled=False, trigger=TRI["OPPOSITE"])),
+        ("V3", dict(scaled=False, trigger=TRI["DOUBLE_TRADE"])),
+        ("V4", dict(scaled=False, trigger=TRI["DOUBLE_OPPOSITE"])),
+    ]
+    for tag, cfg in cases:
+        req = _new_with_stops(a, scaled=cfg["scaled"])
         req.ctidTraderAccountId = sess.account_id
         req.symbolId = symbol_id
         req.tradeSide = 1
@@ -124,21 +138,21 @@ def main(reactor):
         req.volume = VOL
         req.label = LABEL_PREFIX
         req.comment = ""
-        req.stopTriggerMethod = method
+        req.stopTriggerMethod = cfg["trigger"]
         try:
             res2 = yield _send(req, sess)
             _check_error(res2, tag)
-            report(tag, "ACCEPTED", "(absolute, trigger=%s)" % trig)
+            report(tag, "ACCEPTED",
+                   "(scaled=%s trigger=%s)" % (cfg["scaled"], cfg["trigger"]))
         except Exception as exc:
             report(tag, "REJECT", repr(exc))
         yield _close_test_positions(sess)
 
     # ---- V5..V6: open with relative offsets ----
-    for trig in ("TRADE", "OPPOSITE"):
-        tag = "V%s" % (5 if trig == "TRADE" else 6)
+    for trig, tag in (("TRADE", "V5"), ("OPPOSITE", "V6")):
         req = ProtoMsgs.ProtoOANewOrderReq()
-        req.relativeStopLoss = int(SL_DIST * PRICE_UNIT)
-        req.relativeTakeProfit = int(TP_DIST * PRICE_UNIT)
+        req.relativeStopLoss = int(SL_DIST * config.PRICE_UNIT)
+        req.relativeTakeProfit = int(TP_DIST * config.PRICE_UNIT)
         req.ctidTraderAccountId = sess.account_id
         req.symbolId = symbol_id
         req.tradeSide = 1
@@ -165,27 +179,38 @@ def main(reactor):
         tl = getattr(getattr(p, "tradeData", None), "label", "") or ""
         if tl.startswith(LABEL_PREFIX):
             pos_id = p.positionId
-            entry = getattr(p, "price", None) or (a / PRICE_UNIT)
+            entry = getattr(p, "price", None) or (a / config.SPOT_SCALE)
     print("naked positionId", pos_id, "entry", entry, flush=True)
     if pos_id is None:
         print("cannot resolve naked position; abort"); defer.returnValue(1)
 
-    for trig, method in TRI.items():
-        tag = "V%s" % (7 if trig == "TRADE" else
-                       8 if trig == "OPPOSITE" else
-                       9 if trig == "DOUBLE_TRADE" else 10)
+    for trig, tag in (("TRADE", "V7"), ("OPPOSITE", "V8"),
+                      ("DOUBLE_TRADE", "V9"), ("DOUBLE_OPPOSITE", "V10")):
         areq = ProtoMsgs.ProtoOAAmendPositionSLTPReq()
         areq.ctidTraderAccountId = sess.account_id
         areq.positionId = pos_id
         areq.stopLoss = float(entry) - SL_DIST
         areq.takeProfit = float(entry) + TP_DIST
-        areq.stopLossTriggerMethod = method
+        areq.stopLossTriggerMethod = TRI[trig]
         try:
             res5 = yield _send(areq, sess)
             _check_error(res5, tag)
             report(tag, "ACCEPTED", "(absolute amend, trigger=%s)" % trig)
         except Exception as exc:
             report(tag, "REJECT", repr(exc))
+
+    areq2 = ProtoMsgs.ProtoOAAmendPositionSLTPReq()
+    areq2.ctidTraderAccountId = sess.account_id
+    areq2.positionId = pos_id
+    areq2.stopLoss = int(round((float(entry) - SL_DIST) * config.PRICE_UNIT))
+    areq2.takeProfit = int(round((float(entry) + TP_DIST) * config.PRICE_UNIT))
+    areq2.stopLossTriggerMethod = TRI["TRADE"]
+    try:
+        res6 = yield _send(areq2, sess)
+        _check_error(res6, "V11")
+        report("V11", "ACCEPTED", "(scaled amend, trigger=TRADE)")
+    except Exception as exc:
+        report("V11", "REJECT", repr(exc))
 
     yield _close_test_positions(sess)
     print("DONE", flush=True)

@@ -2,15 +2,15 @@
   "position": null,
   "stats": {
     "n": 48,
-    "mean": 4267.1840624999995,
-    "sd": 0.8653659023481778,
-    "median": 4267.39,
-    "mad": 0.7561259999989751
+    "mean": 4268.7603125,
+    "sd": 1.1647657084517251,
+    "median": 4268.879999999999,
+    "mad": 1.4232959999987054
   },
-  "last_run": "2026-09-25T14:23:45Z",
+  "last_run": "2026-09-25T14:27:46Z",
   "money_digits": 2,
-  "entry_balance_units": 1002154,
-  "cooldown_until": 1790346019.525302,
+  "entry_balance_units": 1002161,
+  "cooldown_until": 1790346511.93226,
   "closed_trades": [
     {
       "ts_open": "2026-09-21T15:58:12Z",
@@ -3216,16 +3216,14 @@
   "perf": {
     "running_daily_pnl": -16.63,
     "consecutive_losses": 0,
-    "trades_today": 201,
-    "last_updated": "2026-09-25T14:19:30Z",
-    "measured_count": 1,
-    "measured_commission_usd": 0.08
+    "trades_today": 202,
+    "last_updated": "2026-09-25T14:25:29Z"
   },
   "cleanup_done_internal": true,
-  "_last_spread_usd": 0.07,
-  "_anomaly_jump": 3.7849999999998545,
-  "_prev_catch_up": 0.555000000000291,
-  "_prev2_catch_up": 0.6499999999996362,
+  "_last_spread_usd": 0.05,
+  "_anomaly_jump": 1.1300000000001091,
+  "_prev_catch_up": -3.240000000000691,
+  "_prev2_catch_up": -4.449999999999818,
   "_v2_virtual": null,
   "_v2_daily": {
     "2026-09-23": -4.62,

@@ -1,27 +1,16 @@
 {
-  "position": {
-    "positionId": 41848503,
-    "side": "BUY",
-    "entry_gap": -41.76500000000033,
-    "entry_price": 4266.035,
-    "opened_at": "2026-09-25T05:57:34Z",
-    "pnl_peak_usd": 0.0,
-    "pnl_track": [],
-    "stop_loss": 4263.997234017,
-    "take_profit": 4267.4349999999995,
-    "sltp_set": false
-  },
+  "position": null,
   "stats": {
     "n": 48,
-    "mean": 4268.598958333333,
-    "sd": 1.0076800606392142,
-    "median": 4268.5,
-    "mad": 0.5708010000003236
+    "mean": 4267.800104166667,
+    "sd": 1.3673590360981662,
+    "median": 4267.3025,
+    "mad": 0.7301804999990831
   },
-  "last_run": "2026-09-25T05:57:40Z",
+  "last_run": "2026-09-25T06:01:11Z",
   "money_digits": 2,
   "entry_balance_units": 1002431,
-  "cooldown_until": 0,
+  "cooldown_until": 1790316034.093036,
   "closed_trades": [
     {
       "ts_open": "2026-09-18T15:31:59Z",
@@ -3231,10 +3220,10 @@
     "last_updated": "2026-09-25T05:57:34Z"
   },
   "cleanup_done_internal": true,
-  "_last_spread_usd": 0.09,
-  "_anomaly_jump": 1.3699999999998909,
-  "_prev_catch_up": 1.6850000000004002,
-  "_prev2_catch_up": 3.449999999999818,
+  "_last_spread_usd": 0.1,
+  "_anomaly_jump": 1.2100000000000364,
+  "_prev_catch_up": -0.9899999999988722,
+  "_prev2_catch_up": -2.115000000000691,
   "_v2_virtual": null,
   "_v2_daily": {
     "2026-09-23": -4.62,

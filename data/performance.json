@@ -3,10 +3,10 @@
   "wins": 101,
   "losses": 99,
   "win_rate": 50.5,
-  "total_pnl_usd": -21.16,
-  "avg_pnl_usd": -0.106,
+  "total_pnl_usd": -18.29,
+  "avg_pnl_usd": -0.091,
   "best_usd": 5.79,
   "worst_usd": -4.45,
   "max_drawdown_usd": -32.54,
-  "updated": "2026-09-25T10:22:06Z"
+  "updated": "2026-09-25T10:30:16Z"
 }

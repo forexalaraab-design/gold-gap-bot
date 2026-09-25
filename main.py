@@ -1336,6 +1336,10 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
                     print("  POSITION_NOT_FOUND — broker already closed "
                           "the position; reconciling state (external close)",
                           flush=True)
+                    # 2026-09-24: volume/digits يُعرّفان داخل try فقط بعد نجاح
+                    # الإغلاق — هنا قد يكونان غير معرّفين أصلاً (إغلاق خارجي)
+                    volume = getattr(pos.tradeData, "volume", 100)
+                    digits = getattr(pos, "digits", 2) or 2
                     entry_x = st_pos.get("entry_price")
                     if entry_x:
                         close_x = mid

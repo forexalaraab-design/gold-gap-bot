@@ -347,3 +347,16 @@ HUMAN_AWAY_ON = _env_bool("STRAT_HUMAN_AWAY", False)
 HUMAN_AWAY_PROB = _env_float("STRAT_HUMAN_AWAY_PROB", 0.08)
 HUMAN_AWAY_MIN_MIN = _env_float("STRAT_HUMAN_AWAY_MIN", 25.0)
 HUMAN_AWAY_MAX_MIN = _env_float("STRAT_HUMAN_AWAY_MAX", 90.0)
+
+# ===== قناة MT5 (2026-09-25 — MT5 يقبل SL/TP سيرفراً) =====
+# الهدف: نقل التنفيذ من cTrader (يرفض وقوف السيرفر → تسرب خسائر) إلى
+# MT5 حيث السيرفر هو الضامن. الظروف الآتية تُستعمل من live_mt5.py فقط.
+# 2026-09-28: الحساب الهدف Fusion Markets Demo (490512 / FusionMarkets-Demo)
+# — تحل محل ديمو FP Markets (7394590). الرمز الافتراضي XAUUSD (Fusion لا
+# يستخدم لاحقة .r) وقابل للتجاوز عبر MT5_SYMBOL إن اختلف الاكتشاف الحي.
+MT5_SYMBOL = os.environ.get("MT5_SYMBOL", "XAUUSD")
+# مسار تيرمنال محلي إن وُجد (يُستعمل فقط عند غياب login/password/server).
+MT5_PATH = os.environ.get("MT5_TERMINAL_PATH", "")
+# مدة الدورة القصيرة على GitHub Actions (بالدقائق) — الـ schedule كل 5 د
+# لكن التنفيذ نفسه قد يستغرق دقائق قليلة. 0 = جولة واحدة ثم خروج.
+MT5_DURATION_MIN = _env_float("MT5_DURATION_MIN", 0.0)

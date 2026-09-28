@@ -1,0 +1,124 @@
+name: gold-gap-mt5
+
+on:
+  schedule:
+    # دورة قصيرة كل 5 دقائق — رانسات عامة مجانية غير محدودة
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      probe:
+        description: "فحص تمهيدي اتصال/رمز/سبريد بلا صفقات (MT5_PROBE=1)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: goldgap-mt5
+  cancel-in-progress: true
+
+jobs:
+  run-mt5:
+    runs-on: windows-latest
+    timeout-minutes: 14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install MetaTrader5 python package
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install MetaTrader5
+          python -m pip install -r requirements.txt
+
+      # تيرمنال MT5 رسمي (MetaQuotes) — يعمل مع أي وسيط عبر
+      # login/password/server. تثبيت صامت ثم نبحث عن terminal64.exe في
+      # المواضع الشائعة ونضبط MT5_TERMINAL_PATH ليمرِّره initialize.
+      - name: Install MT5 terminal
+        shell: pwsh
+        run: |
+          $setup = "C:\mt5setup.exe"
+          Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.soft/mt5/mt5setup.exe" -OutFile $setup -UseBasicParsing
+          Write-Host "installing MT5 (silent)..."
+          $p = Start-Process -FilePath $setup -ArgumentList "/auto" -PassThru -Wait
+          Write-Host "mt5setup exit=$($p.ExitCode)"
+          $candidates = @(
+            "C:\Program Files\MetaTrader 5\terminal64.exe",
+            "C:\Program Files\MetaTrader 5 Terminal\terminal64.exe",
+            (Join-Path $env:LOCALAPPDATA "MetaTrader 5\terminal64.exe"),
+            (Join-Path $env:APPDATA "MetaQuotes\Terminal\terminal64.exe")
+          )
+          $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($found) {
+            Write-Host "MT5 terminal at $found"
+            "MT5_TERMINAL_PATH=$found" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          } else {
+            Write-Host "terminal64.exe not found in common paths — initialize path will be null"
+          }
+
+      - name: Run MT5 bot (short cycle)
+        shell: pwsh
+        run: python live_mt5.py
+        env:
+          MT5_LOGIN: ${{ secrets.MT5_LOGIN }}
+          MT5_PASSWORD: ${{ secrets.MT5_PASSWORD }}
+          MT5_SERVER: ${{ secrets.MT5_SERVER }}
+          MT5_SYMBOL: ${{ vars.MT5_SYMBOL || 'XAUUSD' }}
+          MT5_DURATION_MIN: ${{ vars.MT5_DURATION_MIN || '3.0' }}
+          MT5_PROBE: ${{ inputs.probe && '1' || '0' }}
+          # نفس قواعد v1 الحي (هجومي 1.20 + بلا فلتر إضافي + لوت 0.01)
+          STRAT_COOLDOWN_MIN: "1.0"
+          STRAT_MOMENTUM_MIN: "1.20"
+          STRAT_HUMAN_SKIP: "0"
+          STRAT_HUMAN_AWAY: "0"
+          STRAT_HUMAN_ENTRY_JITTER: "0.03"
+          STRAT_FEES_PER_LOT: ${{ secrets.STRAT_FEES_PER_LOT }}
+          STRAT_TRAILING_ARM: ${{ secrets.STRAT_TRAILING_ARM }}
+          STRAT_TRAILING_BACK: ${{ secrets.STRAT_TRAILING_BACK }}
+          STRAT_MAX_HOLD_HOURS: ${{ secrets.STRAT_MAX_HOLD_HOURS }}
+          STRAT_MAX_LOSS_USD: ${{ secrets.STRAT_MAX_LOSS_USD }}
+          STRAT_PROFIT_TARGET: ${{ secrets.STRAT_PROFIT_TARGET }}
+          STRAT_MODEL: ${{ vars.STRAT_MODEL || 'v1' }}
+          STRAT_PAUSE_OPEN: ${{ vars.STRAT_PAUSE_OPEN || '1' }}
+          STRAT_V2_EVAL: ${{ vars.STRAT_V2_EVAL || '1' }}
+          STRAT_SESSION_BLOCK_ON: "1"
+          PYTHONIOENCODING: utf-8
+          PYTHONUNBUFFERED: "1"
+
+      - name: Persist state
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { Write-Host "no changes"; exit 0 }
+          git commit -m "data: mt5 log update ($(Get-Date -Format o))"
+          git push
+          if ($LASTEXITCODE -ne 0) { git pull --rebase --autostash origin main; git push }
+
+      - name: Self-dispatch (keep mt5 chain alive)
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
+        run: |
+          if (-not $env:GH_TOKEN) { Write-Host "no DISPATCH_PAT — cron only"; exit 0 }
+          $runs = gh api "repos/${{ github.repository }}/actions/runs?per_page=20" `
+            --jq '[.workflow_runs[] | select(.status == "in_progress" or .status == "queued") | .id]'
+          $other = ($runs | Where-Object { $_ -ne "$env:GITHUB_RUN_ID" })
+          if (-not $other) {
+            Write-Host "no overlap -> dispatch next mt5 round"
+            gh workflow run gold-gap-mt5.yml --ref $env:GITHUB_REF_NAME
+          } else {
+            Write-Host "overlap detected ($other); skipping self-dispatch"
+          }

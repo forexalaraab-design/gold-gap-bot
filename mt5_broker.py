@@ -66,29 +66,30 @@ def initialize(login=None, password=None, server=None, path=None):
     path = path or os.environ.get("MT5_TERMINAL_PATH") \
         or os.environ.get("MT5_PATH") or None
     last = None
-    for attempt in range(1, 4):
+    for attempt in range(1, 6):
         last = None
-        if path is not None:
-            ok_in = mt5.initialize(path=path, portable=portable,
-                                   timeout=120000)
+        # الوصفة الموثقة من مشروع يشتغل على windows-latest
+        # (Joaopeuko/Mql5-Python-Integration tests/integration):
+        #   mt5.initialize(login=…, password=…, server=…, path=…) — نداء
+        # واحد بالاعتمادات، لا attach ثم mt5.login()، يُعاد 10 مرات حتى
+        # يجيب التيرمنال. مع /portable /headless للـ CI لا يظهر حوار.
+        if login is not None:
+            ok_in = mt5.initialize(path=path, login=login,
+                                   password=password, server=server,
+                                   portable=portable, timeout=100000)
         else:
-            ok_in = mt5.initialize(timeout=120000)
+            ok_in = mt5.initialize(path=path if path else None,
+                                   portable=portable, timeout=100000)
         if ok_in:
-            if login is None:
-                return True, {}
-            if mt5.login(login=login, password=password, server=server):
-                return True, {}
-            last = mt5.last_error()
-        else:
-            last = mt5.last_error()
+            return True, {}
+        last = mt5.last_error()
         try:
             mt5.shutdown()
         except Exception:
             pass
-        if attempt < 3:
-            print(f"mt5 initialize attempt {attempt}/3 failed: "
-                  f"{last} — retrying…", flush=True)
-            time.sleep(4.0 * attempt)
+        print(f"mt5 initialize attempt {attempt}/5 failed: "
+              f"{last} — retrying…", flush=True)
+        time.sleep(5.0 * attempt)
     return False, {"error": last, "detail": "initialize failed"}
 
 

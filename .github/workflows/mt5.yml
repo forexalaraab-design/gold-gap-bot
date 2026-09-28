@@ -106,7 +106,31 @@ jobs:
             } else {
               Write-Host "::error::terminal64 didn't start within 60s"
             }
-            Start-Sleep -Seconds 15
+            # حقن [Experts] في config بجانب التيرمنال (وضع portable يضع
+            # config بجوار الملف لا في %APPDATA%). إدخال لا تغيير سلوك.
+            try {
+              $exeDir = Split-Path $found
+              $cfgPathCandidates = @(
+                (Join-Path $exeDir "config\common.ini"),
+                (Join-Path $exeDir "Config\common.ini")
+              )
+              foreach ($cp in $cfgPathCandidates) {
+                if (Test-Path $cp) {
+                  $c = Get-Content $cp -Raw -ErrorAction SilentlyContinue
+                  if ($c -notmatch '\[Experts\]') {
+                    Add-Content -Path $cp -Value @("", "[Experts]",
+                      "Enabled=1", "AllowDllImport=1", "Account=0",
+                      "Profile=0", "Chart=0", "Api=0", "DisableOpenCL=0",
+                      "WebRequest=0", "")
+                    Write-Host "injected [Experts] into $cp"
+                  } else {
+                    Write-Host "[Experts] already present in $cp"
+                  }
+                  break
+                }
+              }
+            } catch { Write-Host "expert inject skipped: $($_.Exception.Message)" }
+            Start-Sleep -Seconds 25
           } else {
             Write-Host "no MT5_TERMINAL_PATH — relying on initialize default"
           }

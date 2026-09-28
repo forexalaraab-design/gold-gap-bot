@@ -78,19 +78,21 @@ jobs:
               Write-Host "config at $($cfg.FullName)"
               $c = Get-Content $cfg.FullName -Raw -ErrorAction SilentlyContinue
               if ($c -notmatch '\[Experts\]') {
-                Add-Content -Path $cfg.FullName -Value @"
-
-[Experts]
-AllowDllImport=1
-Enabled=1
-Account=0
-Profile=0
-Chart=0
-Api=0
-DisableOpenCL=
-WebRequest=0
-WebRequestUrl=
-"@
+                $lines = @(
+                  ''
+                  '[Experts]'
+                  'AllowDllImport=1'
+                  'Enabled=1'
+                  'Account=0'
+                  'Profile=0'
+                  'Chart=0'
+                  'Api=0'
+                  'DisableOpenCL='
+                  'WebRequest=0'
+                  'WebRequestUrl='
+                  ''
+                )
+                Add-Content -Path $cfg.FullName -Value $lines
                 Write-Host "injected [Experts] Enabled=1 into common.ini"
               } else {
                 Write-Host "[Experts] already present in common.ini"

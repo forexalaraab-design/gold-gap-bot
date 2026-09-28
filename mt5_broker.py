@@ -60,12 +60,25 @@ def initialize(login=None, password=None, server=None, path=None):
         except (TypeError, ValueError):
             return False, {"error": (-2, "Invalid \"login\" argument"),
                            "detail": f"non-numeric login: {login!r}"}
-    if not mt5.initialize(path=path, login=login, password=password,
+    # IPC timeout شائع عند أول إطلاق للتيرمنال بعد تثبيت جديد — نُعيد
+    # المحاولة مع تصفية بينها حتى يجهز التيرمنال نفسه.
+    last = None
+    for attempt in range(1, 4):
+        last = None
+        if mt5.initialize(path=path, login=login, password=password,
                           server=server if server else None,
-                          timeout=60000):
-        err = mt5.last_error()
-        return False, {"error": err, "detail": "initialize failed"}
-    return True, {}
+                          timeout=120000):
+            return True, {}
+        last = mt5.last_error()
+        try:
+            mt5.shutdown()
+        except Exception:
+            pass
+        if attempt < 3:
+            print(f"mt5 initialize attempt {attempt}/3 failed: "
+                  f"{last} — retrying…", flush=True)
+            time.sleep(4.0 * attempt)
+    return False, {"error": last, "detail": "initialize failed"}
 
 
 def shutdown():

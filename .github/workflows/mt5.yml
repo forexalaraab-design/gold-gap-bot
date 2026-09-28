@@ -40,33 +40,30 @@ jobs:
           python -m pip install MetaTrader5
           python -m pip install -r requirements.txt
 
-      # تيرمنال MT5 رسمي (MetaQuotes) — يعمل مع أي وسيط عبر
-      # login/password/server. التثبيت بوضع /portable (البيانات بجانب
-      # التيرمنال لا AppData) هو الوصفة الموثقة لتشغيل CI headless:
-      #   - Joaopeuko/Mql5-Python-Integration: يثبّت /auto /portable ثم
-      #     يُقلع /portable /headless /config:config /noreport ويعمل
-      #     initialize عبر Python على windows-latest فعلياً.
-      #   - mql5 forum #4: نسخ MT5 خارج Program Files + /portable يحل
-      #     IPC timeout الناتج عن permissions/UAC.
-      # السجل الحقيقي: 6 تشغيلات فشلت بـ (-10005,'IPC timeout') مع وضع
-      # البيانات في AppData — هذا المسار portable هو ما يختلف الآن.
-      # الرابط الرسمي المؤكد من mql5.com (team.metaquotes):
-      #   download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe
-      - name: Install MT5 terminal
+      # تيرمنال Fusion الرسمي — مُثبّت الوسيط نفسه وسيرفرات FusionMarkets
+      # مسبقة القائمة. سبب اختياره: على التثبيت العام (MetaQuotes) بلا
+      # حساب ولا سيرفر معلوم، توقف التيرمنال عند شاشة أول تشغيل فلا
+      # يجيب IPC أبداً (7 تشغيلات فشلت بـ -10005). jأجوبة موثوقة
+      # (stackoverflow 75687231) تؤكد أن تنزيل تيرمنال الوسيط هو الحل
+      # لأن سيرفره يكون مكتشفاً سلفاً. الرابط من صفحة Fusion الرسمية:
+      #   download.terminal.free/cdn/web/fusion.markets.pty/mt5/fusionmarkets5setup.exe
+      - name: Install Fusion MT5 terminal
         shell: pwsh
         run: |
           $setup = "C:\mt5setup.exe"
-          $url = "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
-          Write-Host "downloading MT5 web-installer from mql5 CDN..."
+          $url = "https://download.terminal.free/cdn/web/fusion.markets.pty/mt5/fusionmarkets5setup.exe"
+          Write-Host "downloading Fusion MT5 installer..."
           Invoke-WebRequest -Uri $url -OutFile $setup -UseBasicParsing
-          Write-Host "installing MT5 (silent /auto /portable)..."
+          Write-Host "size=$((Get-Item $setup).Length) bytes"
+          Write-Host "installing (silent /auto /portable)..."
           $p = Start-Process -FilePath $setup -ArgumentList "/auto", "/portable" -PassThru -Wait
           Write-Host "mt5setup exit=$($p.ExitCode)"
           $candidates = @(
+            "C:\Program Files\Fusion Markets MetaTrader 5\terminal64.exe",
+            "C:\Program Files\Fusion Markets MT5\terminal64.exe",
             "C:\Program Files\MetaTrader 5\terminal64.exe",
             "C:\Program Files\MetaTrader 5 Terminal\terminal64.exe",
-            (Join-Path $env:LOCALAPPDATA "MetaTrader 5\terminal64.exe"),
-            (Join-Path $env:APPDATA "MetaQuotes\Terminal\terminal64.exe")
+            (Join-Path $env:LOCALAPPDATA "MetaTrader 5\terminal64.exe")
           )
           $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if ($found) {
@@ -74,7 +71,7 @@ jobs:
             "MT5_TERMINAL_PATH=$found" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
             "MT5_PORTABLE=1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           } else {
-            Write-Host "terminal64.exe not found in common paths — initialize path will be null"
+            Write-Host "::error::terminal64.exe not found in common paths"
           }
 
       - name: Run MT5 bot (short cycle)

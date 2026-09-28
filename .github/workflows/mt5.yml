@@ -65,9 +65,17 @@ jobs:
           if ($found) {
             Write-Host "MT5 terminal at $found"
             "MT5_TERMINAL_PATH=$found" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
-            # إقلاع أولي كي ينشئ التيرمنال مجلد بياناته الحقيقي (بدون /portable)
-            # نمرر الاعتمادات من الأسرار كي يبدأ التيرمنال مسجّل الدخول
-            # مباشرة (الحل الموثق للـ IPC timeout في headless CI).
+          } else {
+            Write-Host "terminal64.exe not found in common paths — initialize path will be null"
+          }
+
+      - name: Run MT5 bot (short cycle)
+        shell: pwsh
+        run: |
+          # نفس الخطوة: إقلاع التيرمنال بالحساب + حقن [Experts] + initialize —
+          # فرضية أن فصل الخطوات يقتل رابطة IPC على headless runner.
+          $found = $env:MT5_TERMINAL_PATH
+          if ($found -and (Test-Path $found)) {
             $login = "${{ secrets.MT5_LOGIN }}"
             $pass  = "${{ secrets.MT5_PASSWORD }}"
             $serv  = "${{ secrets.MT5_SERVER }}"
@@ -76,15 +84,12 @@ jobs:
             if ($serv)  { $args += "/server:$serv" }
             if ($pass)  { $args += "/password:$pass" }
             $pt = Start-Process -FilePath $found -ArgumentList $args -PassThru
+            Write-Host "terminal boot pid=$($pt.Id) with login args"
             Start-Sleep -Seconds 25
-            # لا نقتل التيرمنال — سيبقى حياً حتى تتمكن initialize() من IPC
-            # (حل الـ IPC timeout: تلحّق بالعملية القائمة بدل إقلاع جديد في كل خطوة)
-            # حقن قسم [Experts] في common.ini => التداول الآلي (Algo Trading) مفعّل
-            # حتى في بيئة CI بلا واجهة — الحل المُتحقق منه محلياً.
+            # حقن [Experts] => التداول الآلي مفعّل حتى بلا واجهة
             $cfg = Get-ChildItem "$env:APPDATA\MetaQuotes\Terminal" -Recurse `
               -Filter common.ini -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($cfg) {
-              Write-Host "config at $($cfg.FullName)"
               $c = Get-Content $cfg.FullName -Raw -ErrorAction SilentlyContinue
               if ($c -notmatch '\[Experts\]') {
                 $lines = @(
@@ -102,20 +107,17 @@ jobs:
                   ''
                 )
                 Add-Content -Path $cfg.FullName -Value $lines
-                Write-Host "injected [Experts] Enabled=1 into common.ini"
+                Write-Host "injected [Experts] into $($cfg.FullName)"
               } else {
-                Write-Host "[Experts] already present in common.ini"
+                Write-Host "[Experts] already present"
               }
             } else {
-              Write-Host "could not find common.ini for [Experts] injection"
+              Write-Host "warning: no common.ini found for [Experts]"
             }
           } else {
-            Write-Host "terminal64.exe not found in common paths — initialize path will be null"
+            Write-Host "no MT5_TERMINAL_PATH set — will rely on initialize default"
           }
-
-      - name: Run MT5 bot (short cycle)
-        shell: pwsh
-        run: python live_mt5.py
+          python live_mt5.py
         env:
           MT5_LOGIN: ${{ secrets.MT5_LOGIN }}
           MT5_PASSWORD: ${{ secrets.MT5_PASSWORD }}

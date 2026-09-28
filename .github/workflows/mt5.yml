@@ -118,8 +118,60 @@ jobs:
           }
           # 2) إقلاع التيرمنال صامتاً (بلا وسوم دخول) — سيقرأ الحساب من config
           if ($found -and (Test-Path $found)) {
-            $pt = Start-Process -FilePath $found -PassThru
-            Write-Host "terminal boot pid=$($pt.Id) (silent)"
+            # إقلاع أولي قصير: يُنشئ مجلد بيانات التيرمنال (config\common.ini)
+            # في %APPDATA%\MetaQuotes\Terminal\<hash>\config. ثم نقتله ونحقن
+            # الاعتمادات ليتسجّل دخولاً صامتاً عند الإقلاع الثاني.
+            $boot = Start-Process -FilePath $found -PassThru
+            Write-Host "boot#1 pid=$($boot.Id) (create data dir + config)"
+            Start-Sleep -Seconds 20
+            Stop-Process -Id $boot.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
+            $cfg = $null
+            foreach ($base in @("$env:APPDATA\MetaQuotes\Terminal",
+                                "$env:LOCALAPPDATA\MetaQuotes\Terminal",
+                                "$env:APPDATA\MetaQuotes")) {
+              $cfg = Get-ChildItem $base -Recurse -Filter common.ini `
+                -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($cfg) { break }
+            }
+            if (-not $cfg) {
+              Write-Host "::error::common.ini not found after boot#1"
+              Write-Host "TERMINAL DIR TREE:"
+              Get-ChildItem "$env:APPDATA\MetaQuotes" -Recurse -Depth 2 `
+                -ErrorAction SilentlyContinue | Select-Object -First 60 FullName
+            } else {
+              Write-Host "config at $($cfg.FullName)"
+              $lines = Get-Content $cfg.FullName -ErrorAction SilentlyContinue
+              $common = @()
+              $seenLogin = $false; $seenServer = $false; $seenPass = $false
+              foreach ($ln in $lines) {
+                if ($ln -like 'Login=*') { $common += "Login=$login"; $seenLogin = $true }
+                elseif ($ln -like 'Server=*') { $common += "Server=$serv"; $seenServer = $true }
+                elseif ($ln -like 'Password=*') { $common += "Password=$pass"; $seenPass = $true }
+                else { $common += $ln }
+              }
+              if (-not $seenLogin) { $common += "Login=$login" }
+              if (-not $seenServer) { $common += "Server=$serv" }
+              if (-not $seenPass) { $common += "Password=$pass" }
+              Write-Host "common: login=$login server=$serv password=***"
+              if (($common | Out-String) -notmatch '\[Experts\]') {
+                $common += ''
+                $common += '[Experts]'
+                $common += 'Enabled=1'
+                $common += 'AllowDllImport=1'
+                $common += 'Account=0'
+                $common += 'Profile=0'
+                $common += 'Chart=0'
+                $common += 'Api=0'
+                $common += 'DisableOpenCL=0'
+                $common += 'WebRequest=0'
+              }
+              [System.IO.File]::WriteAllLines($cfg.FullName, $common, [System.Text.Encoding]::UTF8)
+              Write-Host "injected [Common] login/server/password + [Experts] Enabled=1"
+            }
+            # إقلاع ثانٍ صامت: يقرأ الاعتمادات من config — لا حوارات.
+            $boot2 = Start-Process -FilePath $found -PassThru
+            Write-Host "boot#2 pid=$($boot2.Id) (silent login from config)"
             Start-Sleep -Seconds 30
           } else {
             Write-Host "no MT5_TERMINAL_PATH — relying on initialize default"

@@ -65,10 +65,39 @@ jobs:
           if ($found) {
             Write-Host "MT5 terminal at $found"
             "MT5_TERMINAL_PATH=$found" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
-            # preregister the terminal to avoid first-launch IPC timeout
-            $pt = Start-Process -FilePath $found -ArgumentList "/portable" -PassThru
-            Start-Sleep -Seconds 5
+            # إقلاع أولي كي ينشئ التيرمنال مجلد بياناته الحقيقي (بدون /portable)
+            $pt = Start-Process -FilePath $found -PassThru
+            Start-Sleep -Seconds 20
             if (-not $pt.HasExited) { try { $pt.Kill() } catch {} }
+            Start-Sleep -Seconds 2
+            # حقن قسم [Experts] في common.ini => التداول الآلي (Algo Trading) مفعّل
+            # حتى في بيئة CI بلا واجهة — الحل المُتحقق منه محلياً.
+            $cfg = Get-ChildItem "$env:APPDATA\MetaQuotes\Terminal" -Recurse `
+              -Filter common.ini -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($cfg) {
+              Write-Host "config at $($cfg.FullName)"
+              $c = Get-Content $cfg.FullName -Raw -ErrorAction SilentlyContinue
+              if ($c -notmatch '\[Experts\]') {
+                Add-Content -Path $cfg.FullName -Value @"
+
+[Experts]
+AllowDllImport=1
+Enabled=1
+Account=0
+Profile=0
+Chart=0
+Api=0
+DisableOpenCL=
+WebRequest=0
+WebRequestUrl=
+"@
+                Write-Host "injected [Experts] Enabled=1 into common.ini"
+              } else {
+                Write-Host "[Experts] already present in common.ini"
+              }
+            } else {
+              Write-Host "could not find common.ini for [Experts] injection"
+            }
           } else {
             Write-Host "terminal64.exe not found in common paths — initialize path will be null"
           }

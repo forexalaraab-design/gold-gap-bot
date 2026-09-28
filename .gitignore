@@ -8,3 +8,9 @@ PROJECT_SUMMARY.md
 BOT_DATA_FOR_AI.md
 data/backup_*/
 data/backup_*
+
+# شفافية الريبو العام لا تتحمّل سجلات تشغيل تكشف المنطق
+data/*.csv
+data/*.json
+*.log
+wordpress_client_secrets.json

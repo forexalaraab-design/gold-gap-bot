@@ -115,6 +115,7 @@ def symbol_properties(symbol=None):
     if info is None:
         return None
     tick = mt5.symbol_info_tick(s)
+    # spread يُقرأ من symbol_info (يجمعه التيرمنال) — كائن Tick لا يحمله.
     return {
         "symbol": s,
         "digits": info.digits,
@@ -123,7 +124,7 @@ def symbol_properties(symbol=None):
         "trade_tick_size": info.trade_tick_size,
         "volume_min": info.volume_min,
         "volume_step": info.volume_step,
-        "spread_points": tick.spread if tick else None,
+        "spread_points": getattr(info, "spread", None),
         "bid": tick.bid if tick else info.bid,
         "ask": tick.ask if tick else info.ask,
     }
@@ -140,6 +141,28 @@ def tick(symbol=None):
             "time_msc": t.time_msc}
 
 
+def positions_list(pos):
+    """تحويل نتائج positions_get من التيرمنال إلى dictات نظيفة (استثناء-safe)."""
+    out = []
+    for p in (pos or []):
+        out.append({
+            "ticket": p.ticket,
+            "symbol": p.symbol,
+            "side": "buy" if p.type == 0 else "sell",
+            "volume": p.volume,
+            "open_price": p.price_open,
+            "sl": p.sl,
+            "tp": p.tp,
+            "pnl_usd": getattr(p, "profit", 0.0),
+            "commission": getattr(p, "commission", 0.0),
+            "swap": getattr(p, "swap", 0.0),
+            "comment": getattr(p, "comment", ""),
+            "magic": getattr(p, "magic", 0),
+            "open_time": p.time,
+        })
+    return out
+
+
 def positions_get(symbol=None):
     """الصفقات المفتوحة — عوضاً عن open_positions في cbot.
 
@@ -154,24 +177,7 @@ def positions_get(symbol=None):
         return []
     if pos is None:
         return []
-    out = []
-    for p in pos:
-        out.append({
-            "ticket": p.ticket,
-            "symbol": p.symbol,
-            "side": "buy" if p.type == 0 else "sell",
-            "volume": p.volume,
-            "open_price": p.price_open,
-            "sl": p.sl,
-            "tp": p.tp,
-            "pnl_usd": p.profit,
-            "commission": p.commission,
-            "swap": p.swap,
-            "comment": p.comment,
-            "magic": p.magic,
-            "open_time": p.time,
-        })
-    return out
+    return positions_list(pos)
 
 
 def _volume_units(lot):
@@ -212,7 +218,7 @@ def open_position(symbol, side, volume, sl=None, tp=None, comment="",
         "volume": lot,
         "type": order_type,
         "price": price,
-        "deviation": 10,
+        "deviation": 30,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
         "comment": comment,
@@ -229,11 +235,12 @@ def open_position(symbol, side, volume, sl=None, tp=None, comment="",
     return res.order, "ok"
 
 
-def close_position(symbol, side, volume, comment=""):
+def close_position(symbol, side, volume, comment="", ticket=None):
     """إغلاق صفقة مفتوحة بعكس الاتجاه بنفس الحجم.
 
-    تُرسل أمر DEAL مع ضبط 'position' أو ببساطة الاتجاه المعاكس للصقف.
-    لا نضع sl/tp عند الإغلاق — السيرفر قد أغلقَها. comment فارغ دائماً.
+    يُرسل أمر DEAL مع ضبط 'position' برقم التذكرة الفعلي (MT5 يرفض
+    إغلاقاً بلا position). إن مُرر ticket يُغلق تلك الصفقة بالضبط؛ وإلا
+    يُغلق المنصوص عليها الأولى. لا نضع sl/tp عند الإغلاق. comment فارغ.
     """
     mt5 = _mt5()
     s = symbol or config.SYMBOL
@@ -241,6 +248,19 @@ def close_position(symbol, side, volume, comment=""):
     order_type = mt5.ORDER_TYPE_SELL if side in ("buy", "0") \
         else mt5.ORDER_TYPE_BUY
     lot = _volume_units(volume if volume else config.LOT)
+
+    if ticket is not None:
+        sel = mt5.positions_get(ticket=ticket)
+        positions = positions_list(sel)
+    else:
+        positions = positions_get(s)
+    if not positions:
+        return None, "no open position to close"
+    pos = positions[0]
+    ticket = pos["ticket"]
+    # حجم الإغلاق لا يتجاوز حجم الصفقة الفعلية
+    close_lot = min(lot, pos["volume"])
+
     tick_ = mt5.symbol_info_tick(s)
     if tick_ is None:
         return None, "no tick"
@@ -248,11 +268,11 @@ def close_position(symbol, side, volume, comment=""):
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": s,
-        "volume": lot,
+        "volume": close_lot,
         "type": order_type,
-        "position": 0,  # سنفشل: نستخدم الموضّع (position) بـ positions_get
+        "position": ticket,
         "price": price,
-        "deviation": 10,
+        "deviation": 30,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
         "comment": comment,

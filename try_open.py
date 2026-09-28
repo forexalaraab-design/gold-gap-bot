@@ -13,7 +13,8 @@ def run():
     print("auth ok account:", acc)
     sid = yield sess.find_symbol(config.SYMBOL)
     info = yield sess.symbol_info(sid)
-    print("symbol:", sid, "minVol:", info.get("minVolume"), "lotSize:", info.get("lotSize"))
+    print("symbol:", sid, "minVol:", info.get("minVolume"),
+          "lotSize:", info.get("lotSize"), "digits:", info.get("digits"))
     bid, ask, ts = yield sess.get_spot(sid)
     mid = (bid + ask) / 2 / config.SPOT_SCALE
     print(f"mid={mid:.2f} (bid={bid/config.SPOT_SCALE:.2f} ask={ask/config.SPOT_SCALE:.2f})")
@@ -23,16 +24,29 @@ def run():
                                      sl=_to_int(mid - 5.0),
                                      tp=_to_int(mid + 5.0),
                                      label="TST1", comment="")
-        print("OPEN OK orderId=", res.order.orderId,
-              "positionId=", res.position.positionId if res.position else None)
-        if res.position:
+        print("OPEN results stops_set=", res.get("stops_set"))
+        pos_id = res.get("positionId")
+        print("OPEN positionId=", pos_id)
+        o = res.get("order")
+        print("OPEN order=", (getattr(o, "orderId", None)
+                              if o is not None else None))
+        p = res.get("position")
+        if p is not None:
+            print("position SL=", getattr(p, "stopLoss", None),
+                  "TP=", getattr(p, "takeProfit", None))
+        if pos_id is None and p is not None:
+            pos_id = getattr(p, "positionId", None)
+        if pos_id:
             try:
-                yield sess.set_sltp(res.position.positionId, _to_int(mid - 5.0), _to_int(mid + 5.0))
+                yield sess.set_sltp(pos_id, _to_int(mid - 5.0), _to_int(mid + 5.0))
                 print("SETSLTP OK")
             except Exception as e:
                 print("SETSLTP FAIL:", repr(e))
-            yield sess.close_position(res.position.positionId)
-            print("CLOSE OK")
+            try:
+                yield sess.close_position(pos_id)
+                print("CLOSE OK")
+            except Exception as e:
+                print("CLOSE FAIL:", repr(e))
     except Exception as e:
         print("FULL-FAIL:", repr(e))
     sess.stop()

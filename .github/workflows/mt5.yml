@@ -43,12 +43,31 @@ jobs:
       # تيرمنال MT5 رسمي (MetaQuotes) — يعمل مع أي وسيط عبر
       # login/password/server. تثبيت صامت ثم نبحث عن terminal64.exe في
       # المواضع الشائعة ونضبط MT5_TERMINAL_PATH ليمرِّره initialize.
+      # الرابط الرسمي المؤكد من mql5.com (team.metaquotes):
+      #   download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe
       - name: Install MT5 terminal
         shell: pwsh
         run: |
           $setup = "C:\mt5setup.exe"
-          Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.soft/mt5/mt5setup.exe" -OutFile $setup -UseBasicParsing
-          Write-Host "installing MT5 (silent)..."
+          $url = "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
+          Write-Host "downloading MT5 web-installer from mql5 CDN..."
+          Invoke-WebRequest -Uri $url -OutFile $setup -UseBasicParsing
+          Write-Host "installing MT5 (silent /auto)..."
+          $p = Start-Process -FilePath $setup -ArgumentList "/auto" -PassThru -Wait
+          Write-Host "mt5setup exit=$($p.ExitCode)"
+          $candidates = @(
+            "C:\Program Files\MetaTrader 5\terminal64.exe",
+            "C:\Program Files\MetaTrader 5 Terminal\terminal64.exe",
+            (Join-Path $env:LOCALAPPDATA "MetaTrader 5\terminal64.exe"),
+            (Join-Path $env:APPDATA "MetaQuotes\Terminal\terminal64.exe")
+          )
+          $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($found) {
+            Write-Host "MT5 terminal at $found"
+            "MT5_TERMINAL_PATH=$found" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          } else {
+            Write-Host "terminal64.exe not found in common paths — initialize path will be null"
+          }
           $p = Start-Process -FilePath $setup -ArgumentList "/auto" -PassThru -Wait
           Write-Host "mt5setup exit=$($p.ExitCode)"
           $candidates = @(

@@ -65,9 +65,17 @@ def initialize(login=None, password=None, server=None, path=None):
     last = None
     for attempt in range(1, 4):
         last = None
-        if mt5.initialize(path=path, login=login, password=password,
-                          server=server if server else None,
-                          timeout=120000):
+        # إن لم يُمرر login فإننا نلتحق بالتيرمنال القائم: mt5.initialize()
+        # بلا وسائط تصل إلى الجلسة الحالية (تستخدم الحساب المخزّن). تمرير
+        # path مع login=None يرفضه MT5 ('Invalid login') — لذا نمسك المسار
+        # فقط عند وجود login.
+        if login is not None:
+            ok_in = mt5.initialize(path=path, login=login,
+                                   password=password, server=server,
+                                   timeout=120000)
+        else:
+            ok_in = mt5.initialize(timeout=120000)
+        if ok_in:
             return True, {}
         last = mt5.last_error()
         try:

@@ -491,9 +491,7 @@ def mt5_probe():
     يرجع 0 عند النجاح و1 عند الفشل (مخرج عملية).
     """
     ok, err = mt5_broker.initialize(
-        login=os.environ.get("MT5_LOGIN") or None,
-        password=os.environ.get("MT5_PASSWORD") or None,
-        server=os.environ.get("MT5_SERVER") or None,
+        login=None, password=None, server=None,
         path=(os.environ.get("MT5_TERMINAL_PATH")
               or os.environ.get("MT5_PATH") or None),
     )
@@ -547,10 +545,11 @@ def mt5_run_duration(duration_min=0.0):
     state = _load_state()
     rows = _main.load_history()
 
+    # على CI نعتمد على التيرمنال المقلع صامتاً بـ config (لا إعادة تسجيل
+    # تفتح حواراً يعلّق IPC على headless). في mock محلي نمرر الاعتمادات
+    # بتمرير login/password/server عبر env عند الحاجة.
     ok, err = mt5_broker.initialize(
-        login=os.environ.get("MT5_LOGIN") or None,
-        password=os.environ.get("MT5_PASSWORD") or None,
-        server=os.environ.get("MT5_SERVER") or None,
+        login=None, password=None, server=None,
         path=(os.environ.get("MT5_TERMINAL_PATH")
               or os.environ.get("MT5_PATH") or None),
     )

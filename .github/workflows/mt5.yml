@@ -72,51 +72,59 @@ jobs:
       - name: Run MT5 bot (short cycle)
         shell: pwsh
         run: |
-          # نفس الخطوة: إقلاع التيرمنال بالحساب + حقن [Experts] + initialize —
-          # فرضية أن فصل الخطوات يقتل رابطة IPC على headless runner.
+          # نفس الخطوة: إعداد config كاملاً (حساب + [Experts]) ثم إقلاع
+          # صامت بلا حوار ثم initialize. على headless runner يجب أن يبدأ
+          # التيرمنال بحساب مخزّن مسبقاً — لا بتمرير وسوم دخول تُظهر نافذة.
           $found = $env:MT5_TERMINAL_PATH
-          if ($found -and (Test-Path $found)) {
-            $login = "${{ secrets.MT5_LOGIN }}"
-            $pass  = "${{ secrets.MT5_PASSWORD }}"
-            $serv  = "${{ secrets.MT5_SERVER }}"
-            $args  = @()
-            if ($login) { $args += "/login:$login" }
-            if ($serv)  { $args += "/server:$serv" }
-            if ($pass)  { $args += "/password:$pass" }
-            $pt = Start-Process -FilePath $found -ArgumentList $args -PassThru
-            Write-Host "terminal boot pid=$($pt.Id) with login args"
-            Start-Sleep -Seconds 25
-            # حقن [Experts] => التداول الآلي مفعّل حتى بلا واجهة
-            $cfg = Get-ChildItem "$env:APPDATA\MetaQuotes\Terminal" -Recurse `
-              -Filter common.ini -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($cfg) {
-              $c = Get-Content $cfg.FullName -Raw -ErrorAction SilentlyContinue
-              if ($c -notmatch '\[Experts\]') {
-                $lines = @(
-                  ''
-                  '[Experts]'
-                  'AllowDllImport=1'
-                  'Enabled=1'
-                  'Account=0'
-                  'Profile=0'
-                  'Chart=0'
-                  'Api=0'
-                  'DisableOpenCL='
-                  'WebRequest=0'
-                  'WebRequestUrl='
-                  ''
-                )
-                Add-Content -Path $cfg.FullName -Value $lines
-                Write-Host "injected [Experts] into $($cfg.FullName)"
-              } else {
-                Write-Host "[Experts] already present"
-              }
-            } else {
-              Write-Host "warning: no common.ini found for [Experts]"
+          $login = "${{ secrets.MT5_LOGIN }}"
+          $pass  = "${{ secrets.MT5_PASSWORD }}"
+          $serv  = "${{ secrets.MT5_SERVER }}"
+          # 1) حقن [Common] (حساب) و [Experts] (تداول آلي) في common.ini
+          $cfg = Get-ChildItem "$env:APPDATA\MetaQuotes\Terminal" -Recurse `
+            -Filter common.ini -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($cfg) {
+            Write-Host "config at $($cfg.FullName)"
+            # بناءً على الأسطر (لا regex) كي لا يتأثر '$' في كلمة السر
+            $lines = Get-Content $cfg.FullName
+            $common = @()
+            $seenLogin = $false; $seenServer = $false; $seenPass = $false
+            foreach ($ln in $lines) {
+              if ($ln -like 'Login=*') { $common += "Login=$login"; $seenLogin = $true }
+              elseif ($ln -like 'Server=*') { $common += "Server=$serv"; $seenServer = $true }
+              elseif ($ln -like 'Password=*') { $common += "Password=$pass"; $seenPass = $true }
+              else { $common += $ln }
             }
+            if (-not $seenLogin) { $common += "Login=$login" }
+            if (-not $seenServer) { $common += "Server=$serv" }
+            if (-not $seenPass) { $common += "Password=$pass" }
+            # نطبع فقط مفتاح وجود الحساب لا كلمة السر
+            Write-Host "common: login=$login server=$serv password=***"
+            if (($common | Out-String) -notmatch '\[Experts\]') {
+              $common += ''
+              $common += '[Experts]'
+              $common += 'Enabled=1'
+              $common += 'AllowDllImport=1'
+              $common += 'Account=0'
+              $common += 'Profile=0'
+              $common += 'Chart=0'
+              $common += 'Api=0'
+              $common += 'DisableOpenCL=0'
+              $common += 'WebRequest=0'
+            }
+            [System.IO.File]::WriteAllLines($cfg.FullName, $common, [System.Text.Encoding]::UTF8)
+            Write-Host "injected [Common] login/server/password + [Experts] Enabled=1"
           } else {
-            Write-Host "no MT5_TERMINAL_PATH set — will rely on initialize default"
+            Write-Host "warning: no common.ini found — cannot preconfigure account"
           }
+          # 2) إقلاع التيرمنال صامتاً (بلا وسوم دخول) — سيقرأ الحساب من config
+          if ($found -and (Test-Path $found)) {
+            $pt = Start-Process -FilePath $found -PassThru
+            Write-Host "terminal boot pid=$($pt.Id) (silent)"
+            Start-Sleep -Seconds 30
+          } else {
+            Write-Host "no MT5_TERMINAL_PATH — relying on initialize default"
+          }
+          # 3) تشغيل البوت — initialize ستلتحق بالترمنال المقلع
           python live_mt5.py
         env:
           MT5_LOGIN: ${{ secrets.MT5_LOGIN }}
@@ -149,8 +157,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/
-          git diff --cached --quiet
+          $no = git add data/ 2>&1; if ($LASTEXITCODE -ne 0) { Write-Host "data/ ignored or empty: $no"; exit 0 }
+          $none = git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) { Write-Host "no changes"; exit 0 }
           git commit -m "data: mt5 log update ($(Get-Date -Format o))"
           git push
@@ -168,7 +176,7 @@ jobs:
           $other = ($runs | Where-Object { $_ -ne "$env:GITHUB_RUN_ID" })
           if (-not $other) {
             Write-Host "no overlap -> dispatch next mt5 round"
-            gh workflow run gold-gap-mt5.yml --ref $env:GITHUB_REF_NAME
+            gh workflow run mt5.yml --ref $env:GITHUB_REF_NAME
           } else {
             Write-Host "overlap detected ($other); skipping self-dispatch"
           }

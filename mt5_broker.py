@@ -52,9 +52,17 @@ def initialize(login=None, password=None, server=None, path=None):
     التيرمنال الدائرة المفتوحة (أو login مخزّن في accounts.dat).
     """
     mt5 = _mt5()
+    # MetaTrader5 يتطلب login (رقم الحساب) كـ int وليس str — الأسرار القادمة
+    # من env تصل نصوصاً دائماً. نُقسّر إن أمكن وإلا فشل واضح.
+    if login is not None and not isinstance(login, int):
+        try:
+            login = int(str(login).strip())
+        except (TypeError, ValueError):
+            return False, {"error": (-2, "Invalid \"login\" argument"),
+                           "detail": f"non-numeric login: {login!r}"}
     if not mt5.initialize(path=path, login=login, password=password,
                           server=server if server else None,
-                          timeout=15000):
+                          timeout=60000):
         err = mt5.last_error()
         return False, {"error": err, "detail": "initialize failed"}
     return True, {}

@@ -41,8 +41,15 @@ jobs:
           python -m pip install -r requirements.txt
 
       # تيرمنال MT5 رسمي (MetaQuotes) — يعمل مع أي وسيط عبر
-      # login/password/server. تثبيت صامت ثم نبحث عن terminal64.exe في
-      # المواضع الشائعة ونضبط MT5_TERMINAL_PATH ليمرِّره initialize.
+      # login/password/server. التثبيت بوضع /portable (البيانات بجانب
+      # التيرمنال لا AppData) هو الوصفة الموثقة لتشغيل CI headless:
+      #   - Joaopeuko/Mql5-Python-Integration: يثبّت /auto /portable ثم
+      #     يُقلع /portable /headless /config:config /noreport ويعمل
+      #     initialize عبر Python على windows-latest فعلياً.
+      #   - mql5 forum #4: نسخ MT5 خارج Program Files + /portable يحل
+      #     IPC timeout الناتج عن permissions/UAC.
+      # السجل الحقيقي: 6 تشغيلات فشلت بـ (-10005,'IPC timeout') مع وضع
+      # البيانات في AppData — هذا المسار portable هو ما يختلف الآن.
       # الرابط الرسمي المؤكد من mql5.com (team.metaquotes):
       #   download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe
       - name: Install MT5 terminal
@@ -52,8 +59,8 @@ jobs:
           $url = "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
           Write-Host "downloading MT5 web-installer from mql5 CDN..."
           Invoke-WebRequest -Uri $url -OutFile $setup -UseBasicParsing
-          Write-Host "installing MT5 (silent /auto)..."
-          $p = Start-Process -FilePath $setup -ArgumentList "/auto" -PassThru -Wait
+          Write-Host "installing MT5 (silent /auto /portable)..."
+          $p = Start-Process -FilePath $setup -ArgumentList "/auto", "/portable" -PassThru -Wait
           Write-Host "mt5setup exit=$($p.ExitCode)"
           $candidates = @(
             "C:\Program Files\MetaTrader 5\terminal64.exe",
@@ -65,6 +72,7 @@ jobs:
           if ($found) {
             Write-Host "MT5 terminal at $found"
             "MT5_TERMINAL_PATH=$found" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+            "MT5_PORTABLE=1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           } else {
             Write-Host "terminal64.exe not found in common paths — initialize path will be null"
           }
@@ -72,116 +80,42 @@ jobs:
       - name: Run MT5 bot (short cycle)
         shell: pwsh
         run: |
-          # نفس الخطوة: إعداد config كاملاً (حساب + [Experts]) ثم إقلاع
-          # صامت بلا حوار ثم initialize. على headless runner يجب أن يبدأ
-          # التيرمنال بحساب مخزّن مسبقاً — لا بتمرير وسوم دخول تُظهر نافذة.
+          # الوصفة الموثقة (Joaopeuko/Mql5-Python-Integration):
+          #   1) إقلاع portable بلا وسائط دخول وبدون واجهة (/headless) — فلا
+          #      يوجد نافذة/حوار يعلّق IPC على الـ runner.
+          #   2) initialize(path, portable=True) يلتحق بالترمنال القائم.
+          #   3) تسجيل الدخول عبر login(login,password,server) صريحة —
+          #      لا عبر حقن Password في common.ini (يتجاهله MT5 الحديث
+          #      المشفّر ولا تصل إلى الحساب في portable).
           $found = $env:MT5_TERMINAL_PATH
-          $login = "${{ secrets.MT5_LOGIN }}"
-          $pass  = "${{ secrets.MT5_PASSWORD }}"
-          $serv  = "${{ secrets.MT5_SERVER }}"
-          # 1) حقن [Common] (حساب) و [Experts] (تداول آلي) في common.ini
-          $cfg = Get-ChildItem "$env:APPDATA\MetaQuotes\Terminal" -Recurse `
-            -Filter common.ini -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($cfg) {
-            Write-Host "config at $($cfg.FullName)"
-            # بناءً على الأسطر (لا regex) كي لا يتأثر '$' في كلمة السر
-            $lines = Get-Content $cfg.FullName
-            $common = @()
-            $seenLogin = $false; $seenServer = $false; $seenPass = $false
-            foreach ($ln in $lines) {
-              if ($ln -like 'Login=*') { $common += "Login=$login"; $seenLogin = $true }
-              elseif ($ln -like 'Server=*') { $common += "Server=$serv"; $seenServer = $true }
-              elseif ($ln -like 'Password=*') { $common += "Password=$pass"; $seenPass = $true }
-              else { $common += $ln }
-            }
-            if (-not $seenLogin) { $common += "Login=$login" }
-            if (-not $seenServer) { $common += "Server=$serv" }
-            if (-not $seenPass) { $common += "Password=$pass" }
-            # نطبع فقط مفتاح وجود الحساب لا كلمة السر
-            Write-Host "common: login=$login server=$serv password=***"
-            if (($common | Out-String) -notmatch '\[Experts\]') {
-              $common += ''
-              $common += '[Experts]'
-              $common += 'Enabled=1'
-              $common += 'AllowDllImport=1'
-              $common += 'Account=0'
-              $common += 'Profile=0'
-              $common += 'Chart=0'
-              $common += 'Api=0'
-              $common += 'DisableOpenCL=0'
-              $common += 'WebRequest=0'
-            }
-            [System.IO.File]::WriteAllLines($cfg.FullName, $common, [System.Text.Encoding]::UTF8)
-            Write-Host "injected [Common] login/server/password + [Experts] Enabled=1"
-          } else {
-            Write-Host "warning: no common.ini found — cannot preconfigure account"
-          }
-          # 2) إقلاع التيرمنال صامتاً (بلا وسوم دخول) — سيقرأ الحساب من config
           if ($found -and (Test-Path $found)) {
-            # إقلاع أولي قصير: يُنشئ مجلد بيانات التيرمنال (config\common.ini)
-            # في %APPDATA%\MetaQuotes\Terminal\<hash>\config. ثم نقتله ونحقن
-            # الاعتمادات ليتسجّل دخولاً صامتاً عند الإقلاع الثاني.
-            $boot = Start-Process -FilePath $found -PassThru
-            Write-Host "boot#1 pid=$($boot.Id) (create data dir + config)"
-            Start-Sleep -Seconds 20
-            Stop-Process -Id $boot.Id -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 3
-            $cfg = $null
-            foreach ($base in @("$env:APPDATA\MetaQuotes\Terminal",
-                                "$env:LOCALAPPDATA\MetaQuotes\Terminal",
-                                "$env:APPDATA\MetaQuotes")) {
-              $cfg = Get-ChildItem $base -Recurse -Filter common.ini `
-                -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($cfg) { break }
+            Start-Process -FilePath $found -ArgumentList @(
+              "/portable", "/headless", "/config:config", "/noreport"
+            )
+            Write-Host "terminal booted (portable/headless)"
+            $deadline = (Get-Date).AddSeconds(60)
+            $seen = $false
+            while ((Get-Date) -lt $deadline) {
+              if (Get-Process terminal64 -ErrorAction SilentlyContinue) {
+                $seen = $true; break
+              }
+              Start-Sleep -Seconds 5
             }
-            if (-not $cfg) {
-              Write-Host "::error::common.ini not found after boot#1"
-              Write-Host "TERMINAL DIR TREE:"
-              Get-ChildItem "$env:APPDATA\MetaQuotes" -Recurse -Depth 2 `
-                -ErrorAction SilentlyContinue | Select-Object -First 60 FullName
+            if ($seen) {
+              Write-Host "terminal64 process detected"
             } else {
-              Write-Host "config at $($cfg.FullName)"
-              $lines = Get-Content $cfg.FullName -ErrorAction SilentlyContinue
-              $common = @()
-              $seenLogin = $false; $seenServer = $false; $seenPass = $false
-              foreach ($ln in $lines) {
-                if ($ln -like 'Login=*') { $common += "Login=$login"; $seenLogin = $true }
-                elseif ($ln -like 'Server=*') { $common += "Server=$serv"; $seenServer = $true }
-                elseif ($ln -like 'Password=*') { $common += "Password=$pass"; $seenPass = $true }
-                else { $common += $ln }
-              }
-              if (-not $seenLogin) { $common += "Login=$login" }
-              if (-not $seenServer) { $common += "Server=$serv" }
-              if (-not $seenPass) { $common += "Password=$pass" }
-              Write-Host "common: login=$login server=$serv password=***"
-              if (($common | Out-String) -notmatch '\[Experts\]') {
-                $common += ''
-                $common += '[Experts]'
-                $common += 'Enabled=1'
-                $common += 'AllowDllImport=1'
-                $common += 'Account=0'
-                $common += 'Profile=0'
-                $common += 'Chart=0'
-                $common += 'Api=0'
-                $common += 'DisableOpenCL=0'
-                $common += 'WebRequest=0'
-              }
-              [System.IO.File]::WriteAllLines($cfg.FullName, $common, [System.Text.Encoding]::UTF8)
-              Write-Host "injected [Common] login/server/password + [Experts] Enabled=1"
+              Write-Host "::error::terminal64 didn't start within 60s"
             }
-            # إقلاع ثانٍ صامت: يقرأ الاعتمادات من config — لا حوارات.
-            $boot2 = Start-Process -FilePath $found -PassThru
-            Write-Host "boot#2 pid=$($boot2.Id) (silent login from config)"
-            Start-Sleep -Seconds 30
+            Start-Sleep -Seconds 15
           } else {
             Write-Host "no MT5_TERMINAL_PATH — relying on initialize default"
           }
-          # 3) تشغيل البوت — initialize ستلتحق بالترمنال المقلع
           python live_mt5.py
         env:
           MT5_LOGIN: ${{ secrets.MT5_LOGIN }}
           MT5_PASSWORD: ${{ secrets.MT5_PASSWORD }}
           MT5_SERVER: ${{ secrets.MT5_SERVER }}
+          MT5_PORTABLE: "1"
           MT5_SYMBOL: ${{ vars.MT5_SYMBOL || 'XAUUSD' }}
           MT5_DURATION_MIN: ${{ vars.MT5_DURATION_MIN || '3.0' }}
           MT5_PROBE: ${{ inputs.probe && '1' || '0' }}

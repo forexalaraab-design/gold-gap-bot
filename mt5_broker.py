@@ -21,6 +21,7 @@ mt5_broker.py — MT5 execution wrapper over MetaTrader5 python pkg.
   positions_get / modify_sl_tp / tick / symbol_properties.
 """
 
+import os
 import random
 import time
 
@@ -47,37 +48,39 @@ def _mt5():
 def initialize(login=None, password=None, server=None, path=None):
     """تفعيل الاتصال بالترمنال MT5 المحلي.
 
-    login/password/server اختيارية: إن كانت معبأة تُنفَّذ تسجيل الدخول
-    عبر mt5.initialize(login=…, password=…, server=…). وإلا نعتمد على
-    التيرمنال الدائرة المفتوحة (أو login مخزّن في accounts.dat).
+    المسار إلزامي عبر path أو MT5_TERMINAL_PATH/MT5_PATH. وضع portable
+    (البيانات بجانب التيرمنال لا AppData) هو الوصفة الموثقة لتشغيل CI
+    headless (Joaopeuko/Mql5-Python-Integration + mql5 forum #4): يفادي
+    مشاكل permission/UAC ويُقلع بلا واجهة. إن مُررت الاعتمادات نستخدم
+    login() صريحةً بعد الالتحاق بدل حوار تسجيل دخول يعمل على واجهة —
+    لا على runner بلا واجهة.
     """
     mt5 = _mt5()
-    # MetaTrader5 يتطلب login (رقم الحساب) كـ int وليس str — الأسرار القادمة
-    # من env تصل نصوصاً دائماً. نُقسّر إن أمكن وإلا فشل واضح.
     if login is not None and not isinstance(login, int):
         try:
             login = int(str(login).strip())
         except (TypeError, ValueError):
             return False, {"error": (-2, "Invalid \"login\" argument"),
                            "detail": f"non-numeric login: {login!r}"}
-    # IPC timeout شائع عند أول إطلاق للتيرمنال بعد تثبيت جديد — نُعيد
-    # المحاولة مع تصفية بينها حتى يجهز التيرمنال نفسه.
+    portable = os.environ.get("MT5_PORTABLE", "0") in ("1", "true", "True")
+    path = path or os.environ.get("MT5_TERMINAL_PATH") \
+        or os.environ.get("MT5_PATH") or None
     last = None
     for attempt in range(1, 4):
         last = None
-        # إن لم يُمرر login فإننا نلتحق بالتيرمنال القائم: mt5.initialize()
-        # بلا وسائط تصل إلى الجلسة الحالية (تستخدم الحساب المخزّن). تمرير
-        # path مع login=None يرفضه MT5 ('Invalid login') — لذا نمسك المسار
-        # فقط عند وجود login.
-        if login is not None:
-            ok_in = mt5.initialize(path=path, login=login,
-                                   password=password, server=server,
+        if path is not None:
+            ok_in = mt5.initialize(path=path, portable=portable,
                                    timeout=120000)
         else:
             ok_in = mt5.initialize(timeout=120000)
         if ok_in:
-            return True, {}
-        last = mt5.last_error()
+            if login is None:
+                return True, {}
+            if mt5.login(login=login, password=password, server=server):
+                return True, {}
+            last = mt5.last_error()
+        else:
+            last = mt5.last_error()
         try:
             mt5.shutdown()
         except Exception:

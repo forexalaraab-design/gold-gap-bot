@@ -66,10 +66,19 @@ jobs:
             Write-Host "MT5 terminal at $found"
             "MT5_TERMINAL_PATH=$found" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
             # إقلاع أولي كي ينشئ التيرمنال مجلد بياناته الحقيقي (بدون /portable)
-            $pt = Start-Process -FilePath $found -PassThru
-            Start-Sleep -Seconds 20
-            if (-not $pt.HasExited) { try { $pt.Kill() } catch {} }
-            Start-Sleep -Seconds 2
+            # نمرر الاعتمادات من الأسرار كي يبدأ التيرمنال مسجّل الدخول
+            # مباشرة (الحل الموثق للـ IPC timeout في headless CI).
+            $login = "${{ secrets.MT5_LOGIN }}"
+            $pass  = "${{ secrets.MT5_PASSWORD }}"
+            $serv  = "${{ secrets.MT5_SERVER }}"
+            $args  = @()
+            if ($login) { $args += "/login:$login" }
+            if ($serv)  { $args += "/server:$serv" }
+            if ($pass)  { $args += "/password:$pass" }
+            $pt = Start-Process -FilePath $found -ArgumentList $args -PassThru
+            Start-Sleep -Seconds 25
+            # لا نقتل التيرمنال — سيبقى حياً حتى تتمكن initialize() من IPC
+            # (حل الـ IPC timeout: تلحّق بالعملية القائمة بدل إقلاع جديد في كل خطوة)
             # حقن قسم [Experts] في common.ini => التداول الآلي (Algo Trading) مفعّل
             # حتى في بيئة CI بلا واجهة — الحل المُتحقق منه محلياً.
             $cfg = Get-ChildItem "$env:APPDATA\MetaQuotes\Terminal" -Recurse `

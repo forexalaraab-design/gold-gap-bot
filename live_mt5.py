@@ -232,6 +232,13 @@ def mt5_run_cycle(state, rows, sess):
     if mid is None:
         result["action"] = "hold:no_mid"
         return result
+    # حارس النطاق 2026-09-29: بداية الدورة بعد boot يرجع الصف الأول
+    # أحياناً tick غير ناضج (مثال حي 1825 بدل 4115) — نفترضه خلل بيانات
+    # ولا نكمّل به (لا فتح/إغلاق، ولا إلحاق التاريخ).
+    if not (config.MIN_PLATFORM_PRICE <= mid <= config.MAX_PLATFORM_PRICE):
+        result["action"] = "hold:out_of_range"
+        result["mid"] = round(mid, 2)
+        return result
     result["mid"] = mid
 
     # global price (ياهو GC=F القائد) — نفس مصدر live.py

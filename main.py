@@ -202,6 +202,21 @@ def _to_int(price):
     return int(round(price * config.SPOT_SCALE))
 
 
+def _price_rows(rows):
+    """يستبعد الصفوف الشاذة (االقراءة الأولى بعد boot، سعر قديم، خلل
+    شريط) قبل أي حساب مومنتوم/انحدار.
+
+    2026-09-29: رُصد حي على MT5 — بداية الدورة يرجع tick واحدة خام
+    (مثل 1825 بدل 4115) تلوّث platform_momentum وtrend_slope فيمنع
+    trend_against كل الفتح. نفس حد compute_stats (يستبعدها أيضاً)
+    يُطبَّق هنا حتى تتطابق الفلاتر.
+    """
+    lo, hi = config.MIN_PLATFORM_PRICE, config.MAX_PLATFORM_PRICE
+    return [r for r in rows
+            if isinstance(r.get("platform"), (int, float))
+            and lo <= r["platform"] <= hi]
+
+
 def _to_pt(price, digits):
     return int(round(price * (10.0 ** (digits or 2))))
 
@@ -266,14 +281,16 @@ def yahoo_momentum(rows, max_rows=None):
 
 
 def platform_momentum(rows, max_rows=None):
-    """زخم سعر المنصة (mid) — مؤشر تأكيدollower. القيمة الإيجابية = صاعد."""
+    """زخم سعر المنصة (mid) — مؤشر تأكيد follower. القيمة الإيجابية = صاعد."""
     if max_rows is None:
         max_rows = config.MOMENTUM_WINDOW_ROWS
     try:
-        valid = [r for r in rows if isinstance(r.get("platform"), (int, float))]
-        valid = valid[-max_rows:]
+        valid = _price_rows(rows)[-max_rows:]
         if len(valid) < 2:
             return 0.0
+        return valid[-1]["platform"] - valid[0]["platform"]
+    except Exception:
+        return 0.0
         return valid[-1]["platform"] - valid[0]["platform"]
     except Exception:
         return 0.0
@@ -290,8 +307,7 @@ def platform_anomaly_usd(rows, span_rows=20):
     (≈span_rows × 4s): قفزات غير طبيعية تُرصد مباشرة من سعر المنصة.
     """
     try:
-        valid = [r for r in rows if isinstance(r.get("platform"), (int, float))]
-        valid = valid[-span_rows:]
+        valid = _price_rows(rows)[-span_rows:]
         if len(valid) < 2:
             return 0.0
         return abs(valid[-1]["platform"] - valid[0]["platform"])
@@ -314,8 +330,7 @@ def trend_slope(rows, max_rows=None):
     if max_rows is None:
         max_rows = config.TREND_WINDOW_ROWS
     try:
-        valid = [r for r in rows if isinstance(r.get("platform"), (int, float))]
-        valid = valid[-max_rows:]
+        valid = _price_rows(rows)[-max_rows:]
         if len(valid) < 2:
             return 0.0
         t0 = datetime.fromisoformat(valid[0]["ts"].replace("Z", "+00:00"))

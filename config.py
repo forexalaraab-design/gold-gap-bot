@@ -239,7 +239,7 @@ USE_MAD = os.environ.get("STRAT_USE_MAD", "1") == "1"
 # Stats (إشارة الدخول الآن على انحراف سعر المنصة mid-About متوسطه — وليس الفجوة)
 ROLLING_WINDOW = int(_env_float("STRAT_WINDOW", 48))
 MIN_SAMPLES = int(_env_float("STRAT_MIN_SAMPLES", 8))
-MIN_BALANCE_TO_TRADE = 200.0
+MIN_BALANCE_TO_TRADE = 100.0
 # نطاق معقول لسعر XAUUSD — نستبعد الملاحظات التالفة من الإحصاءات
 MIN_PLATFORM_PRICE = 4000.0
 MAX_PLATFORM_PRICE = 5000.0

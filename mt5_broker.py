@@ -255,10 +255,26 @@ def open_position(symbol, side, volume, sl=None, tp=None, comment="",
         request["sl"] = float(sl)
     if tp is not None:
         request["tp"] = float(tp)
+    # تحقق أن auto-trading مفعّل في التيرمنال (بدون ذلك سيرفض MT5
+    # بـ retcode=10027) — شائع على CI بعد إقلاع headless.
+    try:
+        _tterm = mt5.terminal_info()
+        if _tterm is not None and not getattr(_tterm, "trade_allowed", True):
+            return None, "auto-trading disabled (trade_allowed=False)"
+    except Exception as exc:
+        print(f"terminal_info warn: {exc!r}", flush=True)
     res = mt5.order_send(request)
     if res is None:
         return None, "order_send returned None (err=%s)" % (mt5.last_error(),)
     if res.retcode != mt5.TRADE_RETCODE_DONE:
+        # إعادة محاولة واحدة بعد 10027 (أحياناً يفعّل التيرمنال الحقن
+        # المتأخر) — تكلفة منخفضة مقابل صفقة ضائعة.
+        if res.retcode == 10027:
+            import time as _t
+            _t.sleep(2.0)
+            res = mt5.order_send(request)
+            if res is not None and res.retcode == mt5.TRADE_RETCODE_DONE:
+                return res.order, "ok (retry after 10027)"
         return None, "retcode=%s" % res.retcode
     return res.order, "ok"
 

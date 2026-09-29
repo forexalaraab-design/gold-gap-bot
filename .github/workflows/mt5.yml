@@ -86,6 +86,30 @@ jobs:
           #      المشفّر ولا تصل إلى الحساب في portable).
           $found = $env:MT5_TERMINAL_PATH
           if ($found -and (Test-Path $found)) {
+            # حقن [Experts] Enabled=1 في config BEFORE الإقلاع — MT5 يقرأ
+            # common.ini مرة واحدة عند بدء التشغيل، فحقنها بعده لا أثر له
+            # (كانت سبب 10027 على Fusion-Demo: auto-trading معطّل).
+            try {
+              $exeDir = Split-Path $found
+              $cfgDir = Join-Path $exeDir "config"
+              New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
+              $cfgPath = Join-Path $cfgDir "common.ini"
+              $wrote = @()
+              if (Test-Path $cfgPath) {
+                $c = Get-Content $cfgPath -Raw -ErrorAction SilentlyContinue
+                if ($c -notmatch '\[Experts\]') { $wrote += $c }
+              }
+              if ($wrote.Count -gt 0) {
+                Set-Content -Path $cfgPath -Value ($wrote -join "`n") -Encoding ascii
+              }
+              Add-Content -Path $cfgPath -Value @("", "[Experts]",
+                "Enabled=1", "AllowDllImport=1", "Account=0",
+                "Profile=0", "Chart=0", "Api=0", "DisableOpenCL=0",
+                "WebRequest=0", "")
+              Write-Host "[Experts] written to $cfgPath"
+            } catch {
+              Write-Host "expert pre-inject skipped: $($_.Exception.Message)"
+            }
             Start-Process -FilePath $found -ArgumentList @(
               "/portable", "/headless", "/config:config", "/noreport"
             )
@@ -103,30 +127,6 @@ jobs:
             } else {
               Write-Host "::error::terminal64 didn't start within 60s"
             }
-            # حقن [Experts] في config بجانب التيرمنال (وضع portable يضع
-            # config بجوار الملف لا في %APPDATA%). إدخال لا تغيير سلوك.
-            try {
-              $exeDir = Split-Path $found
-              $cfgPathCandidates = @(
-                (Join-Path $exeDir "config\common.ini"),
-                (Join-Path $exeDir "Config\common.ini")
-              )
-              foreach ($cp in $cfgPathCandidates) {
-                if (Test-Path $cp) {
-                  $c = Get-Content $cp -Raw -ErrorAction SilentlyContinue
-                  if ($c -notmatch '\[Experts\]') {
-                    Add-Content -Path $cp -Value @("", "[Experts]",
-                      "Enabled=1", "AllowDllImport=1", "Account=0",
-                      "Profile=0", "Chart=0", "Api=0", "DisableOpenCL=0",
-                      "WebRequest=0", "")
-                    Write-Host "injected [Experts] into $cp"
-                  } else {
-                    Write-Host "[Experts] already present in $cp"
-                  }
-                  break
-                }
-              }
-            } catch { Write-Host "expert inject skipped: $($_.Exception.Message)" }
             Start-Sleep -Seconds 25
           } else {
             Write-Host "no MT5_TERMINAL_PATH — relying on initialize default"

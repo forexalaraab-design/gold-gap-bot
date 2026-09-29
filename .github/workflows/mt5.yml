@@ -2,8 +2,9 @@ name: gold-gap-mt5
 
 on:
   schedule:
-    # دورة قصيرة كل 5 دقائق — رانسات عامة مجانية غير محدودة
-    - cron: "*/5 * * * *"
+    # دورة 15 دقيقة — توازن بين تغطية أطول داخل الدورة وفجوات صغيرة
+    # بين الدورات (كل دورة بديلة تُقتل السابقة تلقائياً cancel-in-progress).
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       probe:
@@ -21,7 +22,7 @@ concurrency:
 jobs:
   run-mt5:
     runs-on: windows-latest
-    timeout-minutes: 14
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -138,7 +139,7 @@ jobs:
           MT5_SERVER: ${{ secrets.MT5_SERVER }}
           MT5_PORTABLE: "1"
           MT5_SYMBOL: ${{ vars.MT5_SYMBOL || 'XAUUSD' }}
-          MT5_DURATION_MIN: ${{ vars.MT5_DURATION_MIN || '3.0' }}
+          MT5_DURATION_MIN: ${{ vars.MT5_DURATION_MIN || '13.0' }}
           MT5_PROBE: ${{ inputs.probe && '1' || '0' }}
           # نفس قواعد v1 الحي (هجومي 1.20 + بلا فلتر إضافي + لوت 0.01)
           STRAT_COOLDOWN_MIN: "1.0"

@@ -192,6 +192,22 @@ def positions_get(symbol=None):
     return positions_list(pos)
 
 
+def broker_open_position_ids(symbol=None):
+    """طلبات الفتح النشطة للرمز — منع التعدد الصارم قبل أي فتح.
+
+    حارس الوسيط (2026-09-22): لا تُفتح صفقة ثانية أبداً مهما انفرطت
+    الحالة المحلية — هنا نقرأ من MT5 مباشرة. أمر الفتح النشط بلا أمر
+    إغلاق مقابل لوذاك positionId = صفقة حية على الرمز، فيُمنع الفتح.
+    يرجع قائمة tickets (تكتب أرقاماً موجبة دائماً من السيرفر).
+    """
+    out = []
+    for p in positions_get(symbol):
+        t = p.get("ticket")
+        if t not in (None, 0):
+            out.append(str(t))
+    return out
+
+
 def _volume_units(lot):
     """تحويل اللوت إلى وحدات رقم تصريح volume في MT5 (0.01..)."""
     return round(max(0.01, float(lot)), 2)

@@ -270,6 +270,10 @@ def mt5_run_cycle(state, rows, sess):
     # السبريد الحي (bid→ask من MT5 نفسها)
     if tk:
         result["spread_usd"] = round(tk["ask"] - tk["bid"], 2)
+    # يُخزَّن في state حتى تستخدمه طبقات الإغلاق (التريلنج/الأرباح) —
+    # التكلفة الحي بدل التقدير الثابت (القاعدة 3ب).
+    if result.get("spread_usd"):
+        state["_last_spread_usd"] = result["spread_usd"]
 
     result["balance_usd"] = 0.0
     acc = sess.account_info()
@@ -368,7 +372,7 @@ def mt5_run_cycle(state, rows, sess):
                     result["action"] = "close_pending"
                     result["close_error"] = msg
         else:
-            st_pos["pnl_peak_usd"] = round(_pos_peak(state, st_pos, mid), 2)
+            st_pos["pnl_peak_usd"] = round(_pos_peak(state, st_pos, mid, result), 2)
             result["action"] = "hold"
         return result
 
@@ -386,6 +390,26 @@ def mt5_run_cycle(state, rows, sess):
         result["action"] = "hold:" + (reason or "not_ready")
         return result
 
+    # --- منع التعدد الصارم 2026-09-22: فحص الوسيط الفعلي قبل الفتح ---
+    # لا نعتمد على الحالة المحلية فقط — نقرأ MT5 حياً: أي positionId
+    # نشط للرمز يمنع الفتح مهما حدث للحالة (broker_open_position_ids).
+    try:
+        live_open = sess.broker_open_position_ids(config.SYMBOL)
+    except Exception as exc:
+        print(f"broker open ids warn: {exc!r}", flush=True)
+        live_open = []
+    if live_open:
+        result["action"] = "hold:broker_already_open"
+        result["open_positions"] = len(live_open)
+        return result
+
+    # --- التكلفة الفعلية (سبريد حي + عمولة) تُدخل في مسافة SL/TP ---
+    # الهدف: صافي التعبير عند SL/TP = الحد المطلوب بعد خصم التكلفة.
+    _live_spread = _detected_spread_usd(result)
+    _fees = _live_spread + _main._commission_usd(None, state=state)
+    if _live_spread <= 0:
+        _fees = 0.0
+
     # OK — فتح صفقة
     tk2 = sess.tick()
     if not tk2:
@@ -393,10 +417,16 @@ def mt5_run_cycle(state, rows, sess):
         return result
     entry = tk2["ask"] if side == "BUY" else tk2["bid"]
 
-    # SL/TP بالمثل main (هامة: MT5 يقبلها من لحظة الطلب)
-    sl_dist = _main._jitter_usd(config.SL_AFTER_ENTRY_USD,
-                                config.HUMAN_SL_TP_JITTER_USD)
-    min_tp_dist = 1.40
+    # SL: مسافة أساسية SL_AFTER_ENTRY_USD (صافي الخسارة يبقى على الحد
+    # بعد العمولة/السبريد لأنها تُخصم من الطرف الآخر). التشتت البشري
+    # يُطبَّق على الأساس نفسه كما في main.
+    sl_base = max(1.0, config.SL_AFTER_ENTRY_USD - _fees) if _fees else \
+        config.SL_AFTER_ENTRY_USD
+    sl_dist = _main._jitter_usd(sl_base, config.HUMAN_SL_TP_JITTER_USD)
+
+    # TP: الحد الأدنى يشمل التكلفة بحيث صافي الربح ≥ 1.40 بعد خصمها —
+    # ربح حقيقي لا اسمي. (0.50×|catch_up| يبقى منطق اللحاق نفسه.)
+    min_tp_dist = 1.40 + _fees
     tp_ext = max(min_tp_dist, 0.50 * abs(catch_up))
     if side == "SELL":
         sl = entry + sl_dist
@@ -452,8 +482,12 @@ def mt5_run_cycle(state, rows, sess):
 # أدوات مساعدة
 # ============================================================================
 
-def _pos_peak(state, st_pos, mid):
-    """قمة pnl حية من mid (لا تُقلل أبداً)."""
+def _pos_peak(state, st_pos, mid, result=None):
+    """قمة pnl صافية لحي من mid (لا تُقلل أبداً).
+
+    التكلفة (سبريد حي + عمولة) تُخصم من القيمة الخام حتى تتطابق عتبات
+    التريلنج/الأرباح مع الصافي الحقيقي بعد الرسوم (القاعدة 3ب).
+    """
     peak = float(st_pos.get("pnl_peak_usd") or 0)
     entry = st_pos.get("entry_price")
     if not entry:
@@ -465,7 +499,7 @@ def _pos_peak(state, st_pos, mid):
     net = diff * 100 / 100.0
     fees = _main.position_fees_usd(
         types.SimpleNamespace(commission=0.0, swap=0.0),
-        2, result=None, state=state)
+        2, result=result, state=state)
     return round(max(peak, net - fees), 2)
 
 

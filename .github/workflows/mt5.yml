@@ -155,7 +155,9 @@ jobs:
           STRAT_MODEL: ${{ vars.STRAT_MODEL || 'v1' }}
           STRAT_PAUSE_OPEN: ${{ vars.STRAT_PAUSE_OPEN || '1' }}
           STRAT_V2_EVAL: ${{ vars.STRAT_V2_EVAL || '1' }}
-          STRAT_SESSION_BLOCK_ON: "1"
+          # فلتر الوقت (جلسة 16–22 UTC) معطّل مؤقتاً بإذن المستخدم للتحقق
+          # لاكتشاف سلاسل الأعطال؛ يُعاد تفعيله عبر ضبط المتغير =1.
+          STRAT_SESSION_BLOCK_ON: ${{ vars.STRAT_SESSION_BLOCK_ON || '0' }}
           PYTHONIOENCODING: utf-8
           PYTHONUNBUFFERED: "1"
 

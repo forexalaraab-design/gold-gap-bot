@@ -180,13 +180,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
         run: |
-          if (-not $env:GH_TOKEN) { Write-Host "no DISPATCH_PAT — cron only"; exit 0 }
-          $runs = gh api "repos/${{ github.repository }}/actions/runs?per_page=20" `
-            --jq '[.workflow_runs[] | select(.status == "in_progress" or .status == "queued") | .id]'
-          $other = ($runs | Where-Object { $_ -ne "$env:GITHUB_RUN_ID" })
-          if (-not $other) {
-            Write-Host "no overlap -> dispatch next mt5 round"
-            gh workflow run mt5.yml --ref $env:GITHUB_REF_NAME
-          } else {
-            Write-Host "overlap detected ($other); skipping self-dispatch"
-          }
+          if (-not $env:GH_TOKEN) { Write-Host "no DISPATCH_PAT - cron only"; exit 0 }
+          Write-Host "dispatch next mt5 round"
+          gh workflow run mt5.yml --ref $env:GITHUB_REF_NAME

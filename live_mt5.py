@@ -422,23 +422,23 @@ def mt5_run_cycle(state, rows, sess):
         return result
     entry = tk2["ask"] if side == "BUY" else tk2["bid"]
 
-    # SL: مسافة أساسية SL_AFTER_ENTRY_USD (صافي الخسارة يبقى على الحد
-    # بعد العمولة/السبريد لأنها تُخصم من الطرف الآخر). التشتت البشري
-    # يُطبَّق على الأساس نفسه كما في main.
-    sl_base = max(1.0, config.SL_AFTER_ENTRY_USD - _fees) if _fees else \
-        config.SL_AFTER_ENTRY_USD
+    # SL: يتناسب مع حجم اللحاق (الإشارة الضعيفة تستأهل ستوباً أضيق
+    # بلا جراحة، القوية مسافة أوسع بلا نفاد مبكر) — بسقف MAX_LOSS
+    # لا يُتجاوز أبداً (درس 2026-09-16: تسريب -3.28 من انزلاق بين
+    # الدورات). خصم الرسوم يبقي صافي الخسارة عند الحد، والتشتت البشري
+    # يُطبَّق على الأساس كما في main.
+    _sl_cap = config.MAX_LOSS_USD
+    _sl_raw = min(_sl_cap, max(1.0, 1.1 * abs(catch_up)))
+    sl_base = max(1.0, _sl_raw - _fees) if _fees else _sl_raw
     sl_dist = _main._jitter_usd(sl_base, config.HUMAN_SL_TP_JITTER_USD)
 
-    # TP: الحد الأدنى يشمل التكلفة بحيث صافي الربح ≥ PROFIT_TARGET بعد
-    # خصمها — ربح حقيقي لا اسمي. (0.50×|catch_up| يبقى منطق اللحاق نفسه.)
-    # 2026-10-01: 1.40 → 1.60 (الحد الأدنى على TF كي لا تُفتح صفقات هامشية
-    # يتلاشى صافيها بعد العمولة/السبريد). تشتت بشري ثابت لكل صفقة يعزل
-    # قيم TP الحرفية المتطابقة — يُبنى من لقطة واصلة عشوائية قبل الفتح
-    # (لا positionId بعد) عبر _stable_jitter.
+    # TP: ≥2×SL (R:R لا يقل عن 2 — درس v2 2026-09-23: الربح أكبر من
+    # الخسارة كي يبقى التوقع موجباً) مع حد أدنى PROFIT_TARGET وبشتت
+    # بشري ثابت لكل صفقة (لا قيم حرفية متطابقة). صافي الهدف بعد الرسوم.
     _tp_seed = f"tp-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M')}-{int(time.time()*1000) % 997}"
     _tp_jit = _main._stable_jitter(_tp_seed, 0.04)
-    min_tp_dist = max(1.60, config.PROFIT_TARGET_USD * (1.0 + _tp_jit)) + _fees
-    tp_ext = max(min_tp_dist, 0.50 * abs(catch_up))
+    tp_ext = max(2.0 * sl_dist,
+                 config.PROFIT_TARGET_USD * (1.0 + _tp_jit)) + _fees
     if side == "SELL":
         sl = entry + sl_dist
         tp = entry - tp_ext

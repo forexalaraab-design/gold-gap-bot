@@ -121,17 +121,15 @@ def _entry_decision(state, result, stats):
     _est_fees = _live_spread + _main._commission_usd(None, state=state) \
         if _live_spread > 0 else 0.0
 
-    # تأكيد ثلاث دورات (نفس القاعدة 2026-09-21)
-    _prev2 = state.get("_prev2_catch_up")
+    # تأكيد دورة سابقة (2026-09-29: تأكيد الدورتين → دورتان سابقتان
+    # كانتا تشترطان إشارتين كاملتين فوق العتبة، ما قتل أغلب المدخلات؛
+    # الآن تكتفي بدورة سابقة واحدة بنفس الاتجاه وفوق العتبة).
     _prev = state.get("_prev_catch_up")
     _confirm_ok = (
-        _prev is not None and _prev2 is not None
+        _prev is not None
         and (_prev * catch_up) >= 0
-        and (_prev2 * catch_up) >= 0
         and abs(_prev) >= config.MOMENTUM_MIN_USD
-        and abs(_prev2) >= config.MOMENTUM_MIN_USD
     )
-    state["_prev2_catch_up"] = _prev
     state["_prev_catch_up"] = catch_up
 
     _efloor = _main._entry_floor()

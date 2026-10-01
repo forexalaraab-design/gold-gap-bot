@@ -1443,23 +1443,17 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         _est_fees = _live_spread + _commission_usd(None, state=state) \
             if _live_spread > 0 else 0.0
 
-        # تأكيد ثلاث دورات (2026-09-21 — نقاط دخول أقوى دون خفض العدد):
-        # كان تأكيد دورتين. الآن لا ندخل إلا إذا استمرت إشارة اللحاق بنفس
-        # الاتجاه بقوة في الدورات 3 المتتالية الأخيرة (~15 ثانية) — يؤخر
-        # الدخول لحظياً ويقتل الومضات القصيرة جداً دون حرمان كبير من
-        # الدخولات المشروعة (الاتجاه القوي يبقى عدة دقائق). تُخزَّن في
+        # تأكيد دورة سابقة واحدة (2026-09-29 — طلب: صفقات أكثر): كانت
+        # الدورتان الماضيتان تشترطان إشارتين كاملتين فوق العتبة، ما قتل
+        # أغلب المدخلات. الآن تكتفي بدورة سابقة واحدة بنفس الاتجاه وفوق
+        # العتبة. قُصفت الومضات القصيرة جداً بالاتساق نفسه. تُخزَّن في
         # state فتبقى مستمرة عبر الجلسات (تُحفظ دورياً).
-        _prev2_catch = state.get("_prev2_catch_up")
         _prev_catch = state.get("_prev_catch_up")
         _confirm_ok = (
             _prev_catch is not None
-            and _prev2_catch is not None
             and (_prev_catch * catch_up) >= 0
-            and (_prev2_catch * catch_up) >= 0
             and abs(_prev_catch) >= config.MOMENTUM_MIN_USD
-            and abs(_prev2_catch) >= config.MOMENTUM_MIN_USD
         )
-        state["_prev2_catch_up"] = _prev_catch
         state["_prev_catch_up"] = catch_up
 
         _efloor = _entry_floor()

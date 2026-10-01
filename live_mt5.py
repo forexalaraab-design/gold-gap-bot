@@ -429,9 +429,15 @@ def mt5_run_cycle(state, rows, sess):
         config.SL_AFTER_ENTRY_USD
     sl_dist = _main._jitter_usd(sl_base, config.HUMAN_SL_TP_JITTER_USD)
 
-    # TP: الحد الأدنى يشمل التكلفة بحيث صافي الربح ≥ 1.40 بعد خصمها —
-    # ربح حقيقي لا اسمي. (0.50×|catch_up| يبقى منطق اللحاق نفسه.)
-    min_tp_dist = 1.40 + _fees
+    # TP: الحد الأدنى يشمل التكلفة بحيث صافي الربح ≥ PROFIT_TARGET بعد
+    # خصمها — ربح حقيقي لا اسمي. (0.50×|catch_up| يبقى منطق اللحاق نفسه.)
+    # 2026-10-01: 1.40 → 1.60 (الحد الأدنى على TF كي لا تُفتح صفقات هامشية
+    # يتلاشى صافيها بعد العمولة/السبريد). تشتت بشري ثابت لكل صفقة يعزل
+    # قيم TP الحرفية المتطابقة — يُبنى من لقطة واصلة عشوائية قبل الفتح
+    # (لا positionId بعد) عبر _stable_jitter.
+    _tp_seed = f"tp-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M')}-{int(time.time()*1000) % 997}"
+    _tp_jit = _main._stable_jitter(_tp_seed, 0.04)
+    min_tp_dist = max(1.60, config.PROFIT_TARGET_USD * (1.0 + _tp_jit)) + _fees
     tp_ext = max(min_tp_dist, 0.50 * abs(catch_up))
     if side == "SELL":
         sl = entry + sl_dist

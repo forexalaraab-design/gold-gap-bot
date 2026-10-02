@@ -226,6 +226,15 @@ def mt5_run_cycle(state, rows, sess):
     except Exception as _exc:
         print(f"ai self-tune warn: {_exc!r}", flush=True)
 
+    # --- عقل LLM: تحليل مجدول + خطة + توصيات (كتب تلقائي الخطة كل 6 ساعات) ---
+    try:
+        import ai_brain
+        if ai_brain.AI_ON and ai_brain._needs_run(state):
+            _pres = ai_brain.run(state)
+            print(f"ai-brain: {_pres}", flush=True)
+    except Exception as _exc:
+        print(f"ai-brain warn: {_exc!r}", flush=True)
+
     # --- إحصائيات من rows (platform mid فقط) ---
     stats = _main.compute_stats(rows, verbose=False)
 

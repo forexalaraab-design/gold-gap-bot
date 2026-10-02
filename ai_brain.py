@@ -54,6 +54,11 @@ _DEFAULTS = {
         "headers": {"Content-Type": "application/json"},
         "path": ["choices", 0, "message", "content"],
     },
+    "openrouter": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {"Content-Type": "application/json"},
+        "path": ["choices", 0, "message", "content"],
+    },
     "anthropic": {
         "url": "https://api.anthropic.com/v1/messages",
         "headers": {

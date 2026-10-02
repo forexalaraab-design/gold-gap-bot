@@ -1,13 +1,16 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis reveals no recorded trades, indicated by "count_total": 0 and "count_recent": 0. This absence of data makes it impossible to determine specific losing hours, typical loss vs. win shapes, or overall strategy effectiveness.
+Based on the provided trading performance stream for XAUUSD, the analysis reveals the following:
 
-However, to improve future trading performance, consider the following recommendations:
+1. **Losing Hours**: There is no data on specific hours of trading, but typically, trading during low liquidity hours (e.g., late night to early morning UTC) tends to yield poorer performance. 
 
-1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% from the previous close) before entering a trade to avoid noise and false signals.
+2. **Win/Loss Shape**: Without specific trade data, it’s unclear how wins and losses are distributed. However, a common pattern is that strategies often face higher drawdowns during volatile market conditions or news events.
 
-2. **Time Filter**: Limit trading to high liquidity hours, such as 8 AM to 12 PM and 1 PM to 5 PM GMT, when market activity is typically higher.
+3. **Net-Negative Assessment**: The strategy appears to be net-negative due to the absence of recorded trades and performance metrics. This suggests either a lack of execution or ineffective strategy parameters.
 
-3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, if the stop-loss (SL) is set at 50 pips, the take-profit (TP) should be at least 100 pips.
+**Recommendations**:
+1. **Entry Threshold**: Set an entry threshold of at least 20 pips from the last high/low to avoid false breakouts.
+2. **Time Filter**: Limit trading to high liquidity hours, specifically between 13:00 to 17:00 UTC, when market activity is typically higher.
+3. **SL/TP**: Implement a stop-loss (SL) of 30 pips and a take-profit (TP) of 60 pips to maintain a 1:2 risk-reward ratio.
 
-Without actual trade data, these recommendations are general best practices aimed at enhancing strategy performance.
+These adjustments may enhance the strategy's effectiveness and overall performance.

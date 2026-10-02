@@ -396,6 +396,12 @@ def _entry_floor():
     عتبة الدخول تنتقل قليلاً بين الجولات كأن المتداول يزن قراره. لا
     تُمَس طبقة الأمان (لا علاقة لها بحارس الخسارة).
     """
+    import random as _r
+    f = config.MOMENTUM_MIN_USD
+    frac = getattr(config, "HUMAN_ENTRY_JITTER_FRAC", 0.10) or 0.0
+    if not config.HUMANIZE_ON or frac <= 0:
+        return f
+    return f * _r.uniform(1.0 - frac, 1.0 + frac)
 
 
 def ai_self_tune(state):
@@ -410,12 +416,6 @@ def ai_self_tune(state):
         return ai_brain.apply_self_improvement(state)
     except Exception:
         return {"applied": False, "reason": "ai_brain unavailable"}
-    import random as _r
-    f = config.MOMENTUM_MIN_USD
-    frac = getattr(config, "HUMAN_ENTRY_JITTER_FRAC", 0.10) or 0.0
-    if not config.HUMANIZE_ON or frac <= 0:
-        return f
-    return f * _r.uniform(1.0 - frac, 1.0 + frac)
 
 
 def _skip_signal():

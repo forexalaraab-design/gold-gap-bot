@@ -218,6 +218,14 @@ def mt5_run_cycle(state, rows, sess):
     """دورة واحدة: إغلاق+فتح — متزامنة، ترجع result dict."""
     result = {"ts": utcnow_iso()}
 
+    # --- حلقة التطوير الذاتي (AI_ON): توصية العقل على الـ entry threshold ---
+    # تُطبَّق في الذاكرة على config فقط (لا ملفات/commit)، وبصد قيم شاذة،
+    # وفي حدود مفاتيح AI_APPLY_ON / AI_MOMENTUM_MIN_{MIN,MAX}.
+    try:
+        _main.ai_self_tune(state)
+    except Exception as _exc:
+        print(f"ai self-tune warn: {_exc!r}", flush=True)
+
     # --- إحصائيات من rows (platform mid فقط) ---
     stats = _main.compute_stats(rows, verbose=False)
 

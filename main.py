@@ -396,6 +396,20 @@ def _entry_floor():
     عتبة الدخول تنتقل قليلاً بين الجولات كأن المتداول يزن قراره. لا
     تُمَس طبقة الأمان (لا علاقة لها بحارس الخسارة).
     """
+
+
+def ai_self_tune(state):
+    """حلقة التطوير الذاتي للاستراتيجية (LLM) — في الذاكرة وعبر ai_brain.
+
+    المرور: يستدعي ai_brain.apply_self_improvement إن كانت تبعية متوفرة
+    (AI_ON=1 + AI_APPLY_ON=1). عند غيابها (لا key/لا وحدة) يُرجع صامتاً
+    بلا أثر — آمن لأن الحالة الافتراضية إيقاف.
+    """
+    try:
+        import ai_brain
+        return ai_brain.apply_self_improvement(state)
+    except Exception:
+        return {"applied": False, "reason": "ai_brain unavailable"}
     import random as _r
     f = config.MOMENTUM_MIN_USD
     frac = getattr(config, "HUMAN_ENTRY_JITTER_FRAC", 0.10) or 0.0

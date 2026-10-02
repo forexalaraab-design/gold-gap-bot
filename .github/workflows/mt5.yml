@@ -16,13 +16,10 @@ permissions:
 
 concurrency:
   group: goldgap-mt5
-  # 2026-10-02: أزلنا queue (كان deadlock قاتل): لو علقت دورة runner منذ
-  # 20:19 لم تُطبق timeout (runner ميت) وكل دورات لاحقة تنتظر بالصف للأبد
-  # فتموت السلسلة (حدث عملياً 204.7 رصيد ثابت 3+ ساعات بلا أي دورات).
-  # cancel-in-progress: دورة جديدة قادمة (self-dispatch أو يدوية) تلغي
-  # أي دورة عالقة تلقائياً — السلسلة صحية تبقى دائماً، والعالق يُقتل من
-  # نفسه. لا تداخل: self-dispatch يحدث بعد اكتمال الدورة فحسب.
-  cancel-in-progress: true
+  # queue بدل cancel-in-progress: لا تُلغى دورة قيد العمل — الجديدة
+  # تنتظر في الصف حتى تُكمل الحالية self-dispatch بسلاسة، فلا ينقطع
+  # التسلسل (كان الضبط القديم يقتل الدورة الجارية قبل آخر خطواتها).
+  cancel-in-progress: false
 
 jobs:
   run-mt5:
@@ -164,6 +161,13 @@ jobs:
           # فلتر الوقت (جلسة 16–22 UTC) معطّل مؤقتاً بإذن المستخدم للتحقق
           # لاكتشاف سلاسل الأعطال؛ يُعاد تفعيله عبر ضبط المتغير =1.
           STRAT_SESSION_BLOCK_ON: ${{ vars.STRAT_SESSION_BLOCK_ON || '0' }}
+          # عقل LLM (2026-10-02): vars تتحكم بالتفعيل/المزود، السرّ من secrets.
+          AI_ON: ${{ vars.AI_ON || '0' }}
+          AI_APPLY_ON: ${{ vars.AI_APPLY_ON || '0' }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openrouter' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'openai/gpt-4o-mini' }}
+          AI_INTERVAL_MIN: ${{ vars.AI_INTERVAL_MIN || '360' }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
           PYTHONIOENCODING: utf-8
           PYTHONUNBUFFERED: "1"
 

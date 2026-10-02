@@ -170,6 +170,16 @@ def _read_csv(path):
         return []
 
 
+def _find_trades():
+    """أبحث عن سجل الصفقات في أي مسار سليم (data/ أو جذر العمل)."""
+    for p in (os.path.join("data", "trades.csv"), "trades.csv",
+              os.path.join(os.path.dirname(__file__), "data", "trades.csv")):
+        rows = _read_csv(p)
+        if rows:
+            return rows, p
+    return [], "data/trades.csv"
+
+
 def _read_json(path):
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -219,6 +229,7 @@ def _fetch_news_headlines():
 
 def _write(path, text):
     try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
     except Exception as exc:
@@ -227,7 +238,7 @@ def _write(path, text):
 
 def _build_context(state):
     """ملخص مجرد من سجل الصفقات، بلا كلمات هوية — تغذية للعقل."""
-    trades = _read_csv(os.path.join("data", "trades.csv"))
+    trades, _src = _find_trades()
     perf = _read_json(os.path.join("data", "performance.json"))
     recent = trades[-40:] if len(trades) > 40 else trades
     rows = []

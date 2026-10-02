@@ -208,6 +208,75 @@ def broker_open_position_ids(symbol=None):
     return out
 
 
+_DEAL_REASON_NAMES = {
+    0: "client", 1: "expert", 2: "dealer", 3: "signal", 4: "stop",
+    5: "target", 6: "slashed", 7: "by_admin", 8: "dontknow",
+}
+
+
+def history_deals_get(symbol=None, position_id=None, since=None, until=None,
+                      limit=50):
+    """سجل الصفقات المغلقة من MT5 — الحقيقة المحاسبية من السيرفر.
+
+    الغرض (2026-10-02): كان النزيف يمر عبر "external-reconciled" بلا
+    تسجيل pnl (الإغلاقات السيرفرية/الوسيط تُكتشف متأخرة ولا تُحسب)،
+    فيُظهر عدّاد الربح ربحاً زائفاً بينما الحساب يذوب. هذه الدالة تقرأ
+    history_deals_get مباشرة: كل صفقة مغلقة مع profit الفعلي والسبب
+    الصادق (comment يحوي "[sl …]" / "[tp …]" و reason=4/5 كما في
+    مرجع MT5 Python API) — مصدر الحقيقة الذي لا يعتمد على التقاط
+    البوت اللحظي.
+
+    تُرجع قائمة dictات نظيفة:
+      ticket / position_id / symbol / side / entry / reason / reason_str
+      volume / price / profit / commission / swap / fee / time
+    وإلا قائمة [] عند أي خطأ (آمن للتتبع).
+    """
+    mt5 = _mt5()
+    try:
+        if position_id is not None:
+            deals = mt5.history_deals_get(position=position_id)
+        elif since is not None:
+            from datetime import datetime as _dt
+            d_from = since if isinstance(since, _dt) else \
+                _dt.fromtimestamp(float(since))
+            d_until = until if isinstance(until, _dt) and until else None
+            deals = mt5.history_deals_get(d_from, d_until)
+        else:
+            deals = mt5.history_deals_get()
+    except Exception:
+        return []
+    if not deals:
+        return []
+    out = []
+    for d in deals:
+        if symbol and d.symbol != symbol:
+            continue
+        pts = getattr(d, "profit", 0.0) or 0.0
+        pcomm = getattr(d, "commission", 0.0) or 0.0
+        pswap = getattr(d, "swap", 0.0) or 0.0
+        pfee = getattr(d, "fee", 0.0) or 0.0
+        out.append({
+            "ticket": d.ticket,
+            "position_id": getattr(d, "position_id", 0),
+            "symbol": d.symbol,
+            "side": "buy" if getattr(d, "type", 0) == 0 else "sell",
+            "entry": getattr(d, "entry", 0),
+            "reason": getattr(d, "reason", 0),
+            "reason_str": _DEAL_REASON_NAMES.get(getattr(d, "reason", 0), "?"),
+            "volume": d.volume,
+            "price": d.price,
+            "profit": round(float(pts), 2),
+            "commission": round(float(pcomm), 2),
+            "swap": round(float(pswap), 2),
+            "fee": round(float(pfee), 2),
+            "comment": getattr(d, "comment", ""),
+            "time": getattr(d, "time", 0),
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _volume_units(lot):
     """تحويل اللوت إلى وحدات رقم تصريح volume في MT5 (0.01..)."""
     return round(max(0.01, float(lot)), 2)

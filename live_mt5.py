@@ -373,16 +373,39 @@ def mt5_run_cycle(state, rows, sess):
                     pnl_ext = 0.0
                     f_ext = 0.0
                     entry_p = st_pos.get("entry_price")
-                    if entry_p:
-                        _diff = mid - entry_p
-                        if st_pos["side"] == "SELL":
-                            _diff = -_diff
-                        gross = _diff * 100 / 100.0
-                        f_ext = _main.position_fees_usd(
-                            pos_ns, 2, result=result, state=state) or 0.0
-                        pnl_ext = round(gross - f_ext, 2)
+                    hit = "sl_hit"
+                    close_price = mid
+                    # الحقيقة من سجل الصفقات: إغلاق الوسيط (stop/TP) تحته
+                    # deal محفوظ عند السيرفر — profit الفعلي والسبب (4=stop,
+                    # 5=target، comment "[sl …]"/"[tp …]") لا التخمين من mid.
+                    try:
+                        _deals = sess.history_deals_get(
+                            symbol=config.SYMBOL,
+                            position_id=int(st_pos.get("positionId") or 0),
+                        )
+                        for _d in (_deals or []):
+                            if int(_d.get("entry", 0)) == 1:
+                                pnl_ext = round(float(_d.get("profit") or 0.0)
+                                                + float(_d.get("commission") or 0.0)
+                                                + float(_d.get("swap") or 0.0)
+                                                + float(_d.get("fee") or 0.0), 2)
+                                f_ext = round(float(_d.get("commission") or 0.0)
+                                              + float(_d.get("swap") or 0.0)
+                                              + float(_d.get("fee") or 0.0), 2)
+                                if _d.get("price"):
+                                    close_price = float(_d["price"])
+                                hit = "tp_hit" if pnl_ext > 0 else "sl_hit"
+                                _c = str(_d.get("comment") or "")
+                                if "[tp" in _c or "[TP" in _c:
+                                    hit = "tp_hit"
+                                elif "[sl" in _c or "[SL" in _c:
+                                    hit = "sl_hit"
+                                break
+                    except Exception as exc:
+                        print(f"history deals ext warn: {exc!r}", flush=True)
+                    if not entry_p:
+                        entry_p = st_pos.get("entry_price")
                     side_n = st_pos.get("side") or broker_pos["side"]
-                    hit = "tp_hit" if pnl_ext > 0 else "sl_hit"
                     if pnl_ext > 0:
                         closing_mgr.record_win(pnl_ext)
                     else:
@@ -395,8 +418,8 @@ def mt5_run_cycle(state, rows, sess):
                         "side": side_n,
                         "entry_gap": st_pos.get("entry_gap"),
                         "close_gap": result["gap"],
-                        "entry_price": st_pos.get("entry_price"),
-                        "close_price": mid,
+                        "entry_price": entry_p,
+                        "close_price": close_price,
                         "pnl_units": pnl_ext,
                         "pnl_usd": pnl_ext,
                         "fees_usd": round(f_ext, 2),
@@ -424,23 +447,35 @@ def mt5_run_cycle(state, rows, sess):
         f_ext = 0.0
         entry_p = state_pos.get("entry_price")
         side_n = state_pos.get("side") or "BUY"
-        if entry_p:
-            _diff = mid - entry_p
-            if str(side_n).upper() == "SELL":
-                _diff = -_diff
-            gross = _diff * 100 / 100.0
-            _ext_ns = types.SimpleNamespace(
-                positionId=state_pos.get("positionId"),
-                price=entry_p,
-                digits=2,
-                tradeData=types.SimpleNamespace(volume=100, tradeSide=(2 if str(side_n).upper() == "SELL" else 1)),
-                commission=float(state_pos.get("commission") or 0.0),
-                swap=float(state_pos.get("swap") or 0.0),
+        hit = "sl_hit"
+        close_price = mid
+        try:
+            _deals = sess.history_deals_get(
+                symbol=config.SYMBOL,
+                position_id=int(state_pos.get("positionId") or 0),
             )
-            f_ext = _main.position_fees_usd(
-                _ext_ns, 2, result=result, state=state) or 0.0
-            pnl_ext = round(gross - f_ext, 2)
-        hit = "tp_hit" if pnl_ext > 0 else "sl_hit"
+            for _d in (_deals or []):
+                if int(_d.get("entry", 0)) == 1:
+                    pnl_ext = round(float(_d.get("profit") or 0.0)
+                                    + float(_d.get("commission") or 0.0)
+                                    + float(_d.get("swap") or 0.0)
+                                    + float(_d.get("fee") or 0.0), 2)
+                    f_ext = round(float(_d.get("commission") or 0.0)
+                                  + float(_d.get("swap") or 0.0)
+                                  + float(_d.get("fee") or 0.0), 2)
+                    if _d.get("price"):
+                        close_price = float(_d["price"])
+                    hit = "tp_hit" if pnl_ext > 0 else "sl_hit"
+                    _c = str(_d.get("comment") or "")
+                    if "[tp" in _c or "[TP" in _c:
+                        hit = "tp_hit"
+                    elif "[sl" in _c or "[SL" in _c:
+                        hit = "sl_hit"
+                    break
+        except Exception as exc:
+            print(f"history deals ext2 warn: {exc!r}", flush=True)
+        if not entry_p:
+            entry_p = state_pos.get("entry_price")
         if pnl_ext > 0:
             closing_mgr.record_win(pnl_ext)
         else:
@@ -454,7 +489,7 @@ def mt5_run_cycle(state, rows, sess):
             "entry_gap": state_pos.get("entry_gap"),
             "close_gap": result["gap"],
             "entry_price": entry_p,
-            "close_price": mid,
+            "close_price": close_price,
             "pnl_units": pnl_ext,
             "pnl_usd": pnl_ext,
             "fees_usd": round(f_ext, 2),

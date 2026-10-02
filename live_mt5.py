@@ -370,9 +370,45 @@ def mt5_run_cycle(state, rows, sess):
             else:
                 # قد يكون الوسيط أغلقها (ستوب/هدف خارجي)
                 if "position not found" in (msg or "").lower():
+                    pnl_ext = 0.0
+                    f_ext = 0.0
+                    entry_p = st_pos.get("entry_price")
+                    if entry_p:
+                        _diff = mid - entry_p
+                        if st_pos["side"] == "SELL":
+                            _diff = -_diff
+                        gross = _diff * 100 / 100.0
+                        f_ext = _main.position_fees_usd(
+                            pos_ns, 2, result=result, state=state) or 0.0
+                        pnl_ext = round(gross - f_ext, 2)
+                    side_n = st_pos.get("side") or broker_pos["side"]
+                    hit = "tp_hit" if pnl_ext > 0 else "sl_hit"
+                    if pnl_ext > 0:
+                        closing_mgr.record_win(pnl_ext)
+                    else:
+                        closing_mgr.record_loss(pnl_ext)
                     state["position"] = None
                     state["cooldown_until"] = _now_unix() + _human_cooldown()
+                    _main._record_close(state, {
+                        "ts_open": st_pos.get("opened_at"),
+                        "ts_close": utcnow_iso(),
+                        "side": side_n,
+                        "entry_gap": st_pos.get("entry_gap"),
+                        "close_gap": result["gap"],
+                        "entry_price": st_pos.get("entry_price"),
+                        "close_price": mid,
+                        "pnl_units": pnl_ext,
+                        "pnl_usd": pnl_ext,
+                        "fees_usd": round(f_ext, 2),
+                        "spread_usd": round(_detected_spread_usd(result), 2),
+                        "pnl_net_usd": pnl_ext,
+                        "reason": hit,
+                        "pnl_peak_usd": round(float(st_pos.get("pnl_peak_usd") or 0), 2),
+                    })
+                    closing_mgr.save_perf_to_state(state)
                     result["action"] = "close:external-reconciled"
+                    result["close_pnl_usd"] = pnl_ext
+                    result["close_reason_ext"] = hit
                 else:
                     result["action"] = "close_pending"
                     result["close_error"] = msg
@@ -384,9 +420,53 @@ def mt5_run_cycle(state, rows, sess):
     # ============ مرحلة الفتح ============
     # موضع في الحالة المحلية لكن لا موضع عند الوسيط = إغلاق خارجي
     if state_pos is not None and state_pos.get("positionId"):
+        pnl_ext = 0.0
+        f_ext = 0.0
+        entry_p = state_pos.get("entry_price")
+        side_n = state_pos.get("side") or "BUY"
+        if entry_p:
+            _diff = mid - entry_p
+            if str(side_n).upper() == "SELL":
+                _diff = -_diff
+            gross = _diff * 100 / 100.0
+            _ext_ns = types.SimpleNamespace(
+                positionId=state_pos.get("positionId"),
+                price=entry_p,
+                digits=2,
+                tradeData=types.SimpleNamespace(volume=100, tradeSide=(2 if str(side_n).upper() == "SELL" else 1)),
+                commission=float(state_pos.get("commission") or 0.0),
+                swap=float(state_pos.get("swap") or 0.0),
+            )
+            f_ext = _main.position_fees_usd(
+                _ext_ns, 2, result=result, state=state) or 0.0
+            pnl_ext = round(gross - f_ext, 2)
+        hit = "tp_hit" if pnl_ext > 0 else "sl_hit"
+        if pnl_ext > 0:
+            closing_mgr.record_win(pnl_ext)
+        else:
+            closing_mgr.record_loss(pnl_ext)
         state["position"] = None
         state["cooldown_until"] = _now_unix() + _human_cooldown()
+        _main._record_close(state, {
+            "ts_open": state_pos.get("opened_at"),
+            "ts_close": utcnow_iso(),
+            "side": side_n,
+            "entry_gap": state_pos.get("entry_gap"),
+            "close_gap": result["gap"],
+            "entry_price": entry_p,
+            "close_price": mid,
+            "pnl_units": pnl_ext,
+            "pnl_usd": pnl_ext,
+            "fees_usd": round(f_ext, 2),
+            "spread_usd": round(_detected_spread_usd(result), 2),
+            "pnl_net_usd": pnl_ext,
+            "reason": hit,
+            "pnl_peak_usd": round(float(state_pos.get("pnl_peak_usd") or 0), 2),
+        })
+        closing_mgr.save_perf_to_state(state)
         result["action"] = "close:external-reconciled"
+        result["close_pnl_usd"] = pnl_ext
+        result["close_reason_ext"] = hit
         return result
 
     can_open, reason, side, catch_up, _ta = _entry_decision(

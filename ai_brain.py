@@ -170,8 +170,53 @@ def _read_csv(path):
         return []
 
 
+def _read_feed():
+    """قراءة data/ai_feed.md (سطر لكل صفقة: ts|side|pnl|tag|spread).
+
+    تنسيق السطر (من main._record_close):
+      2026-10-02 21:33 | BUY | -0.45 | L | 0.20
+    يرجع dicts بمفاتيح trades.csv موحّدة ليقرأها _build_context.
+    """
+    path = os.path.join("data", "ai_feed.md")
+    out = []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or "|" not in line:
+                    continue
+                parts = [p.strip() for p in line.split("|")]
+                out.append({
+                    "ts_open": "", "ts_close": parts[0] if parts else "",
+                    "side": parts[1] if len(parts) > 1 else "",
+                    "entry_gap": "", "close_gap": "",
+                    "entry_price": "", "close_price": "",
+                    "pnl_units": "",
+                    "pnl_usd": parts[2] if len(parts) > 2 else "",
+                    "pnl_net_usd": parts[2] if len(parts) > 2 else "",
+                    "reason": parts[3] if len(parts) > 3 else "",
+                    "fees_usd": "",
+                    "spread_usd": parts[4] if len(parts) > 4 else "",
+                })
+    except Exception:
+        pass
+    return out
+
+
 def _find_trades():
-    """أبحث عن سجل الصفقات في أي مسار سليم (data/ أو جذر العمل)."""
+    """مصدر الصفقات: ai_feed.md المحايد أولاً (غير معزول، يصل الـ runner)،
+    ثم trades.csv، ثم state. ai_feed.md يضمن وصول بيانات حقيقية للعقل.
+    """
+    import_csv = _read_csv(os.path.join("data", "trades.csv"))
+    feed = _read_feed()
+    if feed:
+        return feed, "data/ai_feed.md"
+    if import_csv:
+        return import_csv, "data/trades.csv"
+    return [], "data/trades.csv"
+
+
+def _find_trades_deprecated():
     for p in (os.path.join("data", "trades.csv"), "trades.csv",
               os.path.join(os.path.dirname(__file__), "data", "trades.csv")):
         rows = _read_csv(p)
@@ -239,25 +284,35 @@ def _write(path, text):
 def _build_context(state):
     """ملخص مجرد من سجل الصفقات، بلا كلمات هوية — تغذية للعقل."""
     trades, _src = _find_trades()
+    # الحالة المحلية الحية: closed_trades لدورة سابقة — الأصدق على الـ runner
+    # (عند غياب trades.csv المعزول). ندمجها إن كانت أغنى.
+    live = state.get("closed_trades") or []
+    if live and len(live) >= len(trades):
+        trades = live
+        _src = "state.closed_trades"
     perf = _read_json(os.path.join("data", "performance.json"))
     recent = trades[-40:] if len(trades) > 40 else trades
     rows = []
     for t in recent:
-        rows.append({
-            "s": t.get("side", ""),
-            "eg": _num(t.get("entry_gap")),
-            "cg": _num(t.get("close_gap")),
-            "en": _num(t.get("entry_price")),
-            "cp": _num(t.get("close_price")),
-            "pnl": _num(t.get("pnl_net_usd")),
-            "rs": t.get("reason", ""),
-            "to": (t.get("ts_open") or "")[11:16],
-            "tc": (t.get("ts_close") or "")[11:16],
-        })
+        if isinstance(t, dict):
+            rows.append({
+                "s": t.get("side", ""),
+                "eg": _num(t.get("entry_gap")),
+                "cg": _num(t.get("close_gap")),
+                "en": _num(t.get("entry_price")),
+                "cp": _num(t.get("close_price")),
+                "pnl": _num(t.get("pnl_net_usd")),
+                "rs": t.get("reason", ""),
+                "to": (t.get("ts_open") or "")[11:16],
+                "tc": (t.get("ts_close") or "")[11:16],
+            })
+        else:
+            rows.append({"raw": str(t)[:80]})
     ctx = {
         "count_total": len(trades),
         "count_recent": len(rows),
         "recent": rows,
+        "data_source": _src,
         "perf": perf,
         "spread_usd_last": state.get("_last_spread_usd"),
         "balance_last": state.get("last_balance"),

@@ -865,6 +865,30 @@ def _record_close(state, rec):
             ])
     except Exception as exc:
         print("trades.csv write failed:", exc)
+    # مغذي مجرّد للعقل (ai_brain) — UTC only، بلا أسباب داخلية تكشف المنطق
+    # (القاعدة 0). ملف md غير معزول فيُحمل للـ runner ويسدّ غياب trades.csv.
+    try:
+        _ai_feed_path = os.path.join(os.path.dirname(config.TRADES_FILE),
+                                     "ai_feed.md")
+        os.makedirs(os.path.dirname(_ai_feed_path), exist_ok=True)
+        _tag = "L" 
+        try:
+            _npm = float(rec.get("pnl_net_usd") or 0.0)
+            _tag = "W" if _npm > 0 else "L"
+        except (TypeError, ValueError):
+            _tag = "L"
+        _rs_neutral = {"sl": "SL", "tp": "TP"}.get(
+            str(rec.get("reason") or "").lower(), _tag)
+        with open(_ai_feed_path, "a", encoding="utf-8") as _f:
+            _f.write("{0}|{1}|{2}|{3}|{4}\n".format(
+                str(rec.get("ts_close") or "")[:16].replace("T", " "),
+                str(rec.get("side") or ""),
+                _fmt(rec.get("pnl_net_usd")),
+                _rs_neutral,
+                _fmt(rec.get("spread_usd")),
+            ))
+    except Exception as _exc:
+        print("ai_feed write failed:", _exc)
     _write_performance(state)
 
 

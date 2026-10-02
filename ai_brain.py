@@ -173,6 +173,45 @@ def _read_json(path):
         return {}
 
 
+def _fetch_news_headlines():
+    """أخبار موجزة اختيارية عبر HTTP بلا مفتاح — تغذية سياق للعقل.
+
+    مصدران حران:
+      * metal-price API (بدون مفتاح): سعر ذهب لحظي عالمي.
+      * RSS بسيط غير مطلوب — نكتفي بارتداد نجاح فقط.
+    عند أي فشل يرجع [] بلا أثر (البحث اختياري).
+    """
+    import urllib.request
+    out = []
+    # metal price API (free, no key) — سعر لحظي + اتجاه
+    try:
+        req = urllib.request.Request(
+            "https://api.metalpriceapi.com/v1/latest",
+            headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=AI_FETCH_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode())
+        rates = data.get("rates") or {}
+        for k, v in list(rates.items())[:6]:
+            out.append({"source": "metalpriceapi", "key": k, "value": v})
+    except Exception as exc:
+        print(f"ai_brain news(fetch) warn: {exc!r}", flush=True)
+    # Yahoo GC=F quote — بيانات السوق كسياق
+    try:
+        req = urllib.request.Request(
+            "https://query1.finance.yahoo.com/v8/finance/chart/GC=F",
+            headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=AI_FETCH_TIMEOUT) as resp:
+            j = json.loads(resp.read().decode())
+        meta = (j.get("chart", {}).get("result") or [{}])[0].get("meta") or {}
+        if meta:
+            out.append({"source": "yahoo-GC=F",
+                        "price": meta.get("regularMarketPrice"),
+                        "prev": meta.get("chartPreviousClose")})
+    except Exception as exc:
+        print(f"ai_brain news(yahoo) warn: {exc!r}", flush=True)
+    return out
+
+
 def _write(path, text):
     try:
         with open(path, "w", encoding="utf-8") as f:
@@ -206,6 +245,7 @@ def _build_context(state):
         "perf": perf,
         "spread_usd_last": state.get("_last_spread_usd"),
         "balance_last": state.get("last_balance"),
+        "news": _fetch_news_headlines(),
     }
     return ctx
 

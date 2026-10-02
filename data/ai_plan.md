@@ -1,18 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis reveals the following:
+Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of data, as there are no recorded trades (count_total: 0). Therefore, a detailed diagnosis on losing hours, win/loss shapes, or overall strategy performance cannot be conducted.
 
-1. **Losing Hours**: Without specific trade data, it's difficult to pinpoint exact losing hours. However, typically, trading during low liquidity hours (e.g., late night to early morning UTC) tends to yield poorer performance.
+However, to improve future trading performance, consider the following recommendations:
 
-2. **Win vs. Loss Shape**: The absence of trade data means we can't analyze the win/loss ratio or the typical loss versus win shape. However, if losses are frequent during specific hours, it suggests a need for strategy adjustment.
+1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% to filter out low-volatility trades, ensuring entries occur during more favorable market conditions.
 
-3. **Net-Negative Assessment**: The strategy appears to be net-negative due to the lack of trades and performance data. This indicates either a lack of effective entry signals or poor risk management.
+2. **Time Filter**: Avoid trading during low liquidity hours, specifically between 10 PM and 2 AM GMT, when market activity typically decreases, leading to higher spreads and slippage.
 
-**Recommendations**:
-1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% movement from the previous close) to filter out low-probability trades.
-   
-2. **Time Filter**: Limit trading to high liquidity hours (e.g., 13:00 - 17:00 UTC) when market activity is typically higher.
+3. **SL/TP Settings**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio. This approach can help mitigate losses while maximizing potential gains.
 
-3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, set a Stop Loss (SL) at 50 pips and a Take Profit (TP) at 100 pips to ensure profitable trades outweigh losses.
-
-These adjustments should help improve overall trading performance.
+To summarize, without trade data, it's crucial to establish a structured trading plan with clear thresholds and filters to enhance performance moving forward.

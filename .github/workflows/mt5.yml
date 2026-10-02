@@ -16,10 +16,13 @@ permissions:
 
 concurrency:
   group: goldgap-mt5
-  # queue بدل cancel-in-progress: لا تُلغى دورة قيد العمل — الجديدة
-  # تنتظر في الصف حتى تُكمل الحالية self-dispatch بسلاسة، فلا ينقطع
-  # التسلسل (كان الضبط القديم يقتل الدورة الجارية قبل آخر خطواتها).
-  cancel-in-progress: false
+  # 2026-10-02: أزلنا queue (كان deadlock قاتل): لو علقت دورة runner منذ
+  # 20:19 لم تُطبق timeout (runner ميت) وكل دورات لاحقة تنتظر بالصف للأبد
+  # فتموت السلسلة (حدث عملياً 204.7 رصيد ثابت 3+ ساعات بلا أي دورات).
+  # cancel-in-progress: دورة جديدة قادمة (self-dispatch أو يدوية) تلغي
+  # أي دورة عالقة تلقائياً — السلسلة صحية تبقى دائماً، والعالق يُقتل من
+  # نفسه. لا تداخل: self-dispatch يحدث بعد اكتمال الدورة فحسب.
+  cancel-in-progress: true
 
 jobs:
   run-mt5:

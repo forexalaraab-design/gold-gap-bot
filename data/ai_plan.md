@@ -1,16 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as the total trade count is zero. However, I can provide general recommendations based on common trading patterns.
+Based on the provided trading performance stream for XAUUSD, the analysis reveals no recorded trades, indicated by "count_total": 0 and "count_recent": 0. This absence of data makes it impossible to determine specific losing hours, typical loss vs. win shapes, or overall strategy effectiveness.
 
-1. **Losing Hours**: Typically, trading during low volatility hours (e.g., late night to early morning UTC) can lead to losses. Analyze historical data to identify specific hours with negative performance.
+However, to improve future trading performance, consider the following recommendations:
 
-2. **Win/Loss Shape**: Without specific trade data, it's impossible to determine the typical win vs. loss shape. However, a common pattern is that winning trades often occur during high volatility periods (e.g., market openings or major news releases).
+1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% from the previous close) before entering a trade to avoid noise and false signals.
 
-3. **Net-Negative Strategy**: If the strategy has not been tested or shows zero trades, it is likely net-negative due to lack of execution or poor timing.
+2. **Time Filter**: Limit trading to high liquidity hours, such as 8 AM to 12 PM and 1 PM to 5 PM GMT, when market activity is typically higher.
 
-**Recommendations**:
-- **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close to filter out low-probability trades.
-- **Time Filter**: Trade only during high volatility hours, such as 8 AM to 12 PM UTC and 1 PM to 5 PM UTC.
-- **SL/TP**: Use a stop-loss (SL) of 1% and a take-profit (TP) of 2% to ensure a favorable risk-reward ratio.
+3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, if the stop-loss (SL) is set at 50 pips, the take-profit (TP) should be at least 100 pips.
 
-These recommendations aim to enhance trading performance based on common market behaviors.
+Without actual trade data, these recommendations are general best practices aimed at enhancing strategy performance.

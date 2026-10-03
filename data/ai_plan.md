@@ -1,13 +1,16 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates that there are no recorded trades, as the count_total and count_recent are both zero. This lack of data makes it impossible to assess specific hours of loss, win shapes, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as the total trade count is zero. However, I can provide general recommendations based on typical trading patterns for XAUUSD.
 
-However, to establish a framework for future analysis, consider the following recommendations:
+1. **Losing Hours**: Generally, trading during low volatility hours (e.g., late US session or early Asian session) tends to yield poorer performance. Avoid trading between 10 PM and 2 AM UTC.
 
-1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% change) before entering a trade to avoid noise and false signals.
+2. **Win/Loss Shape**: Without specific trade data, it's challenging to assess the win/loss ratio. However, a typical strategy should aim for a win rate above 50% to be net-positive.
 
-2. **Time Filter**: Focus trading during high liquidity hours, such as 8 AM to 12 PM GMT, when market activity is typically higher, reducing the risk of slippage.
+3. **Net-Negative Assessment**: If the strategy has not generated any trades, it is inherently net-negative. A lack of trades may indicate overly conservative entry criteria or poor market conditions.
 
-3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio. This approach can help mitigate losses while maximizing potential gains.
+**Recommendations**:
+- **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close to filter out noise.
+- **Time Filter**: Trade only between 8 AM and 5 PM UTC to capture higher volatility and liquidity.
+- **SL/TP**: Use a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio.
 
-In summary, without actual trade data, the strategy cannot be deemed net-negative or positive. Implementing the above recommendations can help structure future trades for better performance.
+These adjustments may help improve performance once trading resumes.

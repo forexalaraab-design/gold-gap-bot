@@ -1,16 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as the total trade count is zero. However, I can provide general recommendations based on common trading patterns.
+Based on the provided trading performance stream for XAUUSD, the analysis indicates that there are no recorded trades, as evidenced by the "count_total" and "count_recent" both being zero. This lack of data prevents a thorough diagnosis of losing hours, win/loss patterns, or overall strategy performance.
 
-1. **Losing Hours**: Typically, trading during low volatility hours (e.g., late night to early morning UTC) can lead to losses. Avoid trading between 00:00 - 06:00 UTC.
+However, to improve future trading performance, consider the following recommendations:
 
-2. **Win/Loss Shape**: Without specific trade data, it’s impossible to analyze the win/loss ratio. However, a common pattern is that strategies often show a higher win rate during market open hours (e.g., London and New York sessions).
+1. **Entry Threshold**: Set an entry threshold based on a minimum price movement of 0.5% from the previous close to filter out noise and ensure trades are based on significant price action.
 
-3. **Net-Negative Assessment**: The strategy appears net-negative due to the absence of trades, indicating a lack of execution or poor market conditions. 
+2. **Time Filter**: Limit trading to high-volume hours, specifically during the overlap of the London and New York sessions (08:00 - 12:00 GMT) to capitalize on increased market activity.
 
-**Recommendations**:
-- **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close to filter out noise.
-- **Time Filter**: Trade only during the London (08:00 - 16:00 UTC) and New York (13:00 - 21:00 UTC) sessions for better volatility.
-- **SL/TP**: Use a stop-loss of 1% and a take-profit of 2% to maintain a favorable risk-reward ratio.
+3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. Set SL at 1% of the entry price and TP at 2% to ensure that winning trades outweigh losses.
 
-Implementing these recommendations could improve performance if the strategy is executed consistently.
+These adjustments can help establish a more structured trading strategy and potentially enhance profitability.

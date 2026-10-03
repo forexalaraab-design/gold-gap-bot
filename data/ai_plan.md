@@ -1,12 +1,18 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of trading activity, as evidenced by the total count of trades being zero. This absence of data makes it impossible to assess specific hours of loss, win shapes, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, the analysis reveals the following:
 
-However, the recent news indicates a price drop from 4202.3 to 4162.3, which could suggest market volatility. Without trades, we cannot determine if the strategy is net-negative or positive.
+1. **Losing Hours**: There is no data on specific hours or trades, making it impossible to identify losing hours directly. However, if historical data were available, typically, trading during low liquidity hours (e.g., late night to early morning) could lead to increased losses.
 
-**Recommendations:**
-1. **Entry Threshold:** Set a minimum price movement threshold of 20 pips to filter out noise and ensure only significant trades are executed.
-2. **Time Filter:** Avoid trading during high-impact news events or between 12:00 AM - 2:00 AM GMT, as these hours often show increased volatility and lower liquidity.
-3. **SL/TP:** Implement a stop-loss (SL) of 30 pips and a take-profit (TP) of 60 pips to maintain a risk-reward ratio of 1:2, which can help improve overall profitability if trades are executed.
+2. **Win/Loss Shape**: Without specific trade data, we cannot assess the typical loss versus win shape. A common pattern in trading strategies is a higher win rate with smaller wins and larger losses, which can lead to a net-negative outcome.
 
-To enhance performance, it is crucial to begin trading and gather data for a more comprehensive analysis.
+3. **Net-Negative Strategy**: The absence of trades and performance metrics suggests that the strategy may be net-negative due to lack of execution or poor timing. A strategy must have consistent trade entries with a favorable risk-reward ratio to be profitable.
+
+**Recommendations**:
+1. **Entry Threshold**: Set an entry threshold based on a minimum price movement (e.g., 0.5% deviation from the moving average) to filter out noise.
+  
+2. **Time Filter**: Limit trading to high liquidity hours (e.g., 8 AM - 12 PM and 1 PM - 5 PM GMT) to improve execution quality.
+
+3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to ensure a favorable risk-reward ratio, aiming for a minimum 1:2 ratio on trades. 
+
+These adjustments could enhance overall performance and mitigate losses.

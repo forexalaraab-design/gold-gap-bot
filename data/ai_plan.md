@@ -1,16 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as the total trade count is zero. However, I can offer general recommendations based on common trading patterns.
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as the counts for total and recent trades are both zero. This indicates that no trades have been executed, making it impossible to assess winning or losing hours, typical loss versus win shapes, or overall strategy performance.
 
-1. **Losing Hours**: Typically, trading during low volatility hours (e.g., late night to early morning UTC) can lead to losses. Consider avoiding trades between 00:00 - 06:00 UTC.
+However, to improve trading performance, consider the following recommendations:
 
-2. **Win/Loss Shape**: Without specific trade data, it's challenging to assess the win vs. loss distribution. However, a common pattern is that strategies often yield small wins and larger losses, indicating a need for better risk management.
+1. **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close before entering a trade. This can help filter out noise and ensure trades are based on significant price action.
 
-3. **Net-Negative Strategy**: If the strategy has not been tested or lacks a positive win rate, it is likely net-negative. This could stem from poor entry criteria or inadequate risk management.
+2. **Time Filter**: Avoid trading during high volatility news events (e.g., major economic releases) and consider focusing on the London and New York overlap hours (8 AM - 12 PM EST) for better liquidity.
 
-**Recommendations**:
-- **Entry Threshold**: Set a minimum RSI (Relative Strength Index) of 30 for buys and 70 for sells to filter out weak signals.
-- **Time Filter**: Trade only during high volatility hours, such as 13:00 - 17:00 UTC, when market activity is typically higher.
-- **SL/TP**: Use a stop-loss (SL) of 1.5% and a take-profit (TP) of 3% to ensure a favorable risk-reward ratio.
+3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2%. This risk-reward ratio can help ensure that winning trades outweigh losing ones, potentially leading to a net-positive strategy.
 
-Implementing these recommendations could improve overall trading performance.
+Without actual trading data, these recommendations are general and should be tested in a demo environment before live trading.

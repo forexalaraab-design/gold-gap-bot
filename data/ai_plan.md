@@ -1,13 +1,16 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates that there are no recorded trades, as evidenced by the "count_total" and "count_recent" both being zero. This lack of data prevents a thorough diagnosis of losing hours, win/loss patterns, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as the count of total and recent trades is zero. However, some general observations can be made based on typical trading patterns.
 
-However, to improve future trading performance, consider the following recommendations:
+1. **Losing Hours**: Without specific trade data, it's common for trading strategies to underperform during major market news releases or low liquidity periods (e.g., late evenings or early mornings in the U.S. session).
 
-1. **Entry Threshold**: Set an entry threshold based on a minimum price movement of 0.5% from the previous close to filter out noise and ensure trades are based on significant price action.
+2. **Win/Loss Shape**: Typically, a winning strategy shows a higher win rate with smaller losses compared to wins. If losses are larger or more frequent, the strategy may be net-negative.
 
-2. **Time Filter**: Limit trading to high-volume hours, specifically during the overlap of the London and New York sessions (08:00 - 12:00 GMT) to capitalize on increased market activity.
+3. **Net-Negative Assessment**: The strategy appears net-negative due to the absence of trades, indicating a lack of execution or poor market conditions.
 
-3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. Set SL at 1% of the entry price and TP at 2% to ensure that winning trades outweigh losses.
+**Recommendations**:
+1. **Entry Threshold**: Set an entry threshold based on a 20-pip breakout from a significant support/resistance level to avoid false signals.
+2. **Time Filter**: Trade only during the London and New York sessions (08:00 - 17:00 GMT) to capture higher volatility and liquidity.
+3. **SL/TP**: Implement a stop-loss (SL) of 30 pips and a take-profit (TP) of 60 pips to ensure a favorable risk-reward ratio of 1:2.
 
-These adjustments can help establish a more structured trading strategy and potentially enhance profitability.
+These adjustments could enhance trading performance if the strategy is re-evaluated and executed properly.

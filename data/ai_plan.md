@@ -2,15 +2,17 @@
 
 Based on the provided trading performance stream for XAUUSD, the analysis reveals the following:
 
-1. **Losing Hours**: Without specific trade data, it's difficult to pinpoint exact losing hours. However, typically, trading around major news releases or during low liquidity periods (like late evenings or early mornings) can lead to losses.
+1. **Losing Hours**: Without specific trade data, it's challenging to pinpoint exact losing hours. However, typically, trading during low volatility periods (e.g., late night to early morning UTC) can lead to poor performance.
 
-2. **Win vs. Loss Shape**: The absence of trade data means we cannot determine the typical loss vs. win shape. However, a common pattern is that losses tend to cluster around high volatility events or poor entry points.
+2. **Win/Loss Shape**: The absence of trade data makes it impossible to analyze the typical loss vs. win shape. A balanced win/loss ratio is crucial for a sustainable strategy.
 
-3. **Net-Negative Strategy**: The strategy appears to be net-negative due to the lack of trades and performance metrics. Without a consistent win rate or risk management, profitability is unlikely.
+3. **Net-Negative Assessment**: The strategy appears net-negative due to the lack of trades and performance data. A consistent absence of trades suggests either a lack of opportunities or ineffective strategy execution.
 
 **Recommendations**:
-1. **Entry Threshold**: Set a minimum entry threshold of 20 pips from the last high/low to avoid false breakouts.
-2. **Time Filter**: Trade only during the London and New York sessions (08:00 - 17:00 GMT) to capitalize on higher liquidity and volatility.
-3. **SL/TP**: Implement a stop-loss (SL) of 30 pips and a take-profit (TP) of 60 pips to maintain a risk-reward ratio of 1:2.
+1. **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close to filter out low-probability trades.
+   
+2. **Time Filter**: Trade only during high volatility hours, such as 12:00-16:00 UTC, when major market sessions overlap.
 
-These adjustments may improve overall performance and mitigate losses.
+3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio.
+
+These adjustments could enhance performance by focusing on more favorable trading conditions and improving risk management.

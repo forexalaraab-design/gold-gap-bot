@@ -1,13 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as the counts for total and recent trades are both zero. This indicates that no trades have been executed, making it impossible to assess winning or losing hours, typical loss versus win shapes, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of data, as there are no recorded trades (count_total: 0). Therefore, a detailed diagnosis on losing hours, win/loss shape, or overall strategy performance cannot be made.
 
-However, to improve trading performance, consider the following recommendations:
+However, to improve future trading performance, consider the following recommendations:
 
-1. **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close before entering a trade. This can help filter out noise and ensure trades are based on significant price action.
+1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 20 pips) before entering a trade to avoid noise and false signals.
 
-2. **Time Filter**: Avoid trading during high volatility news events (e.g., major economic releases) and consider focusing on the London and New York overlap hours (8 AM - 12 PM EST) for better liquidity.
+2. **Time Filter**: Trade during high liquidity hours, specifically between 8 AM to 12 PM GMT when both London and New York markets are active, to enhance execution quality.
 
-3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2%. This risk-reward ratio can help ensure that winning trades outweigh losing ones, potentially leading to a net-positive strategy.
+3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For instance, if the stop-loss (SL) is set at 50 pips, the take-profit (TP) should be at least 100 pips to ensure a net-positive strategy over time.
 
-Without actual trading data, these recommendations are general and should be tested in a demo environment before live trading.
+These adjustments can help in establishing a more robust trading strategy once data becomes available for analysis.

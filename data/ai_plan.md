@@ -1,18 +1,15 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis reveals the following:
+Based on the provided trading performance stream for XAUUSD, there are no recorded trades, which limits the ability to analyze specific hours, loss vs. win patterns, or overall strategy effectiveness. However, the absence of trades suggests a potential issue with the trading strategy or execution.
 
-1. **Losing Hours**: There is no data available to identify specific losing hours. However, if historical data were present, it would be crucial to analyze performance during high-volatility periods, such as market openings or major news releases.
+**Diagnosis:**
+1. **Losing Hours:** Without trade data, it's impossible to identify specific losing hours.
+2. **Win/Loss Shape:** No trades mean no win/loss shape can be assessed.
+3. **Net-Negative Strategy:** The strategy appears net-negative due to inactivity, indicating a need for reevaluation.
 
-2. **Win/Loss Shape**: Without specific trade data, we cannot determine the typical loss vs. win shape. Ideally, a healthy strategy should show a higher win rate with smaller losses compared to larger wins.
+**Recommendations:**
+1. **Entry Threshold:** Set a minimum price movement of 0.5% from the previous close to filter out noise and ensure more significant trades.
+2. **Time Filter:** Trade only during high liquidity hours (e.g., 8 AM - 12 PM and 1 PM - 5 PM GMT) to capitalize on market volatility.
+3. **SL/TP:** Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio.
 
-3. **Net-Negative Assessment**: The strategy appears to be net-negative due to the absence of recorded trades, indicating no profitable trades have been executed. Additionally, the lack of a clear performance metric suggests ineffective strategy execution.
-
-**Recommendations**:
-1. **Entry Threshold**: Set an entry threshold of at least 20 pips from the last significant support/resistance level to avoid false breakouts.
-   
-2. **Time Filter**: Limit trading to the London and New York sessions (08:00 - 17:00 GMT) to capitalize on higher liquidity and volatility.
-
-3. **SL/TP**: Implement a stop-loss (SL) of 30 pips and a take-profit (TP) of 60 pips to maintain a favorable risk-reward ratio of 1:2.
-
-These adjustments could enhance the strategy's effectiveness and overall performance.
+To improve performance, consider backtesting the strategy with historical data and adjusting parameters based on observed market behavior.

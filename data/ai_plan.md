@@ -1,16 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis reveals the following:
+Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of data, as there are no recorded trades (count_total: 0). Consequently, it is impossible to assess specific hours of loss, typical loss vs. win shapes, or determine if the strategy is net-negative.
 
-1. **Losing Hours**: There is no specific data on trade counts or performance metrics, but typically, trading during low volatility hours (e.g., late night to early morning GMT) can lead to losses. 
+However, to improve future trading performance, consider the following recommendations:
 
-2. **Win/Loss Shape**: Without specific trade data, it's challenging to determine the typical win vs. loss shape. However, if trades are predominantly taken during off-peak hours, expect a higher loss ratio.
+1. **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close before entering a trade. This can help filter out noise and improve trade quality.
 
-3. **Net-Negative Strategy**: The strategy appears to be net-negative due to the absence of trades and performance metrics. A lack of trades suggests either a conservative approach or ineffective entry signals.
+2. **Time Filter**: Avoid trading during high-volatility news events, particularly around major economic announcements (e.g., Non-Farm Payrolls, Fed meetings). Implement a time filter to trade only between 10:00 AM and 4:00 PM GMT when market activity is typically more stable.
 
-**Recommendations**:
-- **Entry Threshold**: Set a minimum price movement threshold of 0.5% from the previous close to filter out low-volatility trades.
-- **Time Filter**: Trade only during high volatility hours, such as 12:00-16:00 GMT, when market activity is typically higher.
-- **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to ensure a favorable risk-reward ratio.
+3. **Stop Loss/Take Profit (SL/TP)**: Use a risk-reward ratio of at least 1:2. Set the SL at 1% below the entry price and the TP at 2% above the entry price to ensure that winning trades outweigh losses.
 
-These adjustments aim to enhance trading performance by focusing on optimal trading hours and risk management.
+Implementing these strategies may enhance overall performance and mitigate risks associated with trading XAUUSD.

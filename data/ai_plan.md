@@ -1,13 +1,12 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of trading activity, as evidenced by the "count_total" and "count_recent" both being zero. This suggests that there are no trades to evaluate, making it impossible to assess specific hours of loss or gain, typical loss versus win shapes, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a comprehensive analysis. The total trade count is zero, indicating no trading activity, which limits the ability to assess performance metrics such as win/loss ratios, typical loss vs. win shapes, or specific hours of trading performance.
 
-However, to improve future trading performance, consider the following recommendations:
+However, given the lack of trades, it is likely that the strategy is net-negative due to inactivity. A trading strategy requires consistent execution to evaluate its effectiveness and profitability.
 
-1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 20 pips) before entering a trade to avoid noise and false signals.
+**Recommendations:**
+1. **Entry Threshold:** Set a minimum price movement threshold of 10 pips to filter out insignificant trades.
+2. **Time Filter:** Focus trading activity during high volatility hours, specifically between 8 AM - 12 PM and 8 PM - 12 AM GMT, when market activity is typically higher.
+3. **SL/TP:** Implement a stop-loss (SL) of 30 pips and a take-profit (TP) of 60 pips to ensure a favorable risk-reward ratio of 1:2.
 
-2. **Time Filter**: Limit trading to high-volatility periods, such as the overlap of London and New York sessions (08:00 - 12:00 GMT), to capitalize on increased market activity.
-
-3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, set a stop-loss (SL) at 50 pips and a take-profit (TP) at 100 pips to ensure that winning trades outweigh losses.
-
-Without actual trade data, these recommendations are general but can help establish a more structured approach to trading XAUUSD.
+To improve performance, it is crucial to initiate trades consistently and analyze the results over time.

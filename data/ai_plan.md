@@ -1,16 +1,11 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as there are no recorded trades (count_total: 0). However, I can offer general recommendations based on typical trading patterns for XAUUSD.
+Based on the provided trading performance stream for XAUUSD, there are no recorded trades, which makes it impossible to analyze specific hours of loss, win shapes, or overall strategy effectiveness. However, I can provide general recommendations based on typical trading patterns for XAUUSD.
 
-1. **Losing Hours**: Typically, trading during low volatility hours (e.g., late US session or early Asian session) can lead to losses. Avoid trading between 10 PM - 2 AM GMT.
+1. **Entry Threshold**: Consider setting an entry threshold based on a breakout strategy. For instance, enter trades when the price moves 0.5% above or below the previous day's high or low to capture momentum.
 
-2. **Win/Loss Shape**: A common pattern is that winning trades often occur during high volatility periods (e.g., during major news releases or market openings). Aim for a win rate above 55% to ensure profitability.
+2. **Time Filter**: Focus trading activities during high liquidity hours, specifically between 8 AM to 12 PM GMT, when both London and New York markets are active. Avoid trading during low-volume periods, such as late evenings or weekends.
 
-3. **Net-Negative Assessment**: Without recorded trades, it's impossible to determine if the strategy is net-negative. However, if losses exceed wins or the average loss is greater than the average win, the strategy is likely unprofitable.
+3. **SL/TP Recommendations**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio. This approach can help mitigate losses while maximizing potential gains.
 
-**Recommendations**:
-- **Entry Threshold**: Set a minimum price movement of 0.5% before entering a trade to avoid false signals.
-- **Time Filter**: Trade only between 8 AM - 5 PM GMT for optimal volatility.
-- **SL/TP**: Use a stop loss (SL) of 1% and a take profit (TP) of 2% to maintain a favorable risk-reward ratio.
-
-Implementing these recommendations could improve trading performance.
+In summary, without specific trade data, the strategy appears net-negative due to inactivity. Implementing the above recommendations could enhance performance and profitability.

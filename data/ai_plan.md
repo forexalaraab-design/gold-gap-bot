@@ -1,13 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a comprehensive analysis. The total trade count is zero, indicating no trades have been executed, which prevents any assessment of winning or losing hours, typical loss vs. win shapes, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis. The count of total trades is zero, indicating no trading activity has occurred. Consequently, there are no recent trades or performance metrics to evaluate.
 
-However, to enhance future trading performance, consider the following numeric recommendations:
+However, to improve future trading performance, consider the following recommendations:
 
-1. **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close before entering a trade. This can help filter out noise and improve trade quality.
+1. **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close before entering a trade to ensure that trades are based on significant market movements.
 
-2. **Time Filter**: Avoid trading during high-volatility news events (e.g., major economic releases) and consider focusing on the London and New York overlap (8 AM - 12 PM GMT) for better liquidity.
+2. **Time Filter**: Avoid trading during low liquidity hours, specifically between 10 PM and 2 AM UTC, as these periods often lead to increased volatility and slippage.
 
-3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. For example, if the SL is set at 50 pips, the TP should be at least 100 pips. This can help ensure that winning trades compensate for losing ones.
+3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. For example, if the SL is set at 50 pips, the TP should be at least 100 pips to ensure that winning trades outweigh losses.
 
-To summarize, without active trades, the strategy appears net-negative due to inactivity. Implementing these recommendations could improve future performance.
+To summarize, without active trades, the strategy appears net-negative due to inactivity. Implementing these recommendations could enhance trading performance and mitigate potential losses.

@@ -1,13 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of data, as there are no recorded trades (count_total: 0). Consequently, a detailed diagnosis regarding losing hours, win/loss shape, or overall strategy performance cannot be performed.
+Based on the provided trading performance stream for XAUUSD, there are no recorded trades, indicating a lack of data for analysis. Without specific trade data, we cannot identify losing hours, typical loss vs. win shapes, or assess the overall strategy's profitability.
 
-However, to improve potential trading outcomes, consider the following numeric recommendations:
+However, to improve potential trading performance, consider the following recommendations:
 
-1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% from the previous close before entering a trade to ensure that trades are made during significant market movements.
+1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% before entering a trade to avoid noise and ensure significant price action.
 
-2. **Time Filter**: Focus trading activities during high volatility periods, specifically between 8 AM to 12 PM GMT, when major market participants are active, to enhance trade opportunities.
+2. **Time Filter**: Limit trading to high-volume hours, specifically between 08:00 - 12:00 GMT and 20:00 - 23:00 GMT, when market activity is typically higher.
 
-3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of 1:2. For instance, if the SL is set at 50 pips, the TP should be at 100 pips to ensure that winning trades compensate for losses effectively.
+3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. For example, set SL at 50 pips and TP at 100 pips to ensure that winning trades outweigh losses.
 
-These adjustments may help in establishing a more robust trading strategy, provided that data is available for further analysis.
+These recommendations aim to enhance the strategy's effectiveness and mitigate potential losses, leading to a more favorable trading outcome.

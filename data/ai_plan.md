@@ -1,13 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of data, as there are no recorded trades (count_total: 0, count_recent: 0). This absence of trades makes it impossible to assess specific hours of loss, win shapes, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of data to assess specific hours of loss or win patterns. However, the absence of trades (count_total: 0) suggests that the strategy has not been actively implemented, leading to an inability to determine a net-positive or net-negative outcome.
 
-However, to improve potential trading outcomes, consider the following recommendations:
+To improve performance, consider the following recommendations:
 
-1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% before entering a trade to avoid noise and ensure significant price action.
+1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% from the previous close) to filter out low-probability trades.
 
-2. **Time Filter**: Focus trading hours between 8 AM and 12 PM GMT, as these periods often coincide with higher volatility and liquidity in the market.
+2. **Time Filter**: Focus trading during high volatility hours, such as 8 AM to 12 PM GMT, when market activity is typically higher.
 
-3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. For instance, if the SL is set at 50 pips, the TP should be at least 100 pips to ensure profitability over time.
+3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, set a Stop Loss (SL) at 50 pips and a Take Profit (TP) at 100 pips to ensure that winning trades outweigh losses.
 
-In summary, without trade data, the strategy appears net-negative due to inactivity. Implementing these recommendations may help in establishing a more structured trading approach.
+Without active trading data, it’s crucial to start executing trades under these guidelines to evaluate the strategy's effectiveness.

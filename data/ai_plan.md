@@ -1,13 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of trading activity, as evidenced by the "count_total" and "count_recent" both being zero. This suggests that there may be insufficient data to draw definitive conclusions about specific hours of loss or win patterns.
+Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of trading activity, as evidenced by the "count_total" and "count_recent" both being zero. This suggests that there are no trades to evaluate for performance metrics, making it impossible to determine losing hours, win/loss shapes, or overall strategy effectiveness.
 
-However, if we assume a typical trading scenario, common losing hours for XAUUSD often occur during low volatility periods, such as late evening to early morning (UTC). A typical loss shape might show larger drawdowns during these hours compared to more active trading times.
+However, to improve potential trading outcomes, consider the following recommendations:
 
-Given the absence of trades, the strategy appears net-negative due to a lack of engagement and potential missed opportunities. To improve performance, consider the following numeric recommendations:
+1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% to filter out low-volatility trades, ensuring entries occur during significant market movements.
 
-1. **Entry Threshold**: Set a minimum price movement of 0.5% before entering a trade to filter out noise.
-2. **Time Filter**: Trade only during high volatility hours, specifically between 12:00 and 20:00 UTC, when market activity is typically higher.
-3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to ensure a favorable risk-reward ratio.
+2. **Time Filter**: Focus trading activities during the London and New York sessions (08:00 - 17:00 GMT) when market liquidity is higher, reducing the likelihood of slippage and improving execution.
 
-These adjustments could enhance the strategy's effectiveness and overall performance.
+3. **SL/TP Strategy**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio. This approach can help mitigate losses while maximizing potential gains.
+
+In summary, without active trades, the strategy cannot be assessed as net-negative or positive. Implementing the above recommendations may enhance future trading performance.

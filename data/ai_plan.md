@@ -1,13 +1,15 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of trading activity, as evidenced by the total trade count being zero. This absence of trades makes it impossible to assess specific hours of loss or gain, typical loss versus win shapes, or the overall net performance of the strategy.
+Based on the provided trading performance stream for XAUUSD, there are no recorded trades, making it impossible to analyze specific hours of loss or win patterns. However, the absence of trades suggests a lack of engagement or ineffective strategy execution.
 
-However, to improve future trading performance, consider the following recommendations:
+**Diagnosis:**
+1. **Losing Hours**: Without data, we cannot identify specific losing hours.
+2. **Win/Loss Shape**: No trades mean no win/loss shape can be determined.
+3. **Net-Negative Assessment**: The strategy appears net-negative due to inactivity, which indicates a potential issue with the trading plan or execution.
 
-1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% to filter out low-volatility trades, ensuring entries are made during more favorable market conditions.
+**Recommendations:**
+1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% from the previous close) to filter out low-probability trades.
+2. **Time Filter**: Trade during high liquidity hours (e.g., 8 AM - 12 PM and 1 PM - 4 PM GMT) to enhance execution quality.
+3. **SL/TP**: Implement a risk-reward ratio of at least 1:2, with a stop-loss set at 1% of the account balance and a take-profit at 2% to ensure a favorable risk profile.
 
-2. **Time Filter**: Focus trading activities during peak market hours, specifically between 08:00 - 12:00 GMT and 20:00 - 23:00 GMT, when liquidity and volatility are typically higher.
-
-3. **SL/TP Settings**: Implement a stop-loss (SL) of 1.5% and a take-profit (TP) of 3%. This risk-reward ratio (1:2) can help ensure that winning trades outweigh losses, improving the overall strategy's profitability.
-
-In summary, without active trades, the strategy cannot be deemed net-negative or positive. Implementing these recommendations may enhance future trading outcomes.
+These recommendations aim to improve engagement and performance in future trading activities.

@@ -1,18 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis reveals the following:
+Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of data for a comprehensive evaluation. However, the absence of trades (count_total: 0) suggests that no trading activity has occurred, making it impossible to assess specific hours of loss or gain, typical win/loss shapes, or overall strategy performance.
 
-1. **Losing Hours**: There is no data on specific hours of trading performance, but typically, trading during low volatility periods (e.g., late night to early morning UTC) tends to yield poorer results.
+To improve future trading performance, consider the following recommendations:
 
-2. **Win/Loss Shape**: Without specific trade data, it’s impossible to assess the typical loss vs. win shape. However, a common pattern is that winning trades often occur during high volatility events (e.g., news releases).
+1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% from the previous close) to filter out low-probability trades.
 
-3. **Net-Negative Strategy**: The absence of trade data suggests that the strategy may be net-negative. A lack of trades indicates either a very conservative approach or ineffective entry criteria, leading to missed opportunities.
+2. **Time Filter**: Avoid trading during high-volatility news events or outside of peak trading hours (e.g., 8 AM to 12 PM GMT) to reduce risk exposure.
 
-**Recommendations**:
-1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% from the previous close to filter out low-probability trades.
-   
-2. **Time Filter**: Trade only during high volatility hours (e.g., 13:00 - 17:00 UTC) when major markets overlap, enhancing liquidity and price movement.
+3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. For example, if the SL is set at 50 pips, the TP should be at least 100 pips.
 
-3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio, ensuring that winning trades significantly outweigh losses.
-
-These adjustments should help improve overall trading performance and mitigate losses.
+These adjustments can help establish a more structured trading approach and potentially enhance performance metrics.

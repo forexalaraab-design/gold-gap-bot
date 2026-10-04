@@ -1,16 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as the total trade count is zero. However, I can provide general recommendations based on typical trading patterns for XAUUSD.
+Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of data, as there are no recorded trades (count_total: 0). Therefore, a detailed diagnosis on losing hours, win/loss patterns, or overall strategy performance cannot be conducted.
 
-1. **Losing Hours**: Typically, trading during low volatility hours (e.g., late night to early morning UTC) can lead to losses. Focus on high-volume periods, such as the overlap of London and New York sessions (12:00 - 16:00 UTC).
+However, to improve future trading performance, consider the following numeric recommendations:
 
-2. **Win/Loss Shape**: Without specific trade data, it's difficult to assess the win/loss shape. However, a common pattern is that trades taken during high-impact news releases can yield higher win rates.
+1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% from the previous close to filter out noise and ensure trades are based on significant market movements.
 
-3. **Net-Negative Strategy**: If the strategy has not yielded any trades, it is likely net-negative due to inactivity or poor entry criteria.
+2. **Time Filter**: Limit trading to high-volume hours, specifically between 08:00-12:00 GMT and 20:00-22:00 GMT, when market activity is typically higher, potentially increasing win rates.
 
-**Recommendations**:
-- **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close before entering a trade to ensure sufficient volatility.
-- **Time Filter**: Limit trading to the hours between 12:00 - 16:00 UTC to capture optimal market conditions.
-- **SL/TP**: Use a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio.
+3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. For example, if the SL is set at 50 pips, the TP should be at least 100 pips to ensure that winning trades compensate for losing ones.
 
-Implementing these recommendations may improve trading performance.
+These adjustments could enhance the strategy's effectiveness and help achieve a net-positive performance in future trading activities.

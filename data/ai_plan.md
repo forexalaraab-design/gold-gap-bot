@@ -1,13 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is no available trade data to analyze. Consequently, I cannot identify specific losing hours, win/loss patterns, or determine if the strategy is net-negative. 
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a comprehensive analysis. The total trade count is zero, indicating no trades have been executed, which prevents any assessment of winning or losing hours, typical loss versus win shapes, or overall strategy performance.
 
-However, here are general recommendations for improving trading performance:
+However, to improve future trading outcomes, consider the following recommendations:
 
-1. **Entry Threshold**: Set a minimum price movement of 0.5% from the previous close before entering a trade. This helps filter out noise and ensures trades are based on significant price action.
+1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 10 pips) before entering a trade to avoid noise and false signals.
 
-2. **Time Filter**: Avoid trading during low liquidity hours, typically between 10 PM and 2 AM GMT. Focus on high-volume periods, such as the overlap of the London and New York sessions (12 PM to 4 PM GMT).
+2. **Time Filter**: Limit trading to high-volatility hours, such as 8 AM to 12 PM and 1 PM to 5 PM GMT, when market activity is typically higher.
 
-3. **Stop Loss/Take Profit (SL/TP)**: Implement a risk-reward ratio of at least 1:2. For example, if your SL is set at 50 pips, your TP should be at least 100 pips. This ensures that winning trades can compensate for losing ones.
+3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, if setting a stop-loss (SL) at 20 pips, set a take-profit (TP) at 40 pips to ensure that winning trades outweigh losses.
 
-To improve the analysis, ensure that trade data is collected and reviewed regularly for better insights into performance trends.
+These adjustments can help establish a more structured trading strategy and potentially improve performance metrics once trading resumes.

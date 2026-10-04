@@ -1,13 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis. The absence of recorded trades (count_total: 0, count_recent: 0) indicates that no trading activity has occurred, making it impossible to identify losing hours, win/loss patterns, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis. The absence of recorded trades (count_total: 0) indicates that no trading activity has occurred, making it impossible to assess losing hours, win/loss patterns, or overall strategy effectiveness.
 
-However, to improve future trading outcomes, consider the following recommendations:
+However, to improve future trading performance, consider the following recommendations:
 
-1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% change) before entering a trade to avoid noise and false signals.
+1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% from the previous close) before entering a trade to avoid noise and false signals.
 
-2. **Time Filter**: Limit trading to high-volume hours, such as 8 AM to 12 PM GMT, when market activity is typically higher, reducing the risk of slippage and increasing the likelihood of favorable price movements.
+2. **Time Filter**: Limit trading to high liquidity hours, such as 08:00-12:00 and 20:00-23:00 GMT, when market activity is typically higher.
 
-3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio. This approach can help manage losses while maximizing potential gains.
+3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, if setting a stop-loss (SL) at 50 pips, aim for a take-profit (TP) of 100 pips.
 
-In summary, without trading data, the strategy appears net-negative due to inactivity. Implementing the above recommendations could enhance future trading performance.
+These adjustments can help create a more structured trading strategy, potentially leading to improved performance once trading resumes.

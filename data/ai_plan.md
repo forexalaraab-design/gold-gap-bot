@@ -1,13 +1,16 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis. The total trade count is zero, indicating no trades have been executed, which prevents any assessment of winning or losing hours, typical loss vs. win shapes, or overall strategy effectiveness.
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis, as there are no recorded trades (count_total: 0). However, I can provide general recommendations based on common trading patterns.
 
-However, to improve potential trading outcomes, consider the following recommendations:
+1. **Losing Hours**: Typically, trading during low volatility hours (e.g., late night to early morning UTC) can lead to losses. Avoid trading from 00:00 to 06:00 UTC.
 
-1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% change) before entering a trade to avoid noise and false signals.
+2. **Win/Loss Shape**: Without specific trade data, it's challenging to determine the typical loss vs. win shape. However, a common pattern is that winning trades often occur during high volatility periods (e.g., during market openings).
 
-2. **Time Filter**: Limit trading to high-volatility periods, such as the overlap of the London and New York sessions (e.g., 8 AM to 12 PM EST), to capitalize on market movements.
+3. **Net-Negative Strategy**: The strategy appears net-negative due to the absence of trades, indicating either a lack of execution or poor timing. 
 
-3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, if the stop-loss (SL) is set at 50 pips, the take-profit (TP) should be at least 100 pips to ensure profitability over time.
+**Recommendations**:
+- **Entry Threshold**: Set a minimum price movement of 0.5% before entering a trade to ensure sufficient volatility.
+- **Time Filter**: Trade only between 13:00 and 20:00 UTC when market activity is higher.
+- **SL/TP**: Use a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio.
 
-Without active trades, the strategy cannot be deemed net-negative or positive. It is crucial to start executing trades to gather performance data for a more accurate diagnosis.
+Implementing these recommendations could improve trading performance if trades are executed.

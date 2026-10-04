@@ -1,13 +1,13 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, the analysis indicates a lack of trading activity, as evidenced by the "count_total" and "count_recent" both being zero. This suggests that no trades have been executed, making it impossible to assess specific hours of loss or gain, typical loss vs. win shapes, or overall strategy performance.
+Based on the provided trading performance stream for XAUUSD, there is insufficient data to conduct a thorough analysis. The total trade count is zero, indicating no trades have been executed, which prevents any assessment of winning or losing hours, typical loss vs. win shapes, or overall strategy performance.
 
-However, to improve potential trading outcomes, consider the following recommendations:
+However, to improve future trading performance, consider the following recommendations:
 
-1. **Entry Threshold**: Set a minimum price movement threshold of 0.5% to filter out low-volatility periods, ensuring trades are executed during more favorable market conditions.
+1. **Entry Threshold**: Set a minimum price movement threshold (e.g., 0.5% from the previous close) to filter out low-probability trades.
 
-2. **Time Filter**: Avoid trading during the Asian session (00:00 - 08:00 UTC) when volatility is typically lower. Focus on the London (08:00 - 16:00 UTC) and New York (13:00 - 21:00 UTC) sessions for better opportunities.
+2. **Time Filter**: Avoid trading during low liquidity hours (e.g., between 10 PM and 2 AM GMT) to reduce slippage and improve execution quality.
 
-3. **SL/TP Strategy**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio. This approach can help mitigate losses while maximizing potential gains.
+3. **SL/TP**: Implement a risk-reward ratio of at least 1:2. For example, if the stop-loss (SL) is set at 50 pips, the take-profit (TP) should be at least 100 pips.
 
-In summary, the strategy currently appears net-negative due to inactivity. Implementing these recommendations could enhance trading performance.
+Without actual trade data, these recommendations are general best practices to enhance trading strategy effectiveness.

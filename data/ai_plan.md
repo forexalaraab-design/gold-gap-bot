@@ -1,11 +1,11 @@
 # AI daily plan
 
-Based on the provided trading performance stream for XAUUSD, there are no recorded trades, making it impossible to analyze specific hours, loss vs. win shapes, or overall strategy effectiveness. However, I can provide general recommendations based on common trading patterns for XAUUSD.
+Based on the provided trading performance stream for XAUUSD, there are no recorded trades, making it impossible to analyze specific hours of loss, win shapes, or overall strategy effectiveness. However, I can provide general recommendations based on typical trading patterns for XAUUSD.
 
-1. **Entry Threshold**: Set an entry threshold of at least 0.5% price movement from the previous close to filter out noise and increase the probability of a successful trade.
+1. **Entry Threshold**: Consider setting an entry threshold based on a 20-period moving average. Enter trades when the price crosses above or below this average, indicating potential momentum.
 
-2. **Time Filter**: Focus trading activities during peak market hours, specifically between 8 AM to 12 PM GMT, when liquidity is higher and price movements are more pronounced.
+2. **Time Filter**: Focus trading activities during the London and New York sessions (08:00 - 17:00 GMT) when market volatility is higher, as this typically leads to better trading opportunities.
 
-3. **SL/TP**: Implement a stop-loss (SL) of 1% and a take-profit (TP) of 2% to maintain a favorable risk-reward ratio. This approach can help mitigate losses while maximizing potential gains.
+3. **SL/TP Recommendations**: Implement a stop-loss (SL) of 1% of the account balance and a take-profit (TP) ratio of 1:2. This means for every dollar risked, aim to gain two dollars, which can help maintain a net-positive strategy over time.
 
-Without actual trade data, it's crucial to backtest these recommendations against historical performance to validate their effectiveness. If the strategy remains net-negative, consider refining entry criteria and risk management parameters.
+Without actual trade data, it’s crucial to start recording trades to analyze performance accurately and adjust strategies accordingly.

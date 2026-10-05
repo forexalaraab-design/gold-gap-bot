@@ -1,14 +1,14 @@
-name: watchdog
+﻿name: watchdog
 
 on:
   schedule:
-    # يفحص كل 20 دقيقة — أوسع من سلسلة البوت (~3.5د) فلا يتعارض،
-    # ويتدخل فقط إذا صمت البوت أكثر من الحد (15 دقيقة افتراضياً).
+    # ظٹظپط­طµ ظƒظ„ 20 ط¯ظ‚ظٹظ‚ط© â€” ط£ظˆط³ط¹ ظ…ظ† ط³ظ„ط³ظ„ط© ط§ظ„ط¨ظˆطھ (~3.5ط¯) ظپظ„ط§ ظٹطھط¹ط§ط±ط¶طŒ
+    # ظˆظٹطھط¯ط®ظ„ ظپظ‚ط· ط¥ط°ط§ طµظ…طھ ط§ظ„ط¨ظˆطھ ط£ظƒط«ط± ظ…ظ† ط§ظ„ط­ط¯ (15 ط¯ظ‚ظٹظ‚ط© ط§ظپطھط±ط§ط¶ظٹط§ظ‹).
     - cron: "*/20 * * * *"
   workflow_dispatch:
     inputs:
       max_silence_min:
-        description: "أقصى صمت (دقائق) قبل إعادة الإطلاق" 
+        description: "ط£ظ‚طµظ‰ طµظ…طھ (ط¯ظ‚ط§ط¦ظ‚) ظ‚ط¨ظ„ ط¥ط¹ط§ط¯ط© ط§ظ„ط¥ط·ظ„ط§ظ‚" 
         required: false
         default: "15"
 
@@ -50,17 +50,17 @@ jobs:
           if [ "$AGE" -lt 0 ]; then AGE=0; fi
           echo "last_data_commit_min_ago=$AGE max_silence_min=$MAX"
           if [ "$AGE" -le "$MAX" ]; then
-            echo "bot alive ($AGE min <= $MAX) — nothing to do"
+            echo "bot alive ($AGE min <= $MAX) â€” nothing to do"
             exit 0
           fi
-          echo "BOT SILENT for $AGE min (> $MAX) — re-dispatching"
+          echo "BOT SILENT for $AGE min (> $MAX) â€” re-dispatching"
           for i in 1 2 3; do
-            if gh workflow run goldgap.yml --ref main 2>/dev/null; then
+            if gh workflow run mt5.yml --ref main 2>/dev/null; then
               echo "re-dispatch OK on attempt $i; chain healed automatically"
               exit 0
             fi
             echo "re-dispatch attempt $i failed, retrying"
             sleep 8
           done
-          echo "re-dispatch FAILED after 3 attempts — manual intervention required"
+          echo "re-dispatch FAILED after 3 attempts â€” manual intervention required"
           exit 1

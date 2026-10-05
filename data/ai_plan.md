@@ -2,18 +2,16 @@
 
 **Diagnosis of XAUUSD Trading Performance:**
 
-1. **Losing Hours:** The majority of losses occur between 02:00 and 07:00, indicating a potential unfavorable trading environment during these hours.
+1. **Losing Hours:** The majority of losses occur between 02:00 and 07:00, indicating a potential issue with trading during these hours.
 
-2. **Win vs. Loss Shape:** The strategy shows a mix of wins and losses, but losses are more frequent and larger in magnitude. For instance, notable losses include -2.44 and -2.23, while wins are generally smaller, with the largest win being 1.77.
+2. **Win vs. Loss Shape:** The strategy shows a higher frequency of small losses compared to wins. The average loss is approximately -1.1, while the average win is around +0.9, suggesting a net-negative performance.
 
-3. **Net-Negative Assessment:** The strategy appears net-negative due to a higher frequency of losses and larger average loss amounts compared to wins. The total number of trades is 51, with 40 recent trades showing a concerning trend.
+3. **Net-Negative Strategy:** The strategy is net-negative due to a higher cumulative loss from trades during the early morning hours, combined with a lack of significant winning trades to offset these losses.
 
 **Recommendations:**
 
-1. **Entry Threshold:** Implement a stricter entry threshold, such as only entering trades when the price moves at least 0.5% from the last high/low to avoid false signals.
+1. **Entry Threshold:** Implement a stricter entry threshold, such as only entering trades when the price moves at least 0.5% in the desired direction before execution.
 
-2. **Time Filter:** Avoid trading between 02:00 and 07:00 to reduce exposure to losing periods.
+2. **Time Filter:** Avoid trading between 02:00 and 07:00, focusing on more volatile hours, such as 08:00 to 12:00, when market activity typically increases.
 
-3. **Stop Loss/Take Profit (SL/TP):** Set a fixed SL at 1.5% and a TP at 1% to ensure risk management and lock in profits while minimizing losses. 
-
-By applying these recommendations, the strategy may improve its overall performance and risk profile.
+3. **Stop Loss/Take Profit (SL/TP):** Set a fixed SL at 1.5% and a TP at 2.5% to ensure a better risk-reward ratio, aiming for a more favorable outcome on winning trades.

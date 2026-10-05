@@ -1,16 +1,18 @@
 # AI daily plan
 
-**Diagnosis of Trading Performance (XAUUSD Demo)**
+**Diagnosis of XAUUSD Trading Performance:**
 
-1. **Losing Hours**: The majority of losses occur between 06:00 and 07:16, indicating a potential unfavorable market condition during these hours.
+1. **Losing Hours:** The majority of losses occur between 06:00 and 07:00, indicating a potential issue with trades during this timeframe. 
 
-2. **Win vs. Loss Shape**: The strategy shows a mix of wins and losses, but losses tend to be larger than wins. For example, the largest loss recorded is -2.44, while the largest win is +1.78. This suggests a negative risk-reward ratio.
+2. **Win vs. Loss Shape:** The recent trades show a mixed performance with a slight edge towards losses. The average loss per losing trade is approximately -1.5, while the average win per winning trade is around +1.3. This indicates that losses are larger than wins, contributing to a net-negative performance.
 
-3. **Net-Negative Strategy**: The strategy is net-negative due to the higher average loss compared to the average win. The cumulative losses outweigh the gains, indicating a need for adjustment.
+3. **Net-Negative Strategy:** The strategy appears net-negative due to the higher average loss compared to the average win, alongside a significant number of losing trades during early hours.
 
-**Recommendations**:
-- **Entry Threshold**: Set a minimum price movement threshold of 0.5% before entering trades to avoid false signals.
-- **Time Filter**: Avoid trading between 06:00 and 07:30, as this period shows consistent losses.
-- **SL/TP**: Implement a stop-loss (SL) of 1.5% and a take-profit (TP) of 2% to improve the risk-reward ratio and minimize larger losses.
+**Recommendations:**
+1. **Entry Threshold:** Set a minimum entry threshold of 1.5% price movement from the last close before entering a trade to avoid noise.
+   
+2. **Time Filter:** Avoid trading between 06:00 and 07:00 to reduce exposure during losing hours.
 
-By refining the strategy with these adjustments, the overall performance can be improved.
+3. **SL/TP Settings:** Implement a stop-loss (SL) of 1.5% and a take-profit (TP) of 2.5% to ensure that winning trades can offset losses effectively. 
+
+These adjustments aim to improve overall trading performance and reduce risk exposure.

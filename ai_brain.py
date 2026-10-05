@@ -331,11 +331,30 @@ def _num(v):
 
 
 def _prompt(ctx):
-    return ("Analyze this trading performance stream (XAUUSD demo). "
-            "Give a SHORT diagnosis: which hours are losing, typical loss vs "
-            "win shape, whether the strategy is net-negative and why, and 2-3 "
-            "concrete numeric recommendations (entry threshold, time filter, "
-            "SL/TP). Keep under 250 words.\n\n" + json.dumps(ctx))
+    return (
+        "You are tuning a live XAUUSD (gold) scalping bot on a demo account.\n"
+        "ECONOMICS (hard constraints, never contradict them):\n"
+        "- lot is fixed at 0.01 and CANNOT change; 1 USD of gold price move = $1 P/L.\n"
+        "- Target per trade ~ +1.6 USD, stop ~ -2.0 USD (R:R about 0.8 = needs 55%+ win).\n"
+        "- Live spread 0.2-0.3 USD is already subtracted from every P/L.\n"
+        "- The broker REJECTS server-side SL/TP, so the stop is programmatic only:\n"
+        "  positions are polled every ~2s in-run, but the runner is restarted every\n"
+        "  ~15 min, so realised stops often overshoot to -3..-6 USD.\n"
+        "- NO new capital risk rules: lot size, session blocker (16-22 UTC) and\n"
+        "  MAX_LOSS are user-locked and must not be changed.\n"
+        "DATA FIELDS: ts_close | side(B/S) | pnl_net | tag(W/L/SL/TP) | spread\n"
+        "QUESTION: Using the trade history, diagnose the bleeding and propose the\n"
+        "SINGLE highest-impact numeric change.\n"
+        "Answer in this exact shape:\n"
+        "1) DIAGNOSIS: two sentences with the real numbers you used.\n"
+        "2) WORST HOURS: list up to 3 close-hours in UTC that are net negative.\n"
+        "3) WHY STOPS OVERSHOOT: one sentence.\n"
+        "4) FIX: exactly one line of the form  MOMENTUM_MIN=<number between 1.20 and 2.00>\n"
+        "   (entry threshold in USD of gold momentum; only field allowed to move).\n"
+        "   If you think the threshold should NOT change, write MOMENTUM_MIN=1.20.\n"
+        "No disclaimers, no generic risk advice, no percentage SL/TP advice.\n\n"
+        + json.dumps(ctx)
+    )
 
 
 def _recommendations_from(text):
@@ -352,13 +371,17 @@ def _recommendations_from(text):
 
 
 def _extract_first_number(text):
-    """أول رقم عشري في النص (يُستخدم كـ momentum_min المقترح) أو None."""
+    """يستخرج قيمة MOMENTUM_MIN= من نص العقل (أو None).
+
+    لا نلتقط أول رقم عشوائي أبداً (كان خطراً: رقم سردّي كـ "2.0 USD"
+    كان سيُطبَّق كعتبة). فقط النمط الصريح المطلوب في البرومبت.
+    """
     import re
-    m = re.search(r"-?\d+\.?\d*", text or "")
+    m = re.search(r"MOMENTUM_MIN\s*=\s*(-?\d+\.?\d*)", text or "")
     if not m:
         return None
     try:
-        return float(m.group(0))
+        return float(m.group(1))
     except (TypeError, ValueError):
         return None
 

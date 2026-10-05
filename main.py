@@ -243,9 +243,13 @@ def in_quality_session(dt):
       - 09:00–16:00 UTC: نسبة فوز 100% (ذروة لندن + تداخل NY بالسيولة).
     لذلك نمنع الفتح داخل نافذة [16:00–22:00) افتراضياً.
     """
+    blocked = getattr(config, "AI_BLOCKED_HOURS", None) or set()
+    if dt.hour in blocked:
+        return False
     if not config.SESSION_BLOCK_ON:
         return True
     hour = dt.hour + dt.minute / 60.0
+    # ساعات يحظرها العقل الذاتي (قائمة مرتّبة) — تُسبق النافذة الأساسية
     start = config.SESSION_BLOCK_START_HOUR
     end = config.SESSION_BLOCK_END_HOUR
     if start <= end:

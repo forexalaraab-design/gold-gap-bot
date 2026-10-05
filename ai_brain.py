@@ -1,32 +1,32 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-ai_brain.py — عقل LLM خارجي للبوت: يبحث ويحلل ويخطط (مع بوابة تنفيذ مقيدة).
+ai_brain.py â€” ط¹ظ‚ظ„ LLM ط®ط§ط±ط¬ظٹ ظ„ظ„ط¨ظˆطھ: ظٹط¨ط­ط« ظˆظٹط­ظ„ظ„ ظˆظٹط®ط·ط· (ظ…ط¹ ط¨ظˆط§ط¨ط© طھظ†ظپظٹط° ظ…ظ‚ظٹط¯ط©).
 
-الغرض (2026-10-02): المركز الذي يفكر فوق بيانات البوت:
-  * يبحث في الويب (أخبار الذهب / GC=F / دوافع السوق).
-  * يقرأ سجل الصفقات (trades.csv) + الأداء (performance.json) + الحالة.
-  * يحلل السببية (الساعات/الاتجاه/الستوبات/الربح) ويستنتج قراراً.
-  * يكتب "خطة" يومية مقروءة في data/ai_plan.md.
-  * ينتج توصيات قابلة للتمثيل (تعديل عتبة) في data/ai_recommendations.json
-    ليقررها المستخدم صراحةً — لا يُنفَّذ شيء تلقائياً من غير موافقة.
+ط§ظ„ط؛ط±ط¶ (2026-10-02): ط§ظ„ظ…ط±ظƒط² ط§ظ„ط°ظٹ ظٹظپظƒط± ظپظˆظ‚ ط¨ظٹط§ظ†ط§طھ ط§ظ„ط¨ظˆطھ:
+  * ظٹط¨ط­ط« ظپظٹ ط§ظ„ظˆظٹط¨ (ط£ط®ط¨ط§ط± ط§ظ„ط°ظ‡ط¨ / GC=F / ط¯ظˆط§ظپط¹ ط§ظ„ط³ظˆظ‚).
+  * ظٹظ‚ط±ط£ ط³ط¬ظ„ ط§ظ„طµظپظ‚ط§طھ (trades.csv) + ط§ظ„ط£ط¯ط§ط، (performance.json) + ط§ظ„ط­ط§ظ„ط©.
+  * ظٹط­ظ„ظ„ ط§ظ„ط³ط¨ط¨ظٹط© (ط§ظ„ط³ط§ط¹ط§طھ/ط§ظ„ط§طھط¬ط§ظ‡/ط§ظ„ط³طھظˆط¨ط§طھ/ط§ظ„ط±ط¨ط­) ظˆظٹط³طھظ†طھط¬ ظ‚ط±ط§ط±ط§ظ‹.
+  * ظٹظƒطھط¨ "ط®ط·ط©" ظٹظˆظ…ظٹط© ظ…ظ‚ط±ظˆط،ط© ظپظٹ data/ai_plan.md.
+  * ظٹظ†طھط¬ طھظˆطµظٹط§طھ ظ‚ط§ط¨ظ„ط© ظ„ظ„طھظ…ط«ظٹظ„ (طھط¹ط¯ظٹظ„ ط¹طھط¨ط©) ظپظٹ data/ai_recommendations.json
+    ظ„ظٹظ‚ط±ط±ظ‡ط§ ط§ظ„ظ…ط³طھط®ط¯ظ… طµط±ط§ط­ط©ظ‹ â€” ظ„ط§ ظٹظڈظ†ظپظژظ‘ط° ط´ظٹط، طھظ„ظ‚ط§ط¦ظٹط§ظ‹ ظ…ظ† ط؛ظٹط± ظ…ظˆط§ظپظ‚ط©.
 
-البنية:
-  * لا يتصل بالبروكر إطلاقاً (لا معلومة من فتح/إغلاق تُرسَل إلا بيانات مجهولة).
-  * لا يلمس state/live cycle — فقط read + كتابة أهداف في data/.
-  * أي استدعاء وخارجي يكون عبر AI_FETCH_TIMEOUT ويصمت عند الفشل (لا توقف)
-    حتى لو غاب المفتاح/الشبكة.
-  * المزود متوافق مع OpenAI oembedded (chat/completions عبر HTTP خام)
-    بحيث يمكن التبديل (OpenAI/Anthropic/Gemini ولكلhead endpoint).
-  * لا يحوي أي كلمة من كلمات الهوية المحظورة في أي بايلود يُرسل
-    (بصمة القسم 0) — النص يوضع في رسالة مجردة "تحليل سلسلة أرقام".
+ط§ظ„ط¨ظ†ظٹط©:
+  * ظ„ط§ ظٹطھطµظ„ ط¨ط§ظ„ط¨ط±ظˆظƒط± ط¥ط·ظ„ط§ظ‚ط§ظ‹ (ظ„ط§ ظ…ط¹ظ„ظˆظ…ط© ظ…ظ† ظپطھط­/ط¥ط؛ظ„ط§ظ‚ طھظڈط±ط³ظژظ„ ط¥ظ„ط§ ط¨ظٹط§ظ†ط§طھ ظ…ط¬ظ‡ظˆظ„ط©).
+  * ظ„ط§ ظٹظ„ظ…ط³ state/live cycle â€” ظپظ‚ط· read + ظƒطھط§ط¨ط© ط£ظ‡ط¯ط§ظپ ظپظٹ data/.
+  * ط£ظٹ ط§ط³طھط¯ط¹ط§ط، ظˆط®ط§ط±ط¬ظٹ ظٹظƒظˆظ† ط¹ط¨ط± AI_FETCH_TIMEOUT ظˆظٹطµظ…طھ ط¹ظ†ط¯ ط§ظ„ظپط´ظ„ (ظ„ط§ طھظˆظ‚ظپ)
+    ط­طھظ‰ ظ„ظˆ ط؛ط§ط¨ ط§ظ„ظ…ظپطھط§ط­/ط§ظ„ط´ط¨ظƒط©.
+  * ط§ظ„ظ…ط²ظˆط¯ ظ…طھظˆط§ظپظ‚ ظ…ط¹ OpenAI oembedded (chat/completions ط¹ط¨ط± HTTP ط®ط§ظ…)
+    ط¨ط­ظٹط« ظٹظ…ظƒظ† ط§ظ„طھط¨ط¯ظٹظ„ (OpenAI/Anthropic/Gemini ظˆظ„ظƒظ„head endpoint).
+  * ظ„ط§ ظٹط­ظˆظٹ ط£ظٹ ظƒظ„ظ…ط© ظ…ظ† ظƒظ„ظ…ط§طھ ط§ظ„ظ‡ظˆظٹط© ط§ظ„ظ…ط­ط¸ظˆط±ط© ظپظٹ ط£ظٹ ط¨ط§ظٹظ„ظˆط¯ ظٹظڈط±ط³ظ„
+    (ط¨طµظ…ط© ط§ظ„ظ‚ط³ظ… 0) â€” ط§ظ„ظ†طµ ظٹظˆط¶ط¹ ظپظٹ ط±ط³ط§ظ„ط© ظ…ط¬ط±ط¯ط© "طھط­ظ„ظٹظ„ ط³ظ„ط³ظ„ط© ط£ط±ظ‚ط§ظ…".
 
-الإعداد:
-  AI_ON=0/1                  التفعيل الكلي
-  AI_PROVIDER=openai|anthropic|gemini  (افتراضي openai)
-  AI_API_KEY=…               مفتاح (secret في Actions)
-  AI_MODEL=…                 نموذج
-  AI_INTERVAL_MIN=…          أقل فرق دقائق بين تحليلين (افتراضي 360=6h)
-  AI_SYS_HINT=…              توجيه نظام إضافي
+ط§ظ„ط¥ط¹ط¯ط§ط¯:
+  AI_ON=0/1                  ط§ظ„طھظپط¹ظٹظ„ ط§ظ„ظƒظ„ظٹ
+  AI_PROVIDER=openai|anthropic|gemini  (ط§ظپطھط±ط§ط¶ظٹ openai)
+  AI_API_KEY=â€¦               ظ…ظپطھط§ط­ (secret ظپظٹ Actions)
+  AI_MODEL=â€¦                 ظ†ظ…ظˆط°ط¬
+  AI_INTERVAL_MIN=â€¦          ط£ظ‚ظ„ ظپط±ظ‚ ط¯ظ‚ط§ط¦ظ‚ ط¨ظٹظ† طھط­ظ„ظٹظ„ظٹظ† (ط§ظپطھط±ط§ط¶ظٹ 360=6h)
+  AI_SYS_HINT=â€¦              طھظˆط¬ظٹظ‡ ظ†ط¸ط§ظ… ط¥ط¶ط§ظپظٹ
 """
 
 import json
@@ -80,7 +80,7 @@ _DEFAULTS = {
 
 
 def _http_json(url, headers, payload, timeout=AI_FETCH_TIMEOUT):
-    """نداء HTTP خام بلا تبعيات خارجية (stdlib فقط)."""
+    """ظ†ط¯ط§ط، HTTP ط®ط§ظ… ط¨ظ„ط§ طھط¨ط¹ظٹط§طھ ط®ط§ط±ط¬ظٹط© (stdlib ظپظ‚ط·)."""
     import json as _j
     import urllib.request
     req = urllib.request.Request(
@@ -101,7 +101,7 @@ def _decode(resp, path):
 
 
 def _call_llm(prompt, system, timeout=AI_FETCH_TIMEOUT):
-    """استدعاء LLM عام حسب AI_PROVIDER. يرجع نص أو "" على أي فشل."""
+    """ط§ط³طھط¯ط¹ط§ط، LLM ط¹ط§ظ… ط­ط³ط¨ AI_PROVIDER. ظٹط±ط¬ط¹ ظ†طµ ط£ظˆ "" ط¹ظ„ظ‰ ط£ظٹ ظپط´ظ„."""
     if not AI_ON or not AI_API_KEY:
         return ""
     try:
@@ -141,9 +141,9 @@ def _call_llm(prompt, system, timeout=AI_FETCH_TIMEOUT):
         return ""
 
 
-# طابع آخر تشغيل: ملف دائم في data/ (غير معزول — يُرفع مع persist)، لأن
-# state (bot_state.json) معزول ولا يصل بين الدورات ⇒ لو اكتفينا به لبقي
-# الصفر كل دورة فنшал على "كل دورة" بدل AI_INTERVAL_MIN. txt محايد بلا هوية.
+# ط·ط§ط¨ط¹ ط¢ط®ط± طھط´ط؛ظٹظ„: ظ…ظ„ظپ ط¯ط§ط¦ظ… ظپظٹ data/ (ط؛ظٹط± ظ…ط¹ط²ظˆظ„ â€” ظٹظڈط±ظپط¹ ظ…ط¹ persist)طŒ ظ„ط£ظ†
+# state (bot_state.json) ظ…ط¹ط²ظˆظ„ ظˆظ„ط§ ظٹطµظ„ ط¨ظٹظ† ط§ظ„ط¯ظˆط±ط§طھ â‡’ ظ„ظˆ ط§ظƒطھظپظٹظ†ط§ ط¨ظ‡ ظ„ط¨ظ‚ظٹ
+# ط§ظ„طµظپط± ظƒظ„ ط¯ظˆط±ط© ظپظ†رˆذ°ذ» ط¹ظ„ظ‰ "ظƒظ„ ط¯ظˆط±ط©" ط¨ط¯ظ„ AI_INTERVAL_MIN. txt ظ…ط­ط§ظٹط¯ ط¨ظ„ط§ ظ‡ظˆظٹط©.
 _STAMP_FILE = os.path.join("data", "ai_last_run.txt")
 
 
@@ -191,11 +191,11 @@ def _read_csv(path):
 
 
 def _read_feed():
-    """قراءة data/ai_feed.md (سطر لكل صفقة: ts|side|pnl|tag|spread).
+    """ظ‚ط±ط§ط،ط© data/ai_feed.md (ط³ط·ط± ظ„ظƒظ„ طµظپظ‚ط©: ts|side|pnl|tag|spread).
 
-    تنسيق السطر (من main._record_close):
+    طھظ†ط³ظٹظ‚ ط§ظ„ط³ط·ط± (ظ…ظ† main._record_close):
       2026-10-02 21:33 | BUY | -0.45 | L | 0.20
-    يرجع dicts بمفاتيح trades.csv موحّدة ليقرأها _build_context.
+    ظٹط±ط¬ط¹ dicts ط¨ظ…ظپط§طھظٹط­ trades.csv ظ…ظˆط­ظ‘ط¯ط© ظ„ظٹظ‚ط±ط£ظ‡ط§ _build_context.
     """
     path = os.path.join("data", "ai_feed.md")
     out = []
@@ -224,8 +224,8 @@ def _read_feed():
 
 
 def _find_trades():
-    """مصدر الصفقات: ai_feed.md المحايد أولاً (غير معزول، يصل الـ runner)،
-    ثم trades.csv، ثم state. ai_feed.md يضمن وصول بيانات حقيقية للعقل.
+    """ظ…طµط¯ط± ط§ظ„طµظپظ‚ط§طھ: ai_feed.md ط§ظ„ظ…ط­ط§ظٹط¯ ط£ظˆظ„ط§ظ‹ (ط؛ظٹط± ظ…ط¹ط²ظˆظ„طŒ ظٹطµظ„ ط§ظ„ظ€ runner)طŒ
+    ط«ظ… trades.csvطŒ ط«ظ… state. ai_feed.md ظٹط¶ظ…ظ† ظˆطµظˆظ„ ط¨ظٹط§ظ†ط§طھ ط­ظ‚ظٹظ‚ظٹط© ظ„ظ„ط¹ظ‚ظ„.
     """
     import_csv = _read_csv(os.path.join("data", "trades.csv"))
     feed = _read_feed()
@@ -253,17 +253,59 @@ def _read_json(path):
         return {}
 
 
-def _fetch_news_headlines():
-    """أخبار موجزة اختيارية عبر HTTP بلا مفتاح — تغذية سياق للعقل.
+def _journal_tail(n=40):
+    """آخر أسطر سجل قرارات العقل — تغذية مغلقة (يتعلم من نتائجه السابقة)."""
+    try:
+        with open(AI_JOURNAL, "r", encoding="utf-8") as f:
+            return "".join(f.readlines()[-n:])[-2500:]
+    except Exception:
+        return ""
 
-    مصدران حران:
-      * metal-price API (بدون مفتاح): سعر ذهب لحظي عالمي.
-      * RSS بسيط غير مطلوب — نكتفي بارتداد نجاح فقط.
-    عند أي فشل يرجع [] بلا أثر (البحث اختياري).
+
+def _fetch_web_context():
+    """بحث إنترنت حقيقي بلا مفتاح: أخبار ذهب/دولار/ECB من RSS.
+
+    rss محايد بلا هوية. أي فشل ⇒ [] (لا يوقف العقل).
+    """
+    import urllib.request
+    import re as _re
+    feeds = [
+        ("cnbc-gold", "https://search.cnbc.com/rs/search/combinedcms/view.xml"
+         "?partnerId=wrss01&id=20910258"),
+        ("yahoo-gold", "https://feeds.finance.yahoo.com/rss/2.0/headline"
+         "?s=GC=F&region=US&lang=en-US"),
+        ("marketwatch-top", "https://feeds.content.dowjones.io/public/rss"
+         "/mw_topstories"),
+    ]
+    out = []
+    for name, url in feeds:
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                xml = resp.read().decode("utf-8", "ignore")
+            titles = _re.findall(r"<title>(.*?)</title>", xml, _re.S)[:6]
+            for t in titles:
+                t = _re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", t)
+                t = _re.sub(r"<[^>]+>", "", t).strip()
+                if t and len(t) > 8:
+                    out.append({"src": name, "headline": t[:150]})
+        except Exception as exc:
+            print("web({0}) warn: {1!r}".format(name, exc), flush=True)
+    return out[:12]
+
+
+def _fetch_news_headlines():
+    """ط£ط®ط¨ط§ط± ظ…ظˆط¬ط²ط© ط§ط®طھظٹط§ط±ظٹط© ط¹ط¨ط± HTTP ط¨ظ„ط§ ظ…ظپطھط§ط­ â€” طھط؛ط°ظٹط© ط³ظٹط§ظ‚ ظ„ظ„ط¹ظ‚ظ„.
+
+    ظ…طµط¯ط±ط§ظ† ط­ط±ط§ظ†:
+      * metal-price API (ط¨ط¯ظˆظ† ظ…ظپطھط§ط­): ط³ط¹ط± ط°ظ‡ط¨ ظ„ط­ط¸ظٹ ط¹ط§ظ„ظ…ظٹ.
+      * RSS ط¨ط³ظٹط· ط؛ظٹط± ظ…ط·ظ„ظˆط¨ â€” ظ†ظƒطھظپظٹ ط¨ط§ط±طھط¯ط§ط¯ ظ†ط¬ط§ط­ ظپظ‚ط·.
+    ط¹ظ†ط¯ ط£ظٹ ظپط´ظ„ ظٹط±ط¬ط¹ [] ط¨ظ„ط§ ط£ط«ط± (ط§ظ„ط¨ط­ط« ط§ط®طھظٹط§ط±ظٹ).
     """
     import urllib.request
     out = []
-    # metal price API (free, no key) — سعر لحظي + اتجاه
+    # metal price API (free, no key) â€” ط³ط¹ط± ظ„ط­ط¸ظٹ + ط§طھط¬ط§ظ‡
     try:
         req = urllib.request.Request(
             "https://api.metalpriceapi.com/v1/latest",
@@ -275,7 +317,7 @@ def _fetch_news_headlines():
             out.append({"source": "metalpriceapi", "key": k, "value": v})
     except Exception as exc:
         print(f"ai_brain news(fetch) warn: {exc!r}", flush=True)
-    # Yahoo GC=F quote — بيانات السوق كسياق
+    # Yahoo GC=F quote â€” ط¨ظٹط§ظ†ط§طھ ط§ظ„ط³ظˆظ‚ ظƒط³ظٹط§ظ‚
     try:
         req = urllib.request.Request(
             "https://query1.finance.yahoo.com/v8/finance/chart/GC=F",
@@ -302,10 +344,10 @@ def _write(path, text):
 
 
 def _build_context(state):
-    """ملخص مجرد من سجل الصفقات، بلا كلمات هوية — تغذية للعقل."""
+    """ظ…ظ„ط®طµ ظ…ط¬ط±ط¯ ظ…ظ† ط³ط¬ظ„ ط§ظ„طµظپظ‚ط§طھطŒ ط¨ظ„ط§ ظƒظ„ظ…ط§طھ ظ‡ظˆظٹط© â€” طھط؛ط°ظٹط© ظ„ظ„ط¹ظ‚ظ„."""
     trades, _src = _find_trades()
-    # الحالة المحلية الحية: closed_trades لدورة سابقة — الأصدق على الـ runner
-    # (عند غياب trades.csv المعزول). ندمجها إن كانت أغنى.
+    # ط§ظ„ط­ط§ظ„ط© ط§ظ„ظ…ط­ظ„ظٹط© ط§ظ„ط­ظٹط©: closed_trades ظ„ط¯ظˆط±ط© ط³ط§ط¨ظ‚ط© â€” ط§ظ„ط£طµط¯ظ‚ ط¹ظ„ظ‰ ط§ظ„ظ€ runner
+    # (ط¹ظ†ط¯ ط؛ظٹط§ط¨ trades.csv ط§ظ„ظ…ط¹ط²ظˆظ„). ظ†ط¯ظ…ط¬ظ‡ط§ ط¥ظ† ظƒط§ظ†طھ ط£ط؛ظ†ظ‰.
     live = state.get("closed_trades") or []
     if live and len(live) >= len(trades):
         trades = live
@@ -328,15 +370,57 @@ def _build_context(state):
             })
         else:
             rows.append({"raw": str(t)[:80]})
+    # إحصاء كل ساعة على كامل السجل (لا آخر 40 فقط) — أساس قرار ساعات
+    # التداول. hour -> [عدد, صافي, فوز]
+    hour_stats = {}
+    for t in trades:
+        if not isinstance(t, dict):
+            continue
+        ts = (t.get("ts_close") or "")[11:13]
+        if not ts.isdigit():
+            continue
+        pnl = _num(t.get("pnl_net_usd"))
+        if pnl is None:
+            continue
+        rec = hour_stats.setdefault(int(ts), [0, 0.0, 0])
+        rec[0] += 1
+        rec[1] = round(rec[1] + pnl, 2)
+        if pnl > 0:
+            rec[2] += 1
+    hours = [{"h": h, "n": v[0], "net": v[1],
+              "win%": round(100.0 * v[2] / v[0], 1) if v[0] else 0}
+             for h, v in sorted(hour_stats.items())]
+    # حسب سبب الإغلاق — يعرف أين تتسرّب الخسارة فعلياً
+    reason_stats = {}
+    for t in trades:
+        if not isinstance(t, dict):
+            continue
+        rs = (t.get("reason") or "?").strip()
+        pnl = _num(t.get("pnl_net_usd"))
+        if pnl is None:
+            continue
+        agg = reason_stats.setdefault(rs, [0, 0.0, 0])
+        agg[0] += 1
+        agg[1] = round(agg[1] + pnl, 2)
+        if pnl > 0:
+            agg[2] += 1
+    reasons = [{"reason": k, "n": v[0], "net": v[1],
+                "win%": round(100.0 * v[2] / v[0], 1) if v[0] else 0}
+               for k, v in sorted(reason_stats.items(), key=lambda x: x[1][1])]
     ctx = {
         "count_total": len(trades),
         "count_recent": len(rows),
         "recent": rows,
         "data_source": _src,
         "perf": perf,
+        "hour_stats_all": hours,
+        "reason_stats_all": reasons,
+        "params_in_force": state.get("ai_applied") or {},
+        "own_journal_tail": _journal_tail(),
         "spread_usd_last": state.get("_last_spread_usd"),
         "balance_last": state.get("last_balance"),
         "news": _fetch_news_headlines(),
+        "web_research": _fetch_web_context(),
     }
     return ctx
 
@@ -352,33 +436,49 @@ def _num(v):
 
 def _prompt(ctx):
     return (
-        "You are tuning a live XAUUSD (gold) scalping bot on a demo account.\n"
-        "ECONOMICS (hard constraints, never contradict them):\n"
-        "- lot is fixed at 0.01 and CANNOT change; 1 USD of gold price move = $1 P/L.\n"
-        "- Target per trade ~ +1.6 USD, stop ~ -2.0 USD (R:R about 0.8 = needs 55%+ win).\n"
-        "- Live spread 0.2-0.3 USD is already subtracted from every P/L.\n"
-        "- The broker REJECTS server-side SL/TP, so the stop is programmatic only:\n"
-        "  positions are polled every ~2s in-run, but the runner is restarted every\n"
-        "  ~15 min, so realised stops often overshoot to -3..-6 USD.\n"
-        "- NO new capital risk rules: lot size, session blocker (16-22 UTC) and\n"
-        "  MAX_LOSS are user-locked and must not be changed.\n"
-        "DATA FIELDS: ts_close | side(B/S) | pnl_net | tag(W/L/SL/TP) | spread\n"
-        "QUESTION: Using the trade history, diagnose the bleeding and propose the\n"
-        "SINGLE highest-impact numeric change.\n"
-        "Answer in this exact shape:\n"
-        "1) DIAGNOSIS: two sentences with the real numbers you used.\n"
-        "2) WORST HOURS: list up to 3 close-hours in UTC that are net negative.\n"
-        "3) WHY STOPS OVERSHOOT: one sentence.\n"
-        "4) FIX: exactly one line of the form  MOMENTUM_MIN=<number between 1.20 and 2.00>\n"
-        "   (entry threshold in USD of gold momentum; only field allowed to move).\n"
-        "   If you think the threshold should NOT change, write MOMENTUM_MIN=1.20.\n"
-        "No disclaimers, no generic risk advice, no percentage SL/TP advice.\n\n"
+        "You are the tuning brain of a live XAUUSD (gold) scalp bot. You have\n"
+        "FULL AUTHORITY to retune it every hour, applied automatically without\n"
+        "asking anyone. Aim: strong profit, near-zero bleed.\n"
+        "ECONOMICS (never contradict):\n"
+        "- lot is FIXED at 0.01 and can never change; $1 gold move = $1 P/L.\n"
+        "- spread (0.04-0.30 USD) is already subtracted from every P/L.\n"
+        "- entries fire when |platform_momentum - yahoo_momentum| >= momentum_min.\n"
+        "- the stop is PROGRAMMATIC only (broker rejects server SL/TP), polled\n"
+        "  ~2s in-run, but the runner restarts ~15min, so stops overshoot -3..-6.\n"
+        "YOUR LEVERS (you own all of these; each has a hard cage):\n"
+        "  momentum_min       0.60-2.60  entry threshold in USD\n"
+        "  profit_target_usd  0.80-6.00  take-profit per trade\n"
+        "  trailing_arm_usd   0.50-5.00  trail starts at this net profit\n"
+        "  trailing_back_usd  0.15-2.00  close if giveback from peak\n"
+        "  max_loss_usd       0.80-2.50  hard stop ceiling (absolute 2.50)\n"
+        "  sl_after_entry_usd 0.80-2.50  protective stop after entry\n"
+        "  cooldown_minutes   0.5-30.0   wait between trades\n"
+        "  blocked_hours      up to 6 UTC hours (0-23, comma list) to stop trading\n"
+        "  (values outside their range are REJECTED; the stop cannot exceed 2.50.)\n"
+        "THE PAYOFF TRAP: avg win vs avg loss decides survival. If payoff < 1.0,\n"
+        "you MUST raise profit_target_usd and/or cut max_loss_usd, not just raise\n"
+        "momentum_min. Raising the entry threshold alone just freezes trading.\n"
+        "Use hour_stats_all to block the losing UTC hours, reason_stats_all to see\n"
+        "where losses leak, web_research/news for market context, and\n"
+        "own_journal_tail + params_in_force to correct your OWN past mistakes.\n"
+        "REPLY IN THIS EXACT SHAPE:\n"
+        "1) DIAGNOSIS: 2 sentences citing real numbers.\n"
+        "2) WHAT YOU CHANGED VS LAST HOUR: one sentence.\n"
+        "3) RISK: one sentence on the worst downside of your own change.\n"
+        "4) PARAMS: a single line then a PARAMS block of key=value pairs, e.g.\n"
+        "PARAMS:\n"
+        "momentum_min=1.40\n"
+        "profit_target_usd=2.40\n"
+        "max_loss_usd=1.60\n"
+        "blocked_hours=13,14,15\n"
+        "Always give the full PARAMS block with your chosen values. Be concrete,\n"
+        "quantitative and brief. No disclaimers, no generic advice.\n\n"
         + json.dumps(ctx)
     )
 
 
 def _recommendations_from(text):
-    """مخرج التوصيات غير الرسمي — آخر 3 أسطر برقم (التحليل للنص الادعائي)."""
+    """ظ…ط®ط±ط¬ ط§ظ„طھظˆطµظٹط§طھ ط؛ظٹط± ط§ظ„ط±ط³ظ…ظٹ â€” ط¢ط®ط± 3 ط£ط³ط·ط± ط¨ط±ظ‚ظ… (ط§ظ„طھط­ظ„ظٹظ„ ظ„ظ„ظ†طµ ط§ظ„ط§ط¯ط¹ط§ط¦ظٹ)."""
     out = []
     if not text:
         return out
@@ -391,10 +491,10 @@ def _recommendations_from(text):
 
 
 def _extract_first_number(text):
-    """يستخرج قيمة MOMENTUM_MIN= من نص العقل (أو None).
+    """ظٹط³طھط®ط±ط¬ ظ‚ظٹظ…ط© MOMENTUM_MIN= ظ…ظ† ظ†طµ ط§ظ„ط¹ظ‚ظ„ (ط£ظˆ None).
 
-    لا نلتقط أول رقم عشوائي أبداً (كان خطراً: رقم سردّي كـ "2.0 USD"
-    كان سيُطبَّق كعتبة). فقط النمط الصريح المطلوب في البرومبت.
+    ظ„ط§ ظ†ظ„طھظ‚ط· ط£ظˆظ„ ط±ظ‚ظ… ط¹ط´ظˆط§ط¦ظٹ ط£ط¨ط¯ط§ظ‹ (ظƒط§ظ† ط®ط·ط±ط§ظ‹: ط±ظ‚ظ… ط³ط±ط¯ظ‘ظٹ ظƒظ€ "2.0 USD"
+    ظƒط§ظ† ط³ظٹظڈط·ط¨ظژظ‘ظ‚ ظƒط¹طھط¨ط©). ظپظ‚ط· ط§ظ„ظ†ظ…ط· ط§ظ„طµط±ظٹط­ ط§ظ„ظ…ط·ظ„ظˆط¨ ظپظٹ ط§ظ„ط¨ط±ظˆظ…ط¨طھ.
     """
     import re
     m = re.search(r"MOMENTUM_MIN\s*=\s*(-?\d+\.?\d*)", text or "")
@@ -407,7 +507,7 @@ def _extract_first_number(text):
 
 
 def run(state, data_dir="data"):
-    """تنفيذ دورة تحليل إذا حان وقتها. لا يرمي استثناء أبداً."""
+    """طھظ†ظپظٹط° ط¯ظˆط±ط© طھط­ظ„ظٹظ„ ط¥ط°ط§ ط­ط§ظ† ظˆظ‚طھظ‡ط§. ظ„ط§ ظٹط±ظ…ظٹ ط§ط³طھط«ظ†ط§ط، ط£ط¨ط¯ط§ظ‹."""
     try:
         if not _needs_run(state):
             return {"ran": False}
@@ -422,8 +522,8 @@ def run(state, data_dir="data"):
             result["error"] = "empty LLM reply"
             _set_ai_time(state)
             return result
-        # الرقم المنفَّذ في سطر مستقل داخل الخطة: الخطة (.md) الملف
-        # الدائم الذي يصل الدورة التالية، بينما json معزول ولا يصل.
+        # ط§ظ„ط±ظ‚ظ… ط§ظ„ظ…ظ†ظپظژظ‘ط° ظپظٹ ط³ط·ط± ظ…ط³طھظ‚ظ„ ط¯ط§ط®ظ„ ط§ظ„ط®ط·ط©: ط§ظ„ط®ط·ط© (.md) ط§ظ„ظ…ظ„ظپ
+        # ط§ظ„ط¯ط§ط¦ظ… ط§ظ„ط°ظٹ ظٹطµظ„ ط§ظ„ط¯ظˆط±ط© ط§ظ„طھط§ظ„ظٹط©طŒ ط¨ظٹظ†ظ…ط§ json ظ…ط¹ط²ظˆظ„ ظˆظ„ط§ ظٹطµظ„.
         _mm = _extract_first_number(text)
         result["plan_written"] = os.path.join(data_dir, "ai_plan.md")
         header = "# AI plan  ({0} UTC)".format(
@@ -447,62 +547,208 @@ def run(state, data_dir="data"):
 
 
 # ============================================================================
-# حلقة التطوير الذاتي — overrides مُقيّدة تُطبَّق في الذاكرة فقط (لا كود/ملف)
+# ظ…ط­ط±ظ‘ظƒ ط§ظ„طھط·ط¨ظٹظ‚ ط§ظ„ط°ط§طھظٹ â€” ط³ظ„ط·ط§ظ† ظƒط§ظ…ظ„ ط¹ظ„ظ‰ ط§ظ„ظ…ط¹ط§ظ…ظ„ط§طھطŒ ط¨ظ‚ظپطµ ط­ط¯ظˆط¯ طµظ„ط¨ط©
 # ============================================================================
-# القاعدة: لا يغيّر العقل القواعد الحتمية (لوت/حدود أمان) أبداً؛ فقط يتّجه
-# نحو معاملات ضمن نطاق معقول (entry threshold). التطبيق يتم عبر state[yh_dyn]
-# الذي يقرؤه live أثناء الفتح — لا يلمس ملفات config ولا commit.
+# 2026-10-05 (ط·ظ„ط¨ طµط±ظٹط­): ط§ظ„ط¹ظ‚ظ„ ظ…ط®ظˆظ‘ظ„ ط¨ط§ظ„ظƒط§ظ…ظ„ ظ„طھط¹ط¯ظٹظ„ ط§ظ„ط¹طھط¨ط© ظˆط§ظ„ظ‡ط¯ظپ ظˆظˆظ‚ظپ
+# ط§ظ„ط®ط³ط§ط±ط© ظˆط§ظ„طھط±ظٹظ„ظ†ط¬ ظˆط§ظ„طھظ‡ط¯ط¦ط© ظˆط³ط§ط¹ط§طھ ط§ظ„طھط¯ط§ظˆظ„طŒ ظˆظٹط¨ط­ط« ظپظٹ ط§ظ„ط¥ظ†طھط±ظ†طھ ظˆظٹطھط·ظˆط±
+# ط°ط§طھظٹط§ظ‹طŒ ط¨ظ„ط§ ط±ط¬ظˆط¹ ظ„ط£ظٹ ظ…ظˆط§ظپظ‚ط©.
+#
+# ط§ظ„ظ‚ظپطµ ط؛ظٹط± ظ‚ط§ط¨ظ„ ظ„ظ„ط§ط®طھط±ط§ظ‚ (ط­طھظ‰ ظ„ظˆ hallucinate):
+#   * config.AI_BOUNDS ظٹط­ط¯ظ‘ ظƒظ„ ظ‚ظٹظ…ط© (ط³ظ‚ظپ ط§ظ„ط³طھظˆط¨ ط§ظ„ظ…ط·ظ„ظ‚ AI_MAX_STOP_USD).
+#   * ط§ظ„ظ„ظˆطھ 0.01 ط®ط§ط±ط¬ ظ‡ط°ط§ ط§ظ„ط¬ط¯ظˆظ„ ط¹ظ…ط¯ط§ظ‹ â‡’ ظ„ط§ طھظ…ط¯ظ‘ط¯ ط­ط¬ظ… ط£ط¨ط¯ط§ظ‹.
+#   * ط§ظ„طھط·ط¨ظٹظ‚ ظپظٹ ط§ظ„ط°ط§ظƒط±ط© ظپظ‚ط·: ظ„ط§ ظٹظƒطھط¨ config ظˆظ„ط§ commit â‡’ طµظپط± ط®ط·ط± ظƒظˆط¯.
+#   * ط£ظٹ ظ‚ظٹظ…ط© ظ…ظپظ‚ظˆط¯ط©/ط¹ط¨ط«ظٹط©/ط®ط§ط±ط¬ ط§ظ„ظ†ط·ط§ظ‚ طھظڈطھط¬ط§ظ‡ظ„è¯¥é،¹ ظپظ‚ط·طŒ ظˆط§ظ„ط¨ط§ظ‚ظٹ ظٹظڈط·ط¨ظژظ‘ظ‚.
+#   * ظƒظ„ ط¶ط¨ط·ط© طھظڈط³ط¬ظژظ‘ظ„ ظپظٹ data/ai_journal.md ظ…ط¹ ط­طµظٹظ„طھظ‡ط§ â‡’ ط¯ظˆط±ط© طھط¹ظ„ظ‘ظ… ظ…ط؛ظ„ظ‚ط©:
+#     ط§ظ„ط¹ظ‚ظ„ ظپظٹ ط¯ظˆط±طھظ‡ ط§ظ„طھط§ظ„ظٹط© ظٹظ‚ط±ط£ ظ…ط§ ظپط¹ظ„ظ‡ ظ‚ط¨ظ„ ط°ظ„ظƒ ظˆظٹطµط­ظ‘ط­.
 
 AI_APPLY_ON = os.environ.get("AI_APPLY_ON", "0") == "1"
-AI_MOMENTUM_MIN_MIN = float(os.environ.get("AI_MOMENTUM_MIN_MIN", "0.50"))
-AI_MOMENTUM_MIN_MAX = float(os.environ.get("AI_MOMENTUM_MIN_MAX", "2.50"))
+AI_JOURNAL = os.path.join("data", "ai_journal.md")
+
+# ط§ط³ظ… ط§ظ„ظ…طھط؛ظٹظ‘ط± ظپظٹ config  <-  ط§ظ„ط§ط³ظ… ط§ظ„ط°ظٹ ظٹظƒطھط¨ظ‡ ط§ظ„ط¹ظ‚ظ„ ظپظٹ ظƒطھظ„ط© PARAMS
+_PARAM_TARGETS = {
+    "momentum_min": "MOMENTUM_MIN_USD",
+    "profit_target_usd": "PROFIT_TARGET_USD",
+    "trailing_arm_usd": "TRAILING_ARM_USD",
+    "trailing_back_usd": "TRAILING_BACK_USD",
+    "max_loss_usd": "MAX_LOSS_USD",
+    "sl_after_entry_usd": "SL_AFTER_ENTRY_USD",
+    "cooldown_minutes": "COOLDOWN_MINUTES",
+}
 
 
-def _read_recommended_momentum():
-    """توصية العقل من مصدر دائم.
+def _clamp_param(key, raw):
+    """ظٹط­ظˆظ‘ظ„ ظ‚ظٹظ…ط© ظ…ظ‚طھط±ط­ط© ط¥ظ„ظ‰ ظ‚ظٹظ…ط© ط¢ظ…ظ†ط© ط¶ظ…ظ† config.AI_BOUNDSطŒ ط£ظˆ None ط¥ظ† ط±ظپط¶.
 
-    الأولوية: data/ai_plan.md (ملف md غير معزول ⇒ يصل الدورة التالية عبر
-    persist) على شكل  APPLIED_SETTING: MOMENTUM_MIN=<رقم>  أو  MOMENTUM_MIN=<رقم>.
-    الاحتياط: ai_recommendations.json (معزول، يعمل داخل نفس الدورة فقط).
+    ظٹط±ظپط¶: ط؛ظٹط± ط±ظ‚ظ…ظٹطŒ NaN/infطŒ ط®ط§ط±ط¬ ط§ظ„ظ†ط·ط§ظ‚ (ظ„ط§ ظ‚طµظ‘ طµط§ظ…طھ â€” ظ†ظڈط¨ظ‚ظٹ ظ…طµط¯ط§ظ‚ظٹط© ط§ظ„ظˆطµظپط©).
+    ظٹط­ط¯ظ‘ ط§ظ„ط³طھظˆط¨: ظ„ط§ ظٹطھط¬ط§ظˆط² AI_MAX_STOP_USDطŒ ظˆظ„ط§ ظٹظ‚ظپط² ط£ظƒط«ط± ظ…ظ† +0.10$ ظپظˆظ‚
+    ط§ظ„ط­ط§ظ„ظٹ ط¯ظپط¹ط© ظˆط§ط­ط¯ط© (incremental safety â€” ظ„ط§ ظ‚ظپط²ط§طھ ظ…ظپط§ط¬ط¦ط© ط¨ط§ظ„ظ…ط®ط§ط·ط±ط©).
+    """
+    import math
+    bounds = getattr(config, "AI_BOUNDS", {}).get(key)
+    if not bounds:
+        return None
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(val) or math.isinf(val):
+        return None
+    lo, hi = bounds
+    if not (lo <= val <= hi):
+        print("self-improve: REJECT {0}={1} (bounds {2}-{3})".format(
+            key, raw, lo, hi), flush=True)
+        return None
+    if key in ("max_loss_usd", "sl_after_entry_usd"):
+        ceiling = float(getattr(config, "AI_MAX_STOP_USD", 2.5) or 2.5)
+        val = min(val, ceiling)
+        cur = float(getattr(config, _PARAM_TARGETS[key], 0.0) or 0.0)
+        if cur and val > cur:
+            val = min(val, round(cur + 0.10, 2))
+    if key == "trailing_back_usd":
+        arm = float(getattr(config, "TRAILING_ARM_USD", 1.4) or 1.4)
+        if val >= arm:
+            val = round(arm * 0.5, 2)
+    if key == "trailing_arm_usd":
+        if val > float(getattr(config, "PROFIT_TARGET_USD", 1.6) or 1.6):
+            val = float(getattr(config, "PROFIT_TARGET_USD", 1.6) or 1.6)
+    return round(val, 2)
+
+
+def _parse_param_block(text):
+    """ظٹظ‚ط±ط£ ظƒطھظ„ط© PARAMS ظ…ظ† ط±ط¯ظ‘ ط§ظ„ط¹ظ‚ظ„.
+
+    ظٹظ‚ط¨ظ„ ط§ظ„ط³ط·ط±ظٹظ†:
+        PARAMS: momentum_min=1.40, profit_target_usd=2.00
+    ط£ظˆ ط§ظ„ط´ظƒظ„ ظ…طھط¹ط¯ظ‘ط¯ ط§ظ„ط£ط³ط·ط± PARAMS: طھط­طھظ‡ key = value ظ„ظƒظ„ ط³ط·ط±.
+    ظٹظڈط¹ظٹط¯ dict ظ…ظ† ط§ظ„ط£ط³ظ…ط§ط، ط§ظ„ظ…ط¹ط±ظˆظپط© ظپظ‚ط·.
+    """
+    import re
+    out = {}
+    if not text:
+        return out
+    block = None
+    m = re.search(r"PARAMS?\s*:?\s*\n(.*?)(?:\n\s*\n|\Z)", text, re.S | re.I)
+    if m:
+        block = m.group(1)
+    else:
+        block = text
+    allowed = set(_PARAM_TARGETS) | {"blocked_hours"}
+    for k, v in re.findall(r"([a-z_]+)\s*=\s*([0-9][0-9.,\s]*)", block, re.I):
+        k = k.lower().strip()
+        if k in allowed:
+            out[k] = v.strip().rstrip(",")
+    return out
+
+
+def _apply_blocked_hours(raw):
+    """ظٹط·ط¨ظ‘ظ‚ ط³ط§ط¹ط§طھ ط§ظ„ط­ط¸ط± (UTC 0-23) ظ…ظ† طھظˆطµظٹط© ط§ظ„ط¹ظ‚ظ„طŒ ط¨ط­ط¯ ط£ظ‚طµظ‰ 6 ط³ط§ط¹ط§طھ."""
+    hours = set()
+    try:
+        for part in str(raw).replace(" ", "").split(","):
+            part = part.strip().rstrip(".")
+            if part.isdigit():
+                h = int(part)
+                if 0 <= h <= 23:
+                    hours.add(h)
+    except Exception:
+        return None
+    if not hours or len(hours) > 6:
+        return None
+    config.AI_BLOCKED_HOURS = hours
+    return sorted(hours)
+
+
+def _read_recommended_params():
+    """طھظˆطµظٹط§طھ ط§ظ„ط¹ظ‚ظ„ ظ…ظ† ط§ظ„ظ…ظ„ظپ ط§ظ„ط¯ط§ط¦ظ… data/ai_plan.md.
+
+    md ط؛ظٹط± ظ…ط¹ط²ظˆظ„ â‡’ ظٹطµظ„ ط§ظ„ط¯ظˆط±ط© ط§ظ„طھط§ظ„ظٹط© ط¹ط¨ط± persist.-shape ط§ظ„ظ‚ط¯ظٹظ…
+    APPLIED_SETTING/MOMENTUM_MIN_x ظ…ط¯ط¹ظˆظ… ظƒط§ط­طھظٹط§ط·طŒ ظˆai_recommendations.json
+    ظƒط¢ط®ط± ط§ط­طھظٹط§ط·.
     """
     import re
     try:
         with open(os.path.join("data", "ai_plan.md"), "r",
                   encoding="utf-8") as f:
-            m = re.search(r"MOMENTUM_MIN\s*=\s*(-?\d+\.?\d*)", f.read())
-            if m:
-                return float(m.group(1))
+            txt = f.read()
+        blk = _parse_param_block(txt)
+        if blk:
+            return blk
+        m = re.search(r"MOMENTUM_MIN\s*=\s*(-?\d+\.?\d*)", txt)
+        if m:
+            return {"momentum_min": m.group(1)}
     except Exception:
         pass
     rec = _read_json(os.path.join("data", "ai_recommendations.json"))
     val = rec.get("momentum_min")
-    return float(val) if val is not None else None
+    if val is not None:
+        return {"momentum_min": val}
+    return {}
+
+
+def _journal(state, applied, skipped):
+    """ظٹط³ط¬ظ‘ظ„ ظ‡ط°ظ‡ ط§ظ„ط¶ط¨ط·ط© + ط­طµظٹظ„ط© ظ…ط§ طھظ„ط§ظ‡ط§ (طھط؛ط°ظٹط© ظ…ط؛ظ„ظ‚ط© ظ„ظ„ط¯ظˆط±ط© ط§ظ„طھط§ظ„ظٹط©)."""
+    try:
+        stamp = time.strftime("%Y-%m-%d %H:%M", time.gmtime())
+        parts = ["\n## {0} UTC".format(stamp)]
+        if applied:
+            parts.append("- APPLIED: " + ", ".join(
+                "{0}={1}".format(k, v) for k, v in sorted(applied.items())))
+        if skipped:
+            parts.append("- SKIPPED: " + ", ".join(
+                "{0}={1}".format(k, v) for k, v in sorted(skipped.items())))
+        parts.append("- realized_now: {0}".format(
+            state.get("last_balance") or "?"))
+        with open(AI_JOURNAL, "a", encoding="utf-8") as f:
+            f.write("\n".join(parts) + "\n")
+        with open(AI_JOURNAL, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        if len(lines) > 200:
+            with open(AI_JOURNAL, "w", encoding="utf-8") as f:
+                f.writelines(lines[-180:])
+    except Exception as exc:
+        print("journal warn: {0!r}".format(exc), flush=True)
 
 
 def apply_self_improvement(state):
-    """تطبيق توصية العقل على config في الذاكرة (إن فُعّلت) وبصد قيم شاذة.
+    """طھط·ط¨ظٹظ‚ طھظˆطµظٹط§طھ ط§ظ„ط¹ظ‚ظ„ ط¹ظ„ظ‰ config ظپظٹ ط§ظ„ط°ط§ظƒط±ط©طŒ طھط­طھ config.AI_BOUNDS.
 
-    يقرأ الرقم من _read_recommended_momentum() (الخطة الدائمة أولاً) —
-    إن كان ضمن [AI_MOMENTUM_MIN_MIN..MAX] طبّقه على config.MOMENTUM_MIN_USD
-    داخل الذاكرة فقط (لا ملفات ولا commit). أي قيمة خارج النطاق/بنية
-    خاطئة تُهمَل بلا أثر. يُستدعى كل دورة ⇒ الضبط يسري من الدورة التالية.
+    ظٹظ‚ط±ط£ ظƒطھظ„ط© PARAMS ظ…ظ† data/ai_plan.md ط§ظ„ط¯ط§ط¦ظ…. ظƒظ„ ظ‚ظٹظ…ط© ط¯ط§ط®ظ„ ط­ط¯ظ‘ظ‡ط§ طھظڈط·ط¨ظژظ‘ظ‚طŒ
+    ظˆط§ظ„ظ…ط¹ط·ظˆط¨ط© طھظڈطھط¬ط§ظ‡ظ„è¯¥é،¹ ظپظ‚ط·. ط§ظ„ظ„ظˆطھ ظ„ط§ ظٹظڈظ…ظژط³طŒ ظˆظ„ط§ ظ…ظ„ظپ config ظٹظڈظƒطھط¨طŒ ظˆظ„ط§
+    commit â€” ط§ظ„طھط¹ط¯ظٹظ„ ط³ط±ظ‘ظٹ ظپظٹ ط§ظ„ط°ط§ظƒط±ط© ظپظٹط³ط±ظٹ ظپظˆط±ط§ظ‹. ظٹظڈط³طھط¯ط¹ظ‰ ظƒظ„ ط¯ظˆط±ط©طŒ ظˆط§ظ„ط¹ظ‚ظ„
+    ظٹط¹ظٹط¯ ط§ظ„طھظ‚ظٹظٹظ… ظƒظ„ ط³ط§ط¹ط© (AI_INTERVAL_MIN=60).
     """
     if not (AI_ON and AI_APPLY_ON):
         return {"applied": False, "reason": "self-tune disabled"}
     try:
-        val = _read_recommended_momentum()
-        if val is None:
+        rec = _read_recommended_params()
+        if not rec:
             return {"applied": False, "reason": "no recommendation"}
-        val = float(val)
-        if not (AI_MOMENTUM_MIN_MIN <= val <= AI_MOMENTUM_MIN_MAX):
-            return {"applied": False,
-                    "reason": "out-of-range {0:+.2f}".format(val)}
-        # في الذاكرة فقط — لا يلمس الملفات ولاRepo
-        config.MOMENTUM_MIN_USD = round(val, 2)
-        state["yh_dyn"] = {"momentum_min": round(val, 2)}
-        print("self-improve: momentum_min -> {0:.2f} (range {1}-{2})".format(
-            val, AI_MOMENTUM_MIN_MIN, AI_MOMENTUM_MIN_MAX), flush=True)
-        return {"applied": True, "momentum_min": round(val, 2)}
+        applied, skipped = {}, {}
+        for key, target in _PARAM_TARGETS.items():
+            if key not in rec:
+                continue
+            safe = _clamp_param(key, rec[key])
+            if safe is None:
+                skipped[key] = rec[key]
+                continue
+            setattr(config, target, safe)
+            applied[key] = safe
+        if "blocked_hours" in rec:
+            bh = _apply_blocked_hours(rec["blocked_hours"])
+            if bh is not None:
+                applied["blocked_hours"] = bh
+            else:
+                skipped["blocked_hours"] = rec["blocked_hours"]
+        state["yh_dyn"] = dict(applied)
+        state["ai_applied"] = applied
+        if applied:
+            _journal(state, applied, skipped)
+            print("self-improve APPLIED: " + ", ".join(
+                "{0}={1}".format(k, v) for k, v in sorted(applied.items())),
+                flush=True)
+        return {"applied": bool(applied), "applied_params": applied,
+                "skipped": skipped}
     except Exception as exc:
         print("self-improve fail: {0!r}".format(exc), flush=True)
         return {"applied": False, "reason": repr(exc)}
+

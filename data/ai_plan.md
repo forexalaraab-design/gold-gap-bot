@@ -1,16 +1,16 @@
 # AI daily plan
 
-**Diagnosis of XAUUSD Trading Performance:**
+**Diagnosis of Trading Performance (XAUUSD Demo)**
 
-1. **Losing Hours:** The majority of losses occur between 04:21 and 07:36, with a notable concentration of losing trades in the early morning hours (04:00 - 07:00). 
+1. **Losing Hours**: The majority of losses occur between 04:21 and 07:36, particularly during the early morning hours. This indicates a potential time frame where the strategy is less effective.
 
-2. **Win vs. Loss Shape:** The strategy shows a mixed performance with a higher frequency of losses. The average loss per trade appears to be larger than the average win, indicating a net-negative strategy. For instance, several losses exceed 1.5 USD, while wins are often below this threshold.
+2. **Win vs. Loss Shape**: The strategy shows a higher frequency of losses compared to wins. Typical losses range from -0.44 to -2.44, while wins are generally smaller, peaking at 1.78. This suggests a negative risk-reward ratio.
 
-3. **Net-Negative Assessment:** The strategy is net-negative due to the higher average loss compared to wins and the frequency of losing trades. The risk-reward ratio is unfavorable, leading to an overall loss.
+3. **Net-Negative Strategy**: The strategy appears to be net-negative due to the higher cumulative losses compared to gains. The average loss is significantly larger than the average win, indicating poor entry or exit timing.
 
-**Recommendations:**
-1. **Entry Threshold:** Implement a stricter entry threshold, such as only entering trades when the price moves at least 0.5% in the desired direction before entry.
+**Recommendations**:
+1. **Entry Threshold**: Implement a stricter entry threshold, such as only entering trades when the price moves at least 0.5% in the desired direction before entry.
 
-2. **Time Filter:** Limit trading to the hours of 08:00 - 12:00, avoiding early morning hours where losses are prevalent.
+2. **Time Filter**: Limit trading to between 08:00 and 17:00 to avoid the less favorable early morning hours.
 
-3. **SL/TP Settings:** Set a stop-loss (SL) at 1.5 times the average win (approximately 1.5 USD) and a take-profit (TP) at 2 times the average win (approximately 2.0 USD) to improve the risk-reward ratio.
+3. **SL/TP Settings**: Set a stop-loss (SL) at 1.5 times the average loss (around 2.0) and a take-profit (TP) at 1.5 times the average win (around 1.5) to improve the risk-reward ratio.

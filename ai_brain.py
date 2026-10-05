@@ -524,21 +524,41 @@ def run(state, data_dir="data"):
             return result
         # ط§ظ„ط±ظ‚ظ… ط§ظ„ظ…ظ†ظپظژظ‘ط° ظپظٹ ط³ط·ط± ظ…ط³طھظ‚ظ„ ط¯ط§ط®ظ„ ط§ظ„ط®ط·ط©: ط§ظ„ط®ط·ط© (.md) ط§ظ„ظ…ظ„ظپ
         # ط§ظ„ط¯ط§ط¦ظ… ط§ظ„ط°ظٹ ظٹطµظ„ ط§ظ„ط¯ظˆط±ط© ط§ظ„طھط§ظ„ظٹط©طŒ ط¨ظٹظ†ظ…ط§ json ظ…ط¹ط²ظˆظ„ ظˆظ„ط§ ظٹطµظ„.
-        _mm = _extract_first_number(text)
+        # الخطة (.md) هي الملف الدائم الذي تصل الدورة التالية. نكتب فيها
+        # كتلة PARAMS المُطبَّقة صراحةً حتى لو garbled ردّ العقل، فيقرأها
+        # apply_self_improvement مباشرة دون إعادة تحليل النص.
+        params = _parse_param_block(text)
+        for k, v in list(params.items()):
+            if k == "blocked_hours":
+                safe = _parse_blocked_hours(v)
+            else:
+                safe = _clamp_param(k, v)
+            if safe is None:
+                params.pop(k)
+            else:
+                params[k] = safe
+        if not params:
+            _mm = _extract_first_number(text)
+            params = {"momentum_min": _mm} if _mm is not None else {}
         result["plan_written"] = os.path.join(data_dir, "ai_plan.md")
         header = "# AI plan  ({0} UTC)".format(
             time.strftime("%Y-%m-%d %H:%M", time.gmtime()))
-        footer = "\n\nAPPLIED_SETTING: MOMENTUM_MIN={0}\n".format(
-            _mm if _mm is not None else "1.20")
-        _write(result["plan_written"],
-               header + "\n\n" + text + footer)
+        footer = "\n\n## APPLIED (auto-applied next cycle, hard-bounded)\n"
+        if params:
+            footer += "PARAMS:\n" + "\n".join(
+                "{0}={1}".format(k, v) for k, v in sorted(params.items()))
+        else:
+            footer += "PARAMS: (none parsed — keeping current settings)"
+        _write(result["plan_written"], header + "\n\n" + text + footer + "\n")
         _write(os.path.join(data_dir, "ai_recommendations.json"),
                json.dumps({
                    "ts": time.time(),
                    "recommendations": _recommendations_from(text),
-                   "momentum_min": _mm,
+                   "params": params,
+                   "momentum_min": params.get("momentum_min"),
                }, indent=2))
-        result["momentum_min"] = _mm
+        result["params"] = params
+        result["momentum_min"] = params.get("momentum_min")
         _set_ai_time(state)
         return result
     except Exception as exc:
@@ -640,8 +660,11 @@ def _parse_param_block(text):
     return out
 
 
-def _apply_blocked_hours(raw):
-    """ظٹط·ط¨ظ‘ظ‚ ط³ط§ط¹ط§طھ ط§ظ„ط­ط¸ط± (UTC 0-23) ظ…ظ† طھظˆطµظٹط© ط§ظ„ط¹ظ‚ظ„طŒ ط¨ط­ط¯ ط£ظ‚طµظ‰ 6 ط³ط§ط¹ط§طھ."""
+def _parse_blocked_hours(raw):
+    """يحلّل ساعات الحظر (UTC 0-23) دون تعديل config — للتحقق فقط.
+
+    يرجع قائمة مرتّبة أو None (فارغة/تالفة/ أكثر من 6 ساعات).
+    """
     hours = set()
     try:
         for part in str(raw).replace(" ", "").split(","):
@@ -654,8 +677,16 @@ def _apply_blocked_hours(raw):
         return None
     if not hours or len(hours) > 6:
         return None
-    config.AI_BLOCKED_HOURS = hours
     return sorted(hours)
+
+
+def _apply_blocked_hours(raw):
+    """يطبّق ساعات الحظر (UTC 0-23) من توصية العقل، بحد أقصى 6 ساعات."""
+    hours = _parse_blocked_hours(raw)
+    if hours is None:
+        return None
+    config.AI_BLOCKED_HOURS = set(hours)
+    return hours
 
 
 def _read_recommended_params():

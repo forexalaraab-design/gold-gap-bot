@@ -1,8 +1,20 @@
-# AI plan  (2026-10-05 21:54 UTC)
+# AI plan  (2026-10-05 22:42 UTC)
 
-1) DIAGNOSIS: The recent trades show a total of 40 trades with a net P/L of -12.45 USD, indicating a win rate below the required 55%. The average loss per losing trade is approximately -1.85 USD, which is significantly impacting profitability.  
-2) WORST HOURS: 14:00 UTC (-6.02 USD), 14:20 UTC (-1.69 USD), 15:20 UTC (-1.69 USD).  
-3) WHY STOPS OVERSHOOT: The programmatic stop loss is not effectively limiting losses due to the 15-minute restart cycle, leading to larger realized losses.  
-4) FIX: MOMENTUM_MIN=1.40
+1) DIAGNOSIS: The recent performance shows a win rate of 50% with a net loss of -8.86 USD during the 14:00 UTC hour. The average win is significantly lower than the average loss, indicating a payoff ratio below 1.0.
 
-APPLIED_SETTING: MOMENTUM_MIN=1.4
+2) WHAT YOU CHANGED VS LAST HOUR: Increased profit_target_usd from 2.40 to 2.80 to improve the payoff ratio.
+
+3) RISK: The risk of this change is that it may further reduce the frequency of trades if the momentum conditions are not met.
+
+4) PARAMS:
+momentum_min=1.40
+profit_target_usd=2.80
+max_loss_usd=1.60
+blocked_hours=1,2,5,9,14,15
+
+## APPLIED (auto-applied next cycle, hard-bounded)
+PARAMS:
+blocked_hours=[1, 2, 5, 9, 14, 15]
+max_loss_usd=1.6
+momentum_min=1.4
+profit_target_usd=2.8

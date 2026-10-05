@@ -2,16 +2,17 @@
 
 **Diagnosis of XAUUSD Trading Performance:**
 
-1. **Losing Hours:** The majority of losses occur between 00:18 and 05:32, particularly during the early morning hours (00:00 - 05:00). 
+1. **Losing Hours:** The majority of losses occur between 00:18 and 05:53, particularly during the early morning hours (00:00 - 05:59). This suggests a potential issue with market volatility or liquidity during these times.
 
-2. **Win vs. Loss Shape:** The strategy shows a mixed performance with a slight edge in winning trades (12 wins vs. 16 losses). However, the average loss is significantly higher than the average win, indicating a net-negative performance.
+2. **Win vs. Loss Shape:** The strategy shows a mix of wins and losses, but the losses are more significant in magnitude. For example, the largest loss is -2.23, while the largest win is only 2.02. This indicates a net-negative performance.
 
-3. **Net-Negative Strategy:** The strategy is net-negative due to the higher magnitude of losses compared to gains. Total losses amount to approximately -12.4, while total wins are around +9.3, leading to a negative net result.
+3. **Net-Negative Strategy:** The strategy is net-negative due to a higher frequency and magnitude of losses compared to wins. The cumulative losses outweigh the gains, leading to an overall negative outcome.
 
 **Recommendations:**
+1. **Entry Threshold:** Set a minimum profit target of 1.5 pips for buy/sell entries to ensure only trades with a favorable risk-reward ratio are executed.
 
-1. **Entry Threshold:** Set a minimum profit target of 1.5 pips for buy trades and 1.0 pip for sell trades to ensure only higher probability trades are executed.
+2. **Time Filter:** Avoid trading between 00:00 and 06:00 to reduce exposure during low liquidity periods.
 
-2. **Time Filter:** Avoid trading between 00:00 and 05:00 to reduce exposure during hours with higher losses.
+3. **SL/TP Settings:** Implement a stop-loss (SL) of 1.5% and a take-profit (TP) of 3% to better manage risk and enhance potential gains. 
 
-3. **SL/TP Settings:** Implement a stop-loss (SL) of 2.0 pips and a take-profit (TP) of 1.5 pips for buy trades, and a SL of 1.5 pips and TP of 2.0 pips for sell trades to better manage risk and reward.
+These adjustments aim to improve the overall trading performance by focusing on higher-quality trades and reducing exposure during unfavorable hours.

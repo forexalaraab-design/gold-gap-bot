@@ -1,16 +1,19 @@
 # AI daily plan
 
-**Diagnosis of Trading Performance (XAUUSD Demo)**
+**Diagnosis of XAUUSD Trading Performance:**
 
-1. **Losing Hours**: The strategy shows a tendency for losses primarily between 08:00 and 13:00, with notable losses occurring around 12:00-13:00.
+1. **Losing Hours:** The strategy shows a higher frequency of losses during the late morning to early afternoon (11:00 - 14:00), with several consecutive losing trades.
 
-2. **Win vs. Loss Shape**: The recent performance indicates a mix of small wins and larger losses. Typical winning trades average around +0.5 to +1.8, while losses can exceed -2.0, suggesting a negative risk-reward ratio.
+2. **Win vs. Loss Shape:** The win/loss ratio appears to favor wins, but the losses are larger than the wins, indicating a net-negative performance. For example, notable losses include -2.08 and -2.21, while wins are mostly under 2.0.
 
-3. **Net Performance**: The strategy appears net-negative due to the higher magnitude of losses compared to wins, leading to an overall drawdown in balance.
+3. **Net-Negative Strategy:** The strategy is net-negative primarily due to the disproportionate size of losses compared to wins, leading to a negative overall profit.
 
-**Recommendations**:
-- **Entry Threshold**: Set a minimum profit target of +1.0 before entering a trade to ensure only higher probability setups are taken.
-- **Time Filter**: Avoid trading between 12:00 and 13:00 to reduce exposure during losing hours.
-- **Stop Loss/Take Profit (SL/TP)**: Implement a SL of 1.5 times the average win size (approx. 1.5) and a TP of 2.0 to maintain a better risk-reward ratio.
+**Recommendations:**
 
-By refining these parameters, the strategy could improve its overall performance and reduce losses.
+1. **Entry Threshold:** Implement a stricter entry threshold, such as only entering trades when the price moves at least 0.5% in the desired direction before entry to filter out weaker signals.
+
+2. **Time Filter:** Avoid trading from 11:00 to 14:00, as this period shows a higher concentration of losses.
+
+3. **SL/TP Settings:** Set a stop-loss (SL) at 1.5% and a take-profit (TP) at 2.5% to ensure that wins outweigh losses, improving the risk-reward ratio. 
+
+These adjustments aim to enhance performance and mitigate losses.

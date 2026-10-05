@@ -1,9 +1,12 @@
 name: gold-gap-mt5
 
 on:
-  # لا cron: الجدولة على public repo المجاني غير موثوقة (فجوات 3-7 ساعات
-  # رغم */15). السلسلة تصان ذاتياً عبر step الـ Self-dispatch في نهاية كل
-  # دورة (تعمل حتى بعد فشل الدورة، if: always()).
+  # 2026-10-05: أعدنا cron كشبكة أمان. السبب: عند 19:51 مات self-dispatch
+  # (دورة أُلغيت) فماتت السلسلة ساعة كاملة بلا صفقات. cron كل 15 يضمن
+  # استئنافاً ذاتياً حتى لو كسر Self-dispatch. التكرار غير ضار:
+  # concurrency صف يمنع التداخل (والجديدة تنتظر그러 0 صفقة مزدوجة).
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       probe:
@@ -190,5 +193,16 @@ jobs:
           GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
         run: |
           if (-not $env:GH_TOKEN) { Write-Host "no DISPATCH_PAT - cron only"; exit 0 }
-          Write-Host "dispatch next mt5 round"
-          gh workflow run mt5.yml --ref $env:GITHUB_REF_NAME
+          # 2026-10-05: 5 محاولات بتدرّج (كان محاولة واحدة ⇒ موت السلسلة
+          # عند أول فشل عابر، مثل 19:51). cron */15 يبقى شبكة الأمان.
+          $ref = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "main" }
+          for ($i = 1; $i -le 5; $i++) {
+            gh workflow run mt5.yml --ref $ref
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "self-dispatch OK (attempt $i, ref=$ref)"
+              exit 0
+            }
+            Write-Host "attempt $i failed (exit=$LASTEXITCODE); retry in 10s"
+            Start-Sleep -Seconds 10
+          }
+          Write-Host "::warning::self-dispatch exhausted 5 attempts - cron will heal"

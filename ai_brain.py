@@ -141,16 +141,36 @@ def _call_llm(prompt, system, timeout=AI_FETCH_TIMEOUT):
         return ""
 
 
+# طابع آخر تشغيل: ملف دائم في data/ (غير معزول — يُرفع مع persist)، لأن
+# state (bot_state.json) معزول ولا يصل بين الدورات ⇒ لو اكتفينا به لبقي
+# الصفر كل دورة فنшал على "كل دورة" بدل AI_INTERVAL_MIN. txt محايد بلا هوية.
+_STAMP_FILE = os.path.join("data", "ai_last_run.txt")
+
+
 def _last_ai_time(state):
     try:
-        return float(state.get("_ai_last_ts") or 0.0)
+        v = float(state.get("_ai_last_ts") or 0.0)
+        if v > 0:
+            return v
+    except Exception:
+        pass
+    try:
+        with open(_STAMP_FILE, "r", encoding="utf-8") as f:
+            return float((f.read() or "0").strip() or 0.0)
     except Exception:
         return 0.0
 
 
 def _set_ai_time(state):
+    now = time.time()
     try:
-        state["_ai_last_ts"] = time.time()
+        state["_ai_last_ts"] = now
+    except Exception:
+        pass
+    try:
+        os.makedirs(os.path.dirname(_STAMP_FILE), exist_ok=True)
+        with open(_STAMP_FILE, "w", encoding="utf-8") as f:
+            f.write(str(now))
     except Exception:
         pass
 
@@ -402,17 +422,23 @@ def run(state, data_dir="data"):
             result["error"] = "empty LLM reply"
             _set_ai_time(state)
             return result
-        plan_path = os.path.join(data_dir, "ai_plan.md")
-        _write(plan_path, "# AI daily plan\n\n" + text + "\n")
-        rec = _recommendations_from(text)
-        rec_path = os.path.join(data_dir, "ai_recommendations.json")
-        _write(rec_path, json.dumps({
-            "ts": time.time(),
-            "recommendations": rec,
-            "momentum_min": _extract_first_number(text),
-        }, indent=2))
-        result["plan_written"] = plan_path
-        result["recommendations"] = rec
+        # الرقم المنفَّذ في سطر مستقل داخل الخطة: الخطة (.md) الملف
+        # الدائم الذي يصل الدورة التالية، بينما json معزول ولا يصل.
+        _mm = _extract_first_number(text)
+        result["plan_written"] = os.path.join(data_dir, "ai_plan.md")
+        header = "# AI plan  ({0} UTC)".format(
+            time.strftime("%Y-%m-%d %H:%M", time.gmtime()))
+        footer = "\n\nAPPLIED_SETTING: MOMENTUM_MIN={0}\n".format(
+            _mm if _mm is not None else "1.20")
+        _write(result["plan_written"],
+               header + "\n\n" + text + footer)
+        _write(os.path.join(data_dir, "ai_recommendations.json"),
+               json.dumps({
+                   "ts": time.time(),
+                   "recommendations": _recommendations_from(text),
+                   "momentum_min": _mm,
+               }, indent=2))
+        result["momentum_min"] = _mm
         _set_ai_time(state)
         return result
     except Exception as exc:
@@ -432,41 +458,51 @@ AI_MOMENTUM_MIN_MIN = float(os.environ.get("AI_MOMENTUM_MIN_MIN", "0.50"))
 AI_MOMENTUM_MIN_MAX = float(os.environ.get("AI_MOMENTUM_MIN_MAX", "2.50"))
 
 
+def _read_recommended_momentum():
+    """توصية العقل من مصدر دائم.
+
+    الأولوية: data/ai_plan.md (ملف md غير معزول ⇒ يصل الدورة التالية عبر
+    persist) على شكل  APPLIED_SETTING: MOMENTUM_MIN=<رقم>  أو  MOMENTUM_MIN=<رقم>.
+    الاحتياط: ai_recommendations.json (معزول، يعمل داخل نفس الدورة فقط).
+    """
+    import re
+    try:
+        with open(os.path.join("data", "ai_plan.md"), "r",
+                  encoding="utf-8") as f:
+            m = re.search(r"MOMENTUM_MIN\s*=\s*(-?\d+\.?\d*)", f.read())
+            if m:
+                return float(m.group(1))
+    except Exception:
+        pass
+    rec = _read_json(os.path.join("data", "ai_recommendations.json"))
+    val = rec.get("momentum_min")
+    return float(val) if val is not None else None
+
+
 def apply_self_improvement(state):
     """تطبيق توصية العقل على config في الذاكرة (إن فُعّلت) وبصد قيم شاذة.
 
-    يقرأ data/ai_recommendations.json — إن وُجد فيه
-    {"momentum_min": <قيمة>} ضمن [min,max] طبّقه على config.MOMENTUM_MIN_USD
-    وسجّله في الحالة. أي قيمة خارج النطاق/بنية خاطئة تُهمَل بلا أثر.
-    يُعاد كل دورة — يجعل التحسين الذاتي قابلاً للتعديل والطبع.
+    يقرأ الرقم من _read_recommended_momentum() (الخطة الدائمة أولاً) —
+    إن كان ضمن [AI_MOMENTUM_MIN_MIN..MAX] طبّقه على config.MOMENTUM_MIN_USD
+    داخل الذاكرة فقط (لا ملفات ولا commit). أي قيمة خارج النطاق/بنية
+    خاطئة تُهمَل بلا أثر. يُستدعى كل دورة ⇒ الضبط يسري من الدورة التالية.
     """
     if not (AI_ON and AI_APPLY_ON):
         return {"applied": False, "reason": "self-tune disabled"}
     try:
-        rec_path = os.path.join("data", "ai_recommendations.json")
-        rec = _read_json(rec_path)
-        val = rec.get("momentum_min")
-        if val is None:
-            m = rec.get("recommendations") or []
-            if m:
-                first = str(m[0])
-                try:
-                    val = float(first.strip())
-                except Exception:
-                    val = None
+        val = _read_recommended_momentum()
         if val is None:
             return {"applied": False, "reason": "no recommendation"}
         val = float(val)
         if not (AI_MOMENTUM_MIN_MIN <= val <= AI_MOMENTUM_MIN_MAX):
             return {"applied": False,
                     "reason": "out-of-range {0:+.2f}".format(val)}
-        # في الذاكرة فقط — يجهّز للدورة التالية لا يلمس الملفات
+        # في الذاكرة فقط — لا يلمس الملفات ولاRepo
         config.MOMENTUM_MIN_USD = round(val, 2)
         state["yh_dyn"] = {"momentum_min": round(val, 2)}
-        print(f"self-improve: momentum_min -> {val:.2f} "
-              f"(range {AI_MOMENTUM_MIN_MIN}-{AI_MOMENTUM_MIN_MAX})",
-              flush=True)
+        print("self-improve: momentum_min -> {0:.2f} (range {1}-{2})".format(
+            val, AI_MOMENTUM_MIN_MIN, AI_MOMENTUM_MIN_MAX), flush=True)
         return {"applied": True, "momentum_min": round(val, 2)}
     except Exception as exc:
-        print(f"self-improve fail: {exc!r}", flush=True)
+        print("self-improve fail: {0!r}".format(exc), flush=True)
         return {"applied": False, "reason": repr(exc)}

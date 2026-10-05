@@ -1,16 +1,14 @@
-# AI daily plan
+# AI plan  (2026-10-05 16:07 UTC)
 
-**Diagnosis of XAUUSD Trading Performance:**
+1) DIAGNOSIS: The recent trades show a net loss of -9.56 USD from 40 trades, with 15 wins and 25 losses, indicating a win rate of 37.5%. The average loss per losing trade is approximately -1.92 USD, which exceeds the average gain of +0.66 USD per winning trade.
 
-1. **Losing Hours:** The majority of losses occur between 12:48 and 15:21, particularly during the 14:00-15:00 hour, indicating a potential time filter for avoiding trades during this period.
+2) WORST HOURS: 
+- 14:00 UTC: -6.56 USD
+- 15:00 UTC: -6.47 USD
+- 13:00 UTC: -5.58 USD
 
-2. **Win vs. Loss Shape:** The recent performance shows a mix of wins and losses, but losses are more significant in magnitude. The average loss appears to outweigh the average win, suggesting a net-negative strategy.
+3) WHY STOPS OVERSHOOT: The programmatic stop loss is not effectively limiting losses due to the 15-minute restart interval, causing trades to exceed the intended stop loss range.
 
-3. **Net-Negative Assessment:** The strategy is likely net-negative due to a higher frequency of larger losses compared to smaller wins. The cumulative losses in the recent trades indicate poor risk management.
+4) FIX: MOMENTUM_MIN=1.50
 
-**Recommendations:**
-- **Entry Threshold:** Consider implementing a stricter entry threshold, such as only taking trades when the price moves at least 0.5% in the desired direction before entry.
-- **Time Filter:** Avoid trading between 14:00 and 15:00, as this period shows a higher concentration of losses.
-- **SL/TP Settings:** Set a stop-loss (SL) at 1.5 times the average win (approximately 1.5-2.0 pips) and a take-profit (TP) at 2 times the average win to improve risk-reward ratio. 
-
-Implementing these changes could enhance overall trading performance.
+APPLIED_SETTING: MOMENTUM_MIN=1.5

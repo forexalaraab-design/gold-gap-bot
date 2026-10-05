@@ -1,16 +1,16 @@
 # AI daily plan
 
-**Diagnosis of Trading Performance (XAUUSD Demo)**
+**Diagnosis of Trading Performance (XAUUSD)**
 
-1. **Losing Hours**: The majority of losses occur between 04:00 and 07:00, indicating a potential unfavorable trading environment during these hours.
+1. **Losing Hours**: The majority of losses occur between 04:35 and 07:36, with a notable concentration of losses in the early morning hours (04:00 - 07:00).
 
-2. **Win vs. Loss Shape**: The strategy shows a higher frequency of wins (approximately 60% of trades) but suffers from larger losses compared to wins. The average loss is around -1.25, while the average win is approximately +0.75, leading to a net-negative performance.
+2. **Win vs. Loss Shape**: The strategy shows a mix of small wins and larger losses. Typical losses range from -0.42 to -2.44, while wins are generally smaller, peaking at 1.78. This indicates a negative risk-reward ratio.
 
-3. **Net-Negative Strategy**: The strategy is net-negative due to the disproportionate size of losses compared to wins, indicating poor risk management.
+3. **Net-Negative Strategy**: The strategy is net-negative due to a higher frequency of losses and larger loss amounts compared to wins. The total losses outweigh the total gains, leading to an overall negative performance.
 
 **Recommendations**:
-- **Entry Threshold**: Implement a minimum price movement of 0.5% before entering trades to avoid choppy market conditions.
-- **Time Filter**: Avoid trading between 04:00 and 07:00 to reduce exposure to losing hours.
-- **Stop Loss/Take Profit (SL/TP)**: Set a SL at 1.5 times the average loss (around 1.88) and a TP at 1.5 times the average win (around 1.13) to improve risk-reward ratio.
+- **Entry Threshold**: Implement a stricter entry threshold, only entering trades when the price moves at least 0.5% in the desired direction before execution.
+- **Time Filter**: Limit trading to the hours of 08:00 to 11:00, avoiding the early morning hours where losses are concentrated.
+- **SL/TP**: Set a stop-loss (SL) at 1.5x the average loss size (approx. 2.0) and a take-profit (TP) at 1.5x the average win size (approx. 1.5) to improve the risk-reward ratio. 
 
-By adjusting these parameters, the strategy can potentially enhance profitability and reduce risk exposure.
+These adjustments aim to enhance overall performance and reduce exposure during losing periods.

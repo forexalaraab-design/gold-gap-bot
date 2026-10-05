@@ -455,6 +455,12 @@ def _prompt(ctx):
         "  cooldown_minutes   0.5-30.0   wait between trades\n"
         "  blocked_hours      up to 6 UTC hours (0-23, comma list) to stop trading\n"
         "  (values outside their range are REJECTED; the stop cannot exceed 2.50.)\n"
+        "NEVER FREEZE TRADING: block ONLY hours that are NET NEGATIVE in the data.\n"
+        "A profitable hour is never blocked, and at least 8 UTC hours must always\n"
+        "stay tradeable. If unsure a hour is bad, do NOT block it. Omitting\n"
+        "blocked_hours entirely releases every hour you blocked before.\n"
+        "If a change makes recent results PROFITABLE, prefer loosening (lower\n"
+        "momentum_min / lower stop) over freezing - never stop trading for good.\n"
         "THE PAYOFF TRAP: avg win vs avg loss decides survival. If payoff < 1.0,\n"
         "you MUST raise profit_target_usd and/or cut max_loss_usd, not just raise\n"
         "momentum_min. Raising the entry threshold alone just freezes trading.\n"
@@ -549,6 +555,12 @@ def run(state, data_dir="data"):
                 "{0}={1}".format(k, v) for k, v in sorted(params.items()))
         else:
             footer += "PARAMS: (none parsed — keeping current settings)"
+        # دليل ساعات التداول: أرباح/خسائر كل ساعة UTC على كامل السجل.
+        # يقرأه الحارس فلا يُحظر إلا ساعة خاسرة، ويُبقي جدول تداول مفتوح.
+        hn = ctx.get("hour_stats_all") or []
+        if hn:
+            footer += "\nHOURNET: " + ", ".join(
+                "{0}={1:+g}/{2}".format(x["h"], x["net"], x["n"]) for x in hn)
         _write(result["plan_written"], header + "\n\n" + text + footer + "\n")
         _write(os.path.join(data_dir, "ai_recommendations.json"),
                json.dumps({
@@ -680,13 +692,104 @@ def _parse_blocked_hours(raw):
     return sorted(hours)
 
 
-def _apply_blocked_hours(raw):
-    """يطبّق ساعات الحظر (UTC 0-23) من توصية العقل، بحد أقصى 6 ساعات."""
+def _parse_hour_net(text):
+    """يقرأ سطر HOURNET من الخطة: hour=net;n=count لكل ساعة UTC.
+
+   Formato:  HOURNET: 9=+12.30/4, 14=-6.02/7
+    يُعيد {hour: net}. يُستخدم للتحقق: لا تُحظر ساعة رابحة أبداً.
+    """
+    import re
+    out = {}
+    try:
+        m = re.search(r"HOURNET:\s*(.+)", text or "")
+        if not m:
+            return out
+        for part in m.group(1).strip().split(","):
+            hm = re.match(r"\s*(\d{1,2})\s*=\s*([+-]?[\d.]+)", part)
+            if hm:
+                h = int(hm.group(1))
+                if 0 <= h <= 23:
+                    out[h] = float(hm.group(2))
+    except Exception:
+        pass
+    return out
+
+
+def _read_hour_net():
+    """أرباح/خسائر كل ساعة كما حسبها العقل آخر مرة (دائم عبر الدورات)."""
+    try:
+        with open(os.path.join("data", "ai_plan.md"), "r",
+                  encoding="utf-8") as f:
+            return _parse_hour_net(f.read())
+    except Exception:
+        return {}
+
+
+def _filter_blocked_hours(proposed, hour_net, min_free=8):
+    """يرفض حظر الساعات الرابحة، ويضمن بقاء ساعات تداول كافية.
+
+    القاعدة (طلب صريح: لا تجميد أبداً):
+      * ساعة محقّقة ربحاً موجباً لا تُحظر إطلاقاً — حاجز ضد التجميد.
+      * بعد كل الحظر (الذي اقترحه + نافذة الجلسة الثابتة) لا يقلّ عدد
+        الساعات القابلة للتداول عن min_free، وإلا نرفع أخفّ الحظر.
+    يُعيد (ساعات_محظورة, ملاحظات).
+    """
+    notes = []
+    hours = set(proposed)
+    # 1) تُحظر ساعة فقط بدليل صافي سالب مُثبت. بلا دليل ⇒ لا حظر إطلاقاً.
+    for h in sorted(hours):
+        net = hour_net.get(h)
+        if net is None:
+            hours.discard(h)
+            notes.append("hour {0} has no data - NOT blocked".format(h))
+        elif net > 0:
+            hours.discard(h)
+            notes.append("hour {0} profitable ({1:+.2f}) - NOT blocked".format(
+                h, net))
+    if not hours:
+        return set(), notes
+    # نافذة الجلسة الثابتة (16-22 افتراضياً) تُحسب كمحظورة ضمنياً
+    try:
+        sw = float(getattr(config, "SESSION_BLOCK_START_HOUR", 16.0))
+        ew = float(getattr(config, "SESSION_BLOCK_END_HOUR", 22.0))
+        session = set()
+        if getattr(config, "SESSION_BLOCK_ON", False):
+            if sw <= ew:
+                session = set(range(int(sw), max(int(sw), int(ew))))
+            else:
+                session = set(range(0, int(ew))) | set(range(int(sw), 24))
+    except Exception:
+        session = set()
+
+    def free_count(hs):
+        return 24 - len(hs | session)
+    # 2) إن ضاقت ساعات التداول، نرفع الأخفّolé 먼저 (الأقلّ ضرراً) لا الأسوأ.
+    guard = 0
+    while free_count(hours) < min_free and hours and guard < 24:
+        guard += 1
+        mildest = max(hours, key=lambda h: hour_net.get(h, 0.0))
+        hours.discard(mildest)
+        notes.append("hour {0} unblocked ({1:+.2f}) to keep >= {2} "
+                     "tradeable hours".format(
+                         mildest, hour_net.get(mildest, 0.0), min_free))
+    if free_count(hours) < min_free:
+        notes.append("all blocked-hours rejected - keep trading always on")
+        return set(), notes
+    return hours, notes
+
+
+def _apply_blocked_hours(raw, hour_net=None, min_free=8):
+    """يطبّق ساعات الحظر بعد التحقق منها (لا تجميد، لا حظر لساعة رابحة)."""
     hours = _parse_blocked_hours(raw)
     if hours is None:
         return None
+    hours, notes = _filter_blocked_hours(
+        hours, hour_net if hour_net is not None else _read_hour_net(),
+        min_free)
+    for n in notes:
+        print("blocked_hours guard: " + n, flush=True)
     config.AI_BLOCKED_HOURS = set(hours)
-    return hours
+    return sorted(hours)
 
 
 def _read_recommended_params():
@@ -752,6 +855,7 @@ def apply_self_improvement(state):
         return {"applied": False, "reason": "self-tune disabled"}
     try:
         rec = _read_recommended_params()
+        hour_net = _read_hour_net()
         if not rec:
             return {"applied": False, "reason": "no recommendation"}
         applied, skipped = {}, {}
@@ -765,11 +869,17 @@ def apply_self_improvement(state):
             setattr(config, target, safe)
             applied[key] = safe
         if "blocked_hours" in rec:
-            bh = _apply_blocked_hours(rec["blocked_hours"])
+            bh = _apply_blocked_hours(rec["blocked_hours"], hour_net)
             if bh is not None:
                 applied["blocked_hours"] = bh
             else:
                 skipped["blocked_hours"] = rec["blocked_hours"]
+        else:
+            # العقل لم يذكر حظراً ⇒ يطلق كل ما حظره سابقاً (لا تجميد دائم)
+            if getattr(config, "AI_BLOCKED_HOURS", None):
+                config.AI_BLOCKED_HOURS = set()
+                applied["blocked_hours"] = []
+                print("blocked_hours released - brain proposed none", flush=True)
         state["yh_dyn"] = dict(applied)
         state["ai_applied"] = applied
         if applied:

@@ -424,6 +424,7 @@ def _build_context(state):
         "web_research": _fetch_web_context(),
         "backtest_baseline": _current_params_metrics(),
         "backtest_candidates": _measured_candidates(),
+        "walk_forward": _walk_forward_evidence(),
         "lessons_learned": _lab.knowledge_tail(30),
         "professionalism": _lab.professionalism(),
         "high_impact_events_utc": _upcoming_events(),
@@ -453,6 +454,19 @@ def _current_params_metrics():
     except Exception as exc:
         print("baseline metrics warn: {0!r}".format(exc), flush=True)
         return {"metrics": {}}
+
+
+def _walk_forward_evidence():
+    """حكم خارج العيّنة: يُعلّم على الماضي ويُقاس على ما لم يره.
+
+    هذا أقوى دليل ضدّ overfit. إن قال overfit فالشبكة الحالية تلتقط ضجيجاً،
+    ويجب conservatism: إبقاء المعاملات الحيّة كما هي.
+    """
+    try:
+        return _lab.walk_forward(blocked_hours=_live_params().get(
+            "blocked_hours"))
+    except Exception:
+        return {"ok": False, "reason": "unavailable"}
 
 
 def _measured_candidates():
@@ -680,6 +694,18 @@ def run(state, data_dir="data"):
         cv = _critique_verdict(critique)
         margin = (float(cand_m.get("expectancy") or 0.0)
                   - float(base_m.get("expectancy") or 0.0))
+        # حكم خارج العيّنة: إن كانت الشبكة كلها overfit فلا نغيّر شيئاً.
+        # backtest الكامل قد يكون سعة بيانات (in-sample) ⇒ نطلب OOS.
+        wf = ctx.get("walk_forward") or {}
+        if (not rejected) and wf.get("ok") and wf.get("verdict") == "overfit":
+            rejected = True
+            verdict_note = "walk-forward says OVERFIT - keeping live params"
+            params = _live_params()
+            result["rejected_params"] = True
+        result["walk_forward"] = {k: wf.get(k) for k in
+                                  ("verdict", "mean_oos_expectancy",
+                                   "consistency", "positive_folds",
+                                   "total_folds")}
         if (not rejected) and cv == "VETO" and margin < 0.10:
             rejected = True
             verdict_note = ("critic VETO with thin margin ({0:+.3f})".format(
@@ -720,6 +746,10 @@ def run(state, data_dir="data"):
             cand_m.get("net"), base_m.get("net"))
         footer += "\nCRITIC(Pass2): {0} | improvement margin={1}".format(
             _critique_verdict(critique), round(margin, 3))
+        if wf.get("ok"):
+            footer += "\nWALK_FORWARD(OOS): {0} | mean OOS exp={1} | {2}/{3} folds positive".format(
+                wf.get("verdict"), wf.get("mean_oos_expectancy"),
+                wf.get("positive_folds"), wf.get("total_folds"))
         _prof = ctx.get("professionalism") or {}
         footer += "\nPROFESSIONALISM: {0}/100 ({1})".format(
             _prof.get("score"), _prof.get("verdict"))

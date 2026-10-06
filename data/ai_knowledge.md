@@ -5,3 +5,5 @@
 - [2026-10-06 00:10] ACCEPTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.0,momentum_min=1.2,profit_target_usd=3.6 -> validated: exp 0.466 vs -0.059, payoff 1.655 vs 0.721, n=209
 - [2026-10-06 00:10] REVIEW pass1=None | critic=FLAW: The proposed changes do not address the underlying negative expectancy and could lead to a false sense of security based on backtesting alone.   OVERFIT_RISK: The selected parameters appear to be outliers with sign
 - [2026-10-06 00:10] ACCEPTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.0,momentum_min=1.2,profit_target_usd=3.6 -> validated: exp 0.466 vs -0.059, payoff 1.655 vs 0.721, n=209
+- [2026-10-06 01:03] REVIEW pass1=None | critic=FLAW: The proposed changes to profit target and max loss may lead to reduced trade frequency, which could exacerbate the existing negative expectancy and missed opportunities during high volatility.   OVERFIT_RISK: The s
+- [2026-10-06 01:03] ACCEPTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.0,momentum_min=1.2,profit_target_usd=3.6 -> validated: exp 0.466 vs -0.059, payoff 1.655 vs 0.721, n=209

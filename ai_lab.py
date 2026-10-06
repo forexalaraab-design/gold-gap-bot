@@ -102,6 +102,70 @@ def load_recent_feed():
 # ---------------------------------------------------------------------------
 # 2) الاختبار الخلفي
 # ---------------------------------------------------------------------------
+def walk_forward(candidates=None, blocked_hours=None, folds=3, min_train=60):
+    """تحقّق walk-forward حقيقي: تعلّم على الماضي، يُقاس على المستقبل.
+
+    هذا هو الاختبار الوحيد الذي يكشف overfitting بصدق. backtest الكامل يستطيع
+    أن "يفضح" سعة البيانات: معاملات تبدو ممتازة على كامل السجل وقد تكون
+    عشوائية على فترة لم تُرَ من قبل.
+
+    نافذة متوسّعة: كل طيّة تتدرّب على كل ما قبلها وتُقاس على الكتلة التالية
+    التي لم يرها النموذج قط. النتيجة = وسم OOS الحقيقي ⇒ به يُحكم على
+    الموثوقية، لا على backtest الكامل.
+    """
+    rows = load_history()
+    if candidates is None:
+        candidates = candidate_grid()
+    if len(rows) < (min_train + folds * 20):
+        return {"ok": False, "reason": "not enough history", "n": len(rows)}
+    size = len(rows) // (folds + 1)
+    if size < 20:
+        return {"ok": False, "reason": "folds too small", "n": len(rows)}
+    folds_out = []
+    for i in range(1, folds + 1):
+        train = rows[:i * size]
+        test = rows[i * size:(i + 1) * size]
+        if len(train) < min_train or len(test) < 10:
+            continue
+        scored = []
+        for c in candidates:
+            # candidate_grid يُرجع مغلّفات metrics داخلها "params"
+            cc = dict(c.get("params") if isinstance(c, dict) and
+                      "params" in c else c)
+            if blocked_hours:
+                cc["blocked_hours"] = list(blocked_hours)
+            bt = backtest(cc, train)
+            scored.append((float(bt.get("expectancy") or 0.0), cc))
+        scored.sort(reverse=True, key=lambda t: t[0])
+        if not scored:
+            continue
+        best_exp, best_c = scored[0]
+        oos = backtest(best_c, test)
+        folds_out.append({
+            "fold": i, "train_n": len(train), "test_n": len(test),
+            "picked": {k: best_c.get(k) for k in
+                       ("momentum_min", "profit_target_usd", "max_loss_usd")},
+            "train_expectancy": round(best_exp, 3),
+            "oos_expectancy": round(float(oos.get("expectancy") or 0.0), 3),
+            "oos_net": round(float(oos.get("net") or 0.0), 2),
+            "oos_payoff": round(float(oos.get("payoff") or 0.0), 3),
+        })
+    if not folds_out:
+        return {"ok": False, "reason": "no usable folds", "n": len(rows)}
+    exp = [f["oos_expectancy"] for f in folds_out]
+    pos = sum(1 for e in exp if e > 0)
+    return {
+        "ok": True,
+        "folds": folds_out,
+        "mean_oos_expectancy": round(sum(exp) / len(exp), 3),
+        "positive_folds": pos,
+        "total_folds": len(folds_out),
+        "consistency": round(pos / len(folds_out), 2),
+        "verdict": ("robust" if pos == len(folds_out) else
+                    "mixed" if pos > 0 else "overfit"),
+    }
+
+
 def _clip_outcome(realized, target, stop):
     """تقريب صادق لتيجة صفقة تحت هدف/وقف جديدين.
 

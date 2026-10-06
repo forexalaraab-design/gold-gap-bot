@@ -573,6 +573,39 @@ def _recommendations_from(text):
     return out
 
 
+def _critique_verdict(critique):
+    """يستخرج حكم الناقد: VETO / APPROVE / None (إن لم يذكر)."""
+    t = (critique or "").upper()
+    if "VETO" in t:
+        return "VETO"
+    if "APPROVE" in t:
+        return "APPROVE"
+    return None
+
+
+def _critique_prompt(ctx, first_pass):
+    """نقد مستقل للقرار الأول (Pass 2) — عقل ناقد لا يوافق تلقائياً."""
+    base = _current_params_metrics()
+    return (
+        "You are a SKEPTICAL risk manager reviewing another trader's hourly\n"
+        "decision on a live XAUUSD bot. Your job is to find the flaw, not to\n"
+        "agree. The proposal below is auto-backtested and is DISCARDED unless\n"
+        "it beats the live baseline on expectancy, net, payoff and loss streak.\n"
+        "FIRST PASS DECISION:\n" + (first_pass or "")[:1200] +
+        "\n\nLIVE BASELINE (measured): " + json.dumps(base.get("metrics") or {}) +
+        "\nMEASURED CANDIDATES (best first): " + json.dumps(
+            ctx.get("backtest_candidates") or [])[:1200] +
+        "\nEVENTS (high impact): " + json.dumps(
+            ctx.get("high_impact_events_utc") or [])[:400] +
+        "\n\nAnswer in exactly this shape:\n"
+        "FLAW: one sentence naming the strongest objection to the proposal.\n"
+        "OVERFIT_RISK: one sentence - is the pick a lone outlier or supported\n"
+        "  by its neighbours in the measured list?\n"
+        "VERDICT: exactly one of  APPROVE  /  VETO  then a reason.\n"
+        "Keep it under 90 words. No disclaimers.\n"
+    )
+
+
 def _extract_first_number(text):
     """ظٹط³طھط®ط±ط¬ ظ‚ظٹظ…ط© MOMENTUM_MIN= ظ…ظ† ظ†طµ ط§ظ„ط¹ظ‚ظ„ (ط£ظˆ None).
 
@@ -600,7 +633,22 @@ def run(state, data_dir="data"):
             system="You are a risk analyst. Be concrete and short. "
                   "Answer in English." + AI_SYS_HINT,
         )
-        result = {"ran": True, "ts": time.time()}
+        # ---- مرحلة نقد:Pass 2. عقل ناقد مستقل يفحص第一条分析与 بوابة
+        # الاختبار الخلفي قبل التنفيذ. هذا هو الفرق between "قرر" و"-trade
+        # ما بعد تفكير". إن发现Pass 1 لا撑得住，则 we retain current.
+        critique = ""
+        if text:
+            critique = _call_llm(
+                _critique_prompt(ctx, text),
+                system="You are a skeptical risk manager reviewing another "
+                       "trader's decision. Find the flaw. Be brief." +
+                       AI_SYS_HINT,
+            ) or ""
+            _lab.knowledge_append(
+                "REVIEW pass1={0} | critic={1}".format(
+                    _extract_first_number(text),
+                    (critique or "n/a")[:220].replace("\n", " ")))
+        result = {"ran": True, "ts": time.time(), "critique": critique[:400]}
         if not text:
             result["error"] = "empty LLM reply"
             _set_ai_time(state)
@@ -626,6 +674,20 @@ def run(state, data_dir="data"):
         # ---- بوابة الاختبار: لا يُكتب إلا ما أثبت تفوّقه على التاريخ ----
         verdict, cand_m, base_m, verdict_note = _validate_params(params)
         rejected = verdict is not True
+        # حكم الناقد (Pass 2): يعترض فقط إن كانت الأفضلية هامشية. أفضلية
+        # كبيرة مُقاسة (مثلاً 0.40 مقابل -0.06) تتجاوز الاعتراض الشكلي؛
+        # اعتراضٌ على تغييرٍ ضعيف الأثر = سبب كافٍ للاحتفاظ بالحيّ.
+        cv = _critique_verdict(critique)
+        margin = (float(cand_m.get("expectancy") or 0.0)
+                  - float(base_m.get("expectancy") or 0.0))
+        if (not rejected) and cv == "VETO" and margin < 0.10:
+            rejected = True
+            verdict_note = ("critic VETO with thin margin ({0:+.3f})".format(
+                margin))
+            params = _live_params()
+            result["rejected_params"] = True
+        result["critique_verdict"] = cv
+        result["improvement_margin"] = round(margin, 3)
         result["backtest"] = {"candidate": cand_m, "baseline": base_m,
                               "verdict": verdict, "note": verdict_note}
         if rejected:
@@ -656,6 +718,8 @@ def run(state, data_dir="data"):
             "PASS" if not rejected else "REJECTED: " + str(verdict_note),
             cand_m.get("expectancy"), base_m.get("expectancy"),
             cand_m.get("net"), base_m.get("net"))
+        footer += "\nCRITIC(Pass2): {0} | improvement margin={1}".format(
+            _critique_verdict(critique), round(margin, 3))
         _prof = ctx.get("professionalism") or {}
         footer += "\nPROFESSIONALISM: {0}/100 ({1})".format(
             _prof.get("score"), _prof.get("verdict"))

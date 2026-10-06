@@ -34,6 +34,7 @@ import os
 import time
 
 import config
+import ai_lab as _lab
 
 AI_ON = os.environ.get("AI_ON", "0") == "1"
 AI_PROVIDER = os.environ.get("AI_PROVIDER", "openai").lower()
@@ -421,8 +422,71 @@ def _build_context(state):
         "balance_last": state.get("last_balance"),
         "news": _fetch_news_headlines(),
         "web_research": _fetch_web_context(),
+        "backtest_baseline": _current_params_metrics(),
+        "backtest_candidates": _measured_candidates(),
+        "lessons_learned": _lab.knowledge_tail(30),
+        "professionalism": _lab.professionalism(),
+        "high_impact_events_utc": _upcoming_events(),
     }
     return ctx
+
+
+def _current_params_metrics():
+    """مقاييس الاختبار الخلفي للمعاملات الحيّة الحالية = خط الأساس.
+
+    يُقارن بها أي اقتراح جديد قبل تطبيقه.
+    """
+    try:
+        cur = {
+            "momentum_min": round(float(config.MOMENTUM_MIN_USD), 2),
+            "profit_target_usd": round(float(config.PROFIT_TARGET_USD), 2),
+            "max_loss_usd": round(float(config.MAX_LOSS_USD), 2),
+            "blocked_hours": sorted(
+                getattr(config, "AI_BLOCKED_HOURS", None) or set()),
+        }
+        rows = _lab.load_history()
+        if len(rows) < 30:
+            return {"metrics": {}, "note": "history too small",
+                    "sample": len(rows)}
+        return {"params": cur, "sample": len(rows),
+                "metrics": _lab.backtest(cur, rows)}
+    except Exception as exc:
+        print("baseline metrics warn: {0!r}".format(exc), flush=True)
+        return {"metrics": {}}
+
+
+def _measured_candidates():
+    """خيارات مُقاسة على التاريخ (لا أرقام متخيّلة) — يختار منها العقل."""
+    try:
+        rows = _lab.load_history()
+        if len(rows) < 30:
+            return []
+        base = _live_params()
+        out = []
+        for m in _lab.candidate_grid(rows, base_blocked=base["blocked_hours"]):
+            out.append({
+                "params": "momentum_min={0}, profit_target_usd={1}, "
+                          "max_loss_usd={2}".format(
+                              m["params"]["momentum_min"],
+                              m["params"]["profit_target_usd"],
+                              m["params"]["max_loss_usd"]),
+                "n": m["n"], "net": m["net"], "win_rate": m["win_rate"],
+                "payoff": m["payoff"], "expectancy": m["expectancy"],
+                "profit_factor": m["profit_factor"],
+            })
+        return out
+    except Exception as exc:
+        print("candidates warn: {0!r}".format(exc), flush=True)
+        return []
+
+
+def _upcoming_events(days=3):
+    """أحداث USD عالية التأثير القادمة (NFP/CPI/FOMC) بصيغة نصية."""
+    try:
+        evs = _lab.fetch_calendar()
+        return evs[:days * 3]
+    except Exception:
+        return []
 
 
 def _num(v):
@@ -466,7 +530,20 @@ def _prompt(ctx):
         "momentum_min. Raising the entry threshold alone just freezes trading.\n"
         "Use hour_stats_all to block the losing UTC hours, reason_stats_all to see\n"
         "where losses leak, web_research/news for market context, and\n"
-        "own_journal_tail + params_in_force to correct your OWN past mistakes.\n"
+        "own_journal_tail + params_in_force + lessons_learned to correct your\n"
+        "OWN past mistakes. Never repeat a proposal that lessons_learned shows\n"
+        "was REJECTED by the backtest.\n"
+        "CHECK high_impact_events_utc (NFP/CPI/FOMC): real traders stand aside\n"
+        "around those, so prefer tighter stops on such days, not frozen hours.\n"
+        "backtest_candidates are REAL measured results on the full history, best\n"
+        "first (net/win_rate/payoff/expectancy/profit_factor per option).\n"
+        "backtest_baseline is what is live now, measured exactly the same way.\n"
+        "RULES OF A PROFESSIONAL: take your numbers FROM backtest_candidates -\n"
+        "never invent untested values. Prefer an option whose NEIGHBOURS in that\n"
+        "list are also strong: that means robustness, not a lucky cell. If every\n"
+        "option is worse than backtest_baseline, keep momentum_min unchanged.\n"
+        "Your proposal is auto-backtested and DISCARDED if it fails to beat the\n"
+        "live baseline, so only propose what those numbers can defend.\n"
         "REPLY IN THIS EXACT SHAPE:\n"
         "1) DIAGNOSIS: 2 sentences citing real numbers.\n"
         "2) WHAT YOU CHANGED VS LAST HOUR: one sentence.\n"
@@ -546,6 +623,20 @@ def run(state, data_dir="data"):
         if not params:
             _mm = _extract_first_number(text)
             params = {"momentum_min": _mm} if _mm is not None else {}
+        # ---- بوابة الاختبار: لا يُكتب إلا ما أثبت تفوّقه على التاريخ ----
+        verdict, cand_m, base_m, verdict_note = _validate_params(params)
+        rejected = verdict is not True
+        result["backtest"] = {"candidate": cand_m, "baseline": base_m,
+                              "verdict": verdict, "note": verdict_note}
+        if rejected:
+            _lab.knowledge_append(
+                "REJECTED {0} -> {1}".format(
+                    ",".join("{0}={1}".format(k, v)
+                             for k, v in sorted(params.items())), verdict_note))
+            print("backtest gate: REJECTED ({0}) -> keeping live params".format(
+                verdict_note), flush=True)
+            params = _live_params()
+            result["rejected_params"] = True
         result["plan_written"] = os.path.join(data_dir, "ai_plan.md")
         header = "# AI plan  ({0} UTC)".format(
             time.strftime("%Y-%m-%d %H:%M", time.gmtime()))
@@ -561,6 +652,19 @@ def run(state, data_dir="data"):
         if hn:
             footer += "\nHOURNET: " + ", ".join(
                 "{0}={1:+g}/{2}".format(x["h"], x["net"], x["n"]) for x in hn)
+        footer += "\nBACKTEST_GATE: {0} | cand exp={1} baseline exp={2} | cand net={3} baseline net={4}".format(
+            "PASS" if not rejected else "REJECTED: " + str(verdict_note),
+            cand_m.get("expectancy"), base_m.get("expectancy"),
+            cand_m.get("net"), base_m.get("net"))
+        _prof = ctx.get("professionalism") or {}
+        footer += "\nPROFESSIONALISM: {0}/100 ({1})".format(
+            _prof.get("score"), _prof.get("verdict"))
+        try:
+            gr = _lab.graduation_report()
+            footer += "\nGRADUATION: {0}/{1} checks | {2} | live-account switch is MANUAL by design".format(
+                gr["passed"], gr["total"], gr["verdict"])
+        except Exception:
+            pass
         _write(result["plan_written"], header + "\n\n" + text + footer + "\n")
         _write(os.path.join(data_dir, "ai_recommendations.json"),
                json.dumps({
@@ -776,6 +880,45 @@ def _filter_blocked_hours(proposed, hour_net, min_free=8):
         notes.append("all blocked-hours rejected - keep trading always on")
         return set(), notes
     return hours, notes
+
+
+def _live_params():
+    """المعاملات الحيّة حالياً — تُستخدم كخط أساس وكمحفوظ عند رفض اقتراح."""
+    return {
+        "momentum_min": round(float(getattr(config, "MOMENTUM_MIN_USD", 1.20)), 2),
+        "profit_target_usd": round(
+            float(getattr(config, "PROFIT_TARGET_USD", 1.60)), 2),
+        "max_loss_usd": round(float(getattr(config, "MAX_LOSS_USD", 2.0)), 2),
+        "blocked_hours": sorted(
+            getattr(config, "AI_BLOCKED_HOURS", None) or set()),
+    }
+
+
+def _validate_params(candidate):
+    """بوابة الاختبار الخلفي — لا مخاطرة على اقتراح غير مُثبت.
+
+    تُرجع (مقبول؟, مقاييس_المرشح, مقاييس_الأساس, سبب).
+    basal = المعاملات الحيّة (خط الأساس). أي عجز في العيّنة أو الأفضلية
+    ⇒ رفضٌ واحتفاظ بما هو قائم.
+    """
+    rows = _lab.load_history()
+    base = _live_params()
+    if len(rows) < 30:
+        return (False, {}, {},
+                "history too small ({0} trades) - keep live params".format(
+                    len(rows)))
+    try:
+        cand_m = _lab.backtest(candidate, rows)
+        base_m = _lab.backtest(base, rows)
+    except Exception as exc:
+        return False, {}, {}, "backtest error: {0!r}".format(exc)
+    ok, why = _lab.compare(cand_m, base_m)
+    if ok:
+        _lab.knowledge_append(
+            "ACCEPTED {0} -> {1}".format(
+                ",".join("{0}={1}".format(k, v)
+                         for k, v in sorted(candidate.items())), why))
+    return ok, cand_m, base_m, why
 
 
 def _apply_blocked_hours(raw, hour_net=None, min_free=8):

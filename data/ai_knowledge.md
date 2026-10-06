@@ -1,0 +1,3 @@
+- [2026-10-06 00:03] ACCEPTED max_loss_usd=1.2,momentum_min=1.2,profit_target_usd=2.8 -> validated: exp 0.286 vs -0.059, payoff 1.291 vs 0.721, n=329
+- [2026-10-06 00:03] ACCEPTED max_loss_usd=1.8,momentum_min=1.4,profit_target_usd=2.8 -> validated: exp 0.097 vs -0.059, payoff 0.912 vs 0.721, n=326
+- [2026-10-06 00:08] ACCEPTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.0,momentum_min=1.2,profit_target_usd=3.6 -> validated: exp 0.466 vs -0.059, payoff 1.655 vs 0.721, n=209

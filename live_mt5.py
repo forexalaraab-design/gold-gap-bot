@@ -176,6 +176,16 @@ def _entry_decision(state, result, stats):
     cooldown_left = state.get("cooldown_until", 0) - now_ts
     in_session_now = _main.in_session(datetime.now(timezone.utc))
     quality_session_now = _main.in_quality_session(datetime.now(timezone.utc))
+    # نافذة حَبْب الأداث عالية التأثير (NFP/CPI/FOMC): متداول محترف
+    # يقف جانباً 20د قبل و25د بعد الخبر.Events gap-line عيّنات.
+    try:
+        import ai_lab as _lab
+        news_blocked, _ev = _lab.event_blackout()
+    except Exception:
+        news_blocked, _ev = False, None
+    if news_blocked:
+        print("news blackout: {0}".format(
+            (_ev or {}).get("title", "high-impact")), flush=True)
 
     can_open = (
         config.MODE == "trade"
@@ -187,6 +197,7 @@ def _entry_decision(state, result, stats):
         and cooldown_left <= 0
         and in_session_now
         and quality_session_now
+        and not news_blocked
         and result.get("platform_jump", 0.0) < config.PRICE_JUMP_ANOMALY_USD
         and not trend_against
         and not same_side_blocked
@@ -198,6 +209,7 @@ def _entry_decision(state, result, stats):
             "pause_open" if config.PAUSE_OPEN else
             "session_blocked" if not quality_session_now else
             "out_session" if not in_session_now else
+            "high_impact_news" if news_blocked else
             "same_side_loss" if same_side_blocked else
             "spread_wide" if spread_wide else
             "cooldown" if cooldown_left > 0 else

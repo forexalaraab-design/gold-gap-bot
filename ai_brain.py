@@ -430,6 +430,9 @@ def _build_context(state):
         "honest_reality": _lab.honest_eval(),
         "signal_coverage": _lab.signal_coverage(),
         "signal_edge": _lab.signal_edge(),
+        "signal_optimal_momentum": _lab.signal_optimal_momentum(),
+        "live_stop_controller": _lab.live_controller(
+            current_max_loss=_live_params()["max_loss_usd"]),
         "walk_forward": _walk_forward_evidence(),
         "lessons_learned": _lab.knowledge_tail(30),
         "professionalism": _lab.professionalism(),
@@ -741,6 +744,18 @@ def run(state, data_dir="data"):
                 verdict_note), flush=True)
             params = _keep_hours_keep_live(params)
             result["rejected_params"] = True
+        # ---- الضبط الذاتي للوقف من النتائج الحيّة (تلقائي، بلا سؤال) ----
+        # يعمل حتى قبل تغطية الإشارة الكاملة لأنه يعتمد على ما حدث فعلاً،
+        # وهو أصدق من أي اختبار تاريخي. بحدود AI_BOUNDS وسقف 2.50.
+        ctrl = ctx.get("live_stop_controller") or {}
+        if ctrl.get("ok") and ctrl.get("proposed") is not None:
+            _new = _clamp_param("max_loss_usd", ctrl["proposed"])
+            _cur = float((params or {}).get("max_loss_usd") or 0)
+            if _new is not None and abs(float(_new) - _cur) > 1e-9:
+                params["max_loss_usd"] = _new
+                result["stop_controller"] = ctrl
+                print("stop auto-tune: {0} -> {1} ({2})".format(
+                    _cur, _new, ctrl.get("why")), flush=True)
         result["plan_written"] = os.path.join(data_dir, "ai_plan.md")
         header = "# AI plan  ({0} UTC)".format(
             time.strftime("%Y-%m-%d %H:%M", time.gmtime()))
@@ -766,6 +781,10 @@ def run(state, data_dir="data"):
             footer += "\nWALK_FORWARD(OOS): {0} | mean OOS exp={1} | {2}/{3} folds positive".format(
                 wf.get("verdict"), wf.get("mean_oos_expectancy"),
                 wf.get("positive_folds"), wf.get("total_folds"))
+        footer += "\nSTOP_AUTO_TUNE: avg_win={0} avg_loss={1} payoff={2} n={3} | {4}".format(
+            (ctrl or {}).get("avg_win"), (ctrl or {}).get("avg_loss"),
+            (ctrl or {}).get("payoff"), (ctrl or {}).get("n"),
+            (ctrl or {}).get("why") or (ctrl or {}).get("reason"))
         _prof = ctx.get("professionalism") or {}
         footer += "\nPROFESSIONALISM: {0}/100 ({1})".format(
             _prof.get("score"), _prof.get("verdict"))
@@ -1039,7 +1058,6 @@ def _validate_params(candidate):
                     len(rows)))
     cov = _lab.signal_coverage(rows)
     if cov.get("with_signal", 0) < _lab.MIN_SIGNAL_TRADES:
-        # نحتفظ بما هو حيّ لكل ما لا يمكن قياسه honestly
         honest = _lab.honest_eval(rows)
         return (False, {}, {},
                 "no real signal data ({0}/{1} trades carry catch_up, need "
@@ -1048,11 +1066,13 @@ def _validate_params(candidate):
                     cov.get("with_signal"), cov.get("rows"),
                     _lab.MIN_SIGNAL_TRADES, honest.get("net"),
                     honest.get("payoff"), honest.get("n")))
+    # البيانات حقيقية كافية ⇒ التخ-tuning الذاتي يُفتح تلقائياً بلا سؤال.
+    # الاختبار الصادق: يرشّح بالإشارة الحقيقية وبلا قصّ.
     try:
-        cand_m = _lab.backtest(candidate, rows)
-        base_m = _lab.backtest(base, rows)
+        cand_m = _lab.honest_backtest(candidate, rows)
+        base_m = _lab.honest_backtest(base, rows)
     except Exception as exc:
-        return False, {}, {}, "backtest error: {0!r}".format(exc)
+        return False, {}, {}, "honest backtest error: {0!r}".format(exc)
     ok, why = _lab.compare(cand_m, base_m)
     if ok:
         _lab.knowledge_append(

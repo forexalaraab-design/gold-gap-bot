@@ -270,6 +270,154 @@ def signal_edge(rows=None):
             "by_signal_strength": prof}
 
 
+def honest_backtest(params, rows=None, use_session=True):
+    """اختبار **صادق**: يرشّح بالإشارة الحقيقية (catch_up) ويستخدم
+    النتائج الفعلية بلا أي قصّ.
+
+    هذا هو الاختبار الشرعي الوحيد المتاح: نعرف متى دخلنا وبماذا، ونعرف
+    النتيجة الفعلية. لا نعرف مسار السعر داخل الصفقة، لذلك لا يمكن محاكاة
+    تغيير الهدف أو الوقف — fact لا يُخترع.
+    """
+    if rows is None:
+        rows = load_history()
+    mom = float((params or {}).get("momentum_min") or 0.0)
+    blocked = set((params or {}).get("blocked_hours") or [])
+    sw = ew = None
+    if use_session:
+        try:
+            import config
+            if getattr(config, "SESSION_BLOCK_ON", False):
+                sw = float(getattr(config, "SESSION_BLOCK_START_HOUR", 16.0))
+                ew = float(getattr(config, "SESSION_BLOCK_END_HOUR", 22.0))
+        except Exception:
+            sw = ew = None
+
+    def in_session(h):
+        if sw is None or h is None:
+            return False
+        if sw <= ew:
+            return sw <= h < ew
+        return h >= sw or h < ew
+
+    kept, skipped, no_signal = [], 0, 0
+    for r in rows:
+        cu = r.get("catch_up")
+        if cu is None:
+            no_signal += 1
+            continue
+        h = r.get("hour")
+        if h is not None and (h in blocked or in_session(h)):
+            skipped += 1
+            continue
+        if abs(float(cu)) < mom:
+            skipped += 1
+            continue
+        kept.append(float(r["pnl"]))
+    m = _metrics(kept, skipped)
+    m["source"] = "real_signal_unclipped"
+    m["no_signal_rows"] = no_signal
+    return m
+
+
+def signal_optimal_momentum(rows=None, steps=None):
+    """أفضل عتبة دخول من **البيانات الحقيقية** — منحنى صاعد نزولاً.
+
+    نقيس: عند كل عتبة، ما صافي/توقع الصفقات التي تجاوزتها فعلاً.
+   """
+    if rows is None:
+        rows = load_history()
+    sig = [r for r in rows if r.get("catch_up") is not None]
+    if len(sig) < MIN_SIGNAL_TRADES:
+        return {"ok": False, "reason": "need {0} signalled trades, have {1}".format(
+            MIN_SIGNAL_TRADES, len(sig))}
+    steps = steps or (0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.4, 2.8)
+    out = []
+    for thr in steps:
+        m = honest_backtest({"momentum_min": thr}, rows)
+        if m["n"] >= 10:
+            out.append({"threshold": thr, "n": m["n"], "net": m["net"],
+                        "win_rate": m["win_rate"], "payoff": m["payoff"],
+                        "expectancy": m["expectancy"]})
+    if not out:
+        return {"ok": False, "reason": "no usable threshold"}
+    best = max(out, key=lambda r: (r["expectancy"] or 0))
+    return {"ok": True, "curve": out, "best": best,
+            "signal_rows": len(sig)}
+
+
+def live_controller(rows=None, current_max_loss=1.20, min_trades=15,
+                   window=25):
+    """مغلق حلقي على النتائج **الحيّة**: يضبط الوقف من الخسارة الفعلية.
+
+    لا يمكن اختبار الهدف/الوقف على التاريخ (لا مسار سعر)، فالحكم عليهما
+    يكون على نتيجة الصفقات التي حدثت فعلاً.
+
+    نافذة حديثة فقط (آخر `window` صفقة): حكمُ إعدادٍ جديد لا يُبنى على
+    نتائج إعدادٍ قديم. أول إطلاق (2026-10-06) تعلّم من 626 صفقة معظمها
+    بلا وقف على السيرفر، فاقترح شدّاً مشدوداً بلا معنى — خطأ قياس زمني.
+
+    يشدّد الوقف إن كانت الخسارة تتجاوزه، ويعيده للخلف إن تجاوز الربح
+    الخسارة بفارق واضح. كل خطوة bounded. بلا سؤال ولا موافقة.
+    """
+    if rows is None:
+        rows = load_recent_feed()
+    recent = list(rows)[-int(window):] if window else list(rows)
+    pnls = []
+    for r in recent:
+        p = r.get("pnl", r.get("pnl_usd"))
+        try:
+            pnls.append(float(p))
+        except (TypeError, ValueError):
+            continue
+    if len(pnls) < min_trades:
+        return {"ok": False, "reason": "only {0} live trades".format(len(pnls)),
+                "n": len(pnls)}
+    w = [p for p in pnls if p > 0]
+    l = [p for p in pnls if p <= 0]
+    if not l:
+        return {"ok": False, "reason": "no losses yet", "n": len(pnls)}
+    avg_w = sum(w) / len(w) if w else 0.0
+    avg_l = abs(sum(l) / len(l))
+    payoff = (avg_w / avg_l) if avg_l else 0.0
+    breach = avg_l / float(current_max_loss or 1.0)
+    target = 1.60
+    try:
+        import config
+        target = float(getattr(config, "PROFIT_TARGET_USD", 1.60))
+    except Exception:
+        pass
+    winners_starved = avg_w < 0.90 * target
+    if breach > 1.15:
+        # الخسارة تتجاوز السقف ⇒ السقف غير مُنفَّذ ⇒ شدّه
+        proposed = round(max(0.80, float(current_max_loss) - 0.30), 2)
+        why = ("avg loss {0:.2f} exceeds cap {1:.2f} by {2:.0%} -> the stop "
+               "is NOT being enforced, tighten".format(
+                   avg_l, current_max_loss, breach - 1))
+    elif payoff < 1.0 and winners_starved:
+        # الخسارة ضمن السقف والربح يموت قبل هدفه ⇒ الشدّuqتل الرابح.
+        # 2026-10-06 قياس: مع 1.20 هبطت الخسارة 3.06->1.32 لكن الربح
+        # 1.44->0.94 والشدّ أكثر كان سيزيد الخسارة. أعد مساحة للربح.
+        proposed = round(min(2.50, float(current_max_loss) + 0.15), 2)
+        why = ("payoff {0:.2f} but avg win {1:.2f} is far below target "
+               "{2:.2f} -> winners die early; loosen for room, not "
+               "tighter".format(payoff, avg_w, target))
+    elif payoff < 0.95:
+        proposed = round(max(0.80, float(current_max_loss) - 0.15), 2)
+        why = "payoff {0:.2f} < 1 with winners reaching target -> tighten".format(
+            payoff)
+    elif payoff > 1.35:
+        proposed = round(min(2.50, float(current_max_loss) + 0.15), 2)
+        why = "payoff {0:.2f} > 1.35 -> winners are landing, give room".format(
+            payoff)
+    else:
+        proposed = float(current_max_loss)
+        why = "payoff {0:.2f} inside the healthy band -> hold".format(payoff)
+    return {"ok": True, "n": len(pnls), "avg_win": round(avg_w, 2),
+            "avg_loss": round(avg_l, 2), "payoff": round(payoff, 3),
+            "current": float(current_max_loss), "proposed": proposed,
+            "why": why}
+
+
 def _clip_outcome(realized, target, stop):
     """تقريب صادق لتيجة صفقة تحت هدف/وقف جديدين.
 

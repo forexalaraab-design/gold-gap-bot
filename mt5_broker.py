@@ -137,6 +137,10 @@ def symbol_properties(symbol=None):
         "volume_min": info.volume_min,
         "volume_step": info.volume_step,
         "spread_points": getattr(info, "spread", None),
+        # 2026-10-06: الحد الأدنى لمسافة الوقف عند الوسيط — SL أضيق منه
+        # يُرفض الطلب كاملاً. نحتاجه لأرضية الوقف في الفتح.
+        "trade_stops_level": getattr(info, "trade_stops_level", 0),
+        "trade_freeze_level": getattr(info, "trade_freeze_level", 0),
         "bid": tick.bid if tick else info.bid,
         "ask": tick.ask if tick else info.ask,
     }

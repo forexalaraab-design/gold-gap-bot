@@ -569,9 +569,35 @@ def mt5_run_cycle(state, rows, sess):
     # SL: مسافة أساسية SL_AFTER_ENTRY_USD (صافي الخسارة يبقى على الحد
     # بعد العمولة/السبريد لأنها تُخصم من الطرف الآخر). التشتت البشري
     # يُطبَّق على الأساس نفسه كما في main.
-    sl_base = max(1.0, config.SL_AFTER_ENTRY_USD - _fees) if _fees else \
-        config.SL_AFTER_ENTRY_USD
+    # 2026-10-06: الوقف على السيرفر يتبع سقف المخاطرة الحيّ
+    # config.MAX_LOSS_USD — وهو ما يضبطه AI كل ساعة — بدل قيمة ثابتة.
+    # سابقاً كان SL_AFTER_ENTRY_USD ثابتاً عند 2.0، فحين خفّض AI الحد إلى
+    # 1.0 بقي الوقف البعيد وتجاوزت خسارة واحدة -1.86 قبل أن يلتقطها الماسح
+    # البرمجي (استطلاع كل ~3ث + حركة سريعة). الآن السيرفر هو الخلاص الحقيقي
+    # عند نفس مستوى المخاطرة، ويبقى نافذاً حتى لو مات البوت.
+    # والدليل الحي: MT5 قبل SL/TP على السيرفر وقُبلت الصفقة (open:BUY مع
+    # sl/tp) — بخلاف cTrader الذي كان يرفضها.
+    _risk_cap = float(getattr(config, "MAX_LOSS_USD", 0) or 0)
+    _hard_cap = float(getattr(config, "AI_MAX_STOP_USD", 2.50) or 2.50)
+    if _risk_cap > 0:
+        # + تكلفة + هامش تجاوز صغير (حركة بين دورتي الاستطلاع)، ثم سقف
+        # مطلق: مسافة الوقف على السيرفر لا تتجاوز AI_MAX_STOP_USD أبداً.
+        sl_base = min(max(1.0, min(_risk_cap, _hard_cap) + _fees + 0.25),
+                      _hard_cap)
+    elif _fees:
+        sl_base = max(1.0, config.SL_AFTER_ENTRY_USD - _fees)
+    else:
+        sl_base = config.SL_AFTER_ENTRY_USD
     sl_dist = _main._jitter_usd(sl_base, config.HUMAN_SL_TP_JITTER_USD)
+    # أرضية الوسيط: SL أضيق من trade_stops_level يُرفض الطلب كله ⇒ لا صفقة
+    _props = mt5_broker.symbol_properties() or {}
+    try:
+        _min_stop = (float(_props.get("trade_stops_level") or 0)
+                     * float(_props.get("point") or 0))
+    except Exception:
+        _min_stop = 0.0
+    if _min_stop and sl_dist < (_min_stop + 0.10):
+        sl_dist = _min_stop + 0.10
 
     # TP: الحد الأدنى يشمل التكلفة بحيث صافي الربح ≥ PROFIT_TARGET بعد
     # خصمها — ربح حقيقي لا اسمي. (0.50×|catch_up| يبقى منطق اللحاق نفسه.)

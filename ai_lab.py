@@ -25,11 +25,21 @@ DATA = "data"
 HISTORY_CSV = os.path.join(DATA, "trades.csv")
 KNOWLEDGE_MD = os.path.join(DATA, "ai_knowledge.md")
 CALENDAR_CACHE = os.path.join(DATA, "ai_calendar.md")
+# الحد الأدنى من الصفقات الحاملة للإشارة الحقيقية (catch_up) قبل السماح
+# بتغيير معاملات الإشارة. دونه لا يوجد دليل — فقط تخمين.
+MIN_SIGNAL_TRADES = 40
 
 
 # ---------------------------------------------------------------------------
 # 1) السجل التاريخي
 # ---------------------------------------------------------------------------
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def load_history():
     """صفقات تاريخية بصيغة غنية: {ts, hour, side, entry_gap, pnl}.
 
@@ -66,6 +76,11 @@ def load_history():
                     "entry_gap": eg,
                     "pnl": pnl,
                     "reason": (r.get("reason") or "").strip(),
+                    # الإشارة الحقيقية (2026-10-06+): None في السجل القديم
+                    "catch_up": _num(r.get("catch_up")),
+                    "momentum": _num(r.get("momentum")),
+                    "platform_momentum": _num(r.get("platform_momentum")),
+                    "entry_spread_usd": _num(r.get("entry_spread_usd")),
                 })
     except Exception as exc:
         print("lab: history unavailable ({0!r})".format(exc), flush=True)
@@ -114,6 +129,13 @@ def walk_forward(candidates=None, blocked_hours=None, folds=3, min_train=60):
     الموثوقية، لا على backtest الكامل.
     """
     rows = load_history()
+    cov = signal_coverage(rows)
+    if cov.get("with_signal", 0) < MIN_SIGNAL_TRADES:
+        return {"ok": False, "verdict": "unavailable",
+                "reason": "no real signal data ({0}/{1} carry catch_up, need "
+                          "{2}) - a clipped backtest here would be a mirage".format(
+                              cov.get("with_signal"), cov.get("rows"),
+                              MIN_SIGNAL_TRADES)}
     if candidates is None:
         candidates = candidate_grid()
     if len(rows) < (min_train + folds * 20):
@@ -166,6 +188,88 @@ def walk_forward(candidates=None, blocked_hours=None, folds=3, min_train=60):
     }
 
 
+def signal_coverage(rows=None):
+    """كم صفقة تحمل الإشارة الحقيقية (catch_up)؟
+
+    2026-10-06: اكتُشف أن السجل التاريخي كله بلا catch_up — الاختبار القديم
+    كان يقيس entry_gapwhose ارتباطه بالصفر مع النتيجة. فكل "تحقّق" سابق كان
+    يقيس شيئاً غير الذي نتعامل معه. هذا العدّاد هو بوابة الصدق: لا يجوز تغيير
+    معاملات الإشارة قبل أن تتوفّر بيانات حقيقية كافية.
+    """
+    if rows is None:
+        rows = load_history()
+    with_sig = 0
+    for r in rows:
+        v = r.get("catch_up")
+        if v is None:
+            continue
+        try:
+            float(v)
+            with_sig += 1
+        except (TypeError, ValueError):
+            continue
+    return {"rows": len(rows), "with_signal": with_sig,
+            "coverage_pct": round(100.0 * with_sig / len(rows), 1) if rows else 0.0}
+
+
+def honest_eval(rows=None):
+    """إحصاء **بلا أي قصّ** للأرقام —，唯一的事实.
+
+    لا `_clip_outcome` هنا: قصّ الخسائر عند وقف أصغر manufactures ربحاً
+    وهمياً (اكتُشف 2026-10-06: ‎−365.91 حقيقياً تحوّل إلى +171 وهمياً).
+    هذه الدالة للمقارنة الصادقة فقط.
+    """
+    if rows is None:
+        rows = load_history()
+    pnls, sig_rows = [], []
+    for r in rows:
+        p = r.get("pnl", r.get("pnl_usd"))
+        if p is None:
+            continue
+        try:
+            p = float(p)
+        except (TypeError, ValueError):
+            continue
+        pnls.append(p)
+        sig_rows.append(r)
+    m = _metrics(pnls)
+    m["source"] = "raw_unclipped"
+    return m
+
+
+def signal_edge(rows=None):
+    """هل تنبّأ catch_up بالنتيجة فعلاً؟ صفر ارتباط = لا حافّة."""
+    if rows is None:
+        rows = load_history()
+    pairs = []
+    for r in rows:
+        try:
+            x = float(r.get("catch_up"))
+            y = float(r.get("pnl", r.get("pnl_usd")))
+        except (TypeError, ValueError):
+            continue
+        pairs.append((x, y))
+    if len(pairs) < 20:
+        return {"ok": False, "n": len(pairs),
+                "reason": "not enough trades with real signal"}
+    xs = [p[0] for p in pairs]
+    ys = [p[1] for p in pairs]
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    cov = sum((a - mx) * (b - my) for a, b in pairs) / len(pairs)
+    den = (sum((a - mx) ** 2 for a in xs) *
+           sum((b - my) ** 2 for b in ys)) ** 0.5
+    corr = (cov / den) if den else 0.0
+    buckets = {}
+    for x, y in pairs:
+        key = round(abs(x) * 2) / 2.0
+        buckets.setdefault(key, []).append(y)
+    prof = {str(k): {"n": len(v), "net": round(sum(v), 2),
+                     "avg": round(sum(v) / len(v), 3)}
+            for k, v in sorted(buckets.items()) if len(v) >= 5}
+    return {"ok": True, "n": len(pairs), "corr": round(corr, 4),
+            "by_signal_strength": prof}
+
+
 def _clip_outcome(realized, target, stop):
     """تقريب صادق لتيجة صفقة تحت هدف/وقف جديدين.
 
@@ -183,7 +287,17 @@ def _clip_outcome(realized, target, stop):
 
 
 def backtest(params, rows=None, use_session=True):
-    """يعيد التاريخ بمعاملات المرشّح ويعيد مقاييس الأداء.
+    """⚠️ معطوب الإيمان — لا يُستخدم للقرار بعد 2026-10-06.
+
+    ينقص الخسائر عند وقف أصغر، وهذا **يختلق ربحاً**: 507 صفقة حقيقية
+    ‎−365.91 تحوّلت به إلى ‎+171 لمجرد إعادة كتابة 172 خسارة إلى ‎−1.00
+    بينما متوسط الربح 1.56 لا يبلغ الهدف أبداً. وكان يقيس `entry_gap`
+   whose ارتباطه بالنتيجة صفر، لا `catch_up` المستخدَم حيّاً.
+
+    kept للعرض/المقارنة فقط. بوابة القرار تستعمل honest_eval + تغطية
+    الإشارة، وترفض أي تغيير معاملات在没有 40 صفقة تحمل catch_up.
+
+    يعيد التاريخ بمعاملات المرشّح ويعيد مقاييس الأداء.
 
     params: momentum_min, profit_target_usd, max_loss_usd, blocked_hours
     تُفلتر الصفقات كما يفعل المحرك الحيّ (عتبة + ساعات محظورة + نافذة

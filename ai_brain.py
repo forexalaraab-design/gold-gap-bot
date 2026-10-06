@@ -423,7 +423,13 @@ def _build_context(state):
         "news": _fetch_news_headlines(),
         "web_research": _fetch_web_context(),
         "backtest_baseline": _current_params_metrics(),
-        "backtest_candidates": _measured_candidates(),
+        # 2026-10-06: لا نغذّي العقل بأرقام مختلقة. backtest القائم على قصّ
+        # الخسائر يُصنع ربحاً وهمياً (+171 من واقع ‎−365.91) و.entry_gap
+        # ارتباطه بالنتيجة صفر. местоه الآن: الحقيقة المجرّدة + تغطية الإشارة
+        # +—whether the signal predicts anything at all.
+        "honest_reality": _lab.honest_eval(),
+        "signal_coverage": _lab.signal_coverage(),
+        "signal_edge": _lab.signal_edge(),
         "walk_forward": _walk_forward_evidence(),
         "lessons_learned": _lab.knowledge_tail(30),
         "professionalism": _lab.professionalism(),
@@ -549,15 +555,24 @@ def _prompt(ctx):
         "was REJECTED by the backtest.\n"
         "CHECK high_impact_events_utc (NFP/CPI/FOMC): real traders stand aside\n"
         "around those, so prefer tighter stops on such days, not frozen hours.\n"
-        "backtest_candidates are REAL measured results on the full history, best\n"
-        "first (net/win_rate/payoff/expectancy/profit_factor per option).\n"
-        "backtest_baseline is what is live now, measured exactly the same way.\n"
-        "RULES OF A PROFESSIONAL: take your numbers FROM backtest_candidates -\n"
-        "never invent untested values. Prefer an option whose NEIGHBOURS in that\n"
-        "list are also strong: that means robustness, not a lucky cell. If every\n"
-        "option is worse than backtest_baseline, keep momentum_min unchanged.\n"
-        "Your proposal is auto-backtested and DISCARDED if it fails to beat the\n"
-        "live baseline, so only propose what those numbers can defend.\n"
+        "honest_reality is the UNCLIPPED truth of every closed trade: net, n,\n"
+        "win_rate, payoff. Treat it as the only performance fact you own.\n"
+        "signal_coverage tells you how many trades carry the real entry\n"
+        "signal (catch_up). signal_edge tells you whether that signal has\n"
+        "ANY predictive power (corr + net by signal strength).\n"
+        "AN OLD BACKTEST THAT REWROTE LOSSES TO A SMALLER STOP IS A MIRAGE -\n"
+        "it invented profit by shrinking losses while average win never\n"
+        "reached the target. Do not reason with such numbers. They are gone.\n"
+        "RULES OF A PROFESSIONAL:\n"
+        "  * If signal_coverage.with_signal is small, you have NO evidence\n"
+        "    about momentum_min / profit_target_usd / max_loss_usd. Do not\n"
+        "    invent changes there; keep them as they are and say so.\n"
+        "  * blocked_hours IS measurable (real net by hour) - tune it.\n"
+        "  * Judge risk by the arithmetic of honest_reality: compare\n"
+        "    avg win against avg loss. If avg loss is far larger, the loss\n"
+        "    side is the problem, not the entry filter.\n"
+        "Signal-param proposals are auto-validated and DISCARDED unless real\n"
+        "signalled trades exist to prove them.\n"
         "REPLY IN THIS EXACT SHAPE:\n"
         "1) DIAGNOSIS: 2 sentences citing real numbers.\n"
         "2) WHAT YOU CHANGED VS LAST HOUR: one sentence.\n"
@@ -603,12 +618,13 @@ def _critique_prompt(ctx, first_pass):
     return (
         "You are a SKEPTICAL risk manager reviewing another trader's hourly\n"
         "decision on a live XAUUSD bot. Your job is to find the flaw, not to\n"
-        "agree. The proposal below is auto-backtested and is DISCARDED unless\n"
-        "it beats the live baseline on expectancy, net, payoff and loss streak.\n"
+        "agree. The proposal below is DISCARDED unless real evidence supports it,\n"
+        "and signal-param changes are frozen while signal_coverage is empty.\n"
         "FIRST PASS DECISION:\n" + (first_pass or "")[:1200] +
-        "\n\nLIVE BASELINE (measured): " + json.dumps(base.get("metrics") or {}) +
-        "\nMEASURED CANDIDATES (best first): " + json.dumps(
-            ctx.get("backtest_candidates") or [])[:1200] +
+        "\n\nUNCLIPPED REALITY: " + json.dumps(
+            ctx.get("honest_reality") or {})[:600] +
+        "\nSIGNAL COVERAGE: " + json.dumps(
+            ctx.get("signal_coverage") or {})[:300] +
         "\nEVENTS (high impact): " + json.dumps(
             ctx.get("high_impact_events_utc") or [])[:400] +
         "\n\nAnswer in exactly this shape:\n"
@@ -723,7 +739,7 @@ def run(state, data_dir="data"):
                              for k, v in sorted(params.items())), verdict_note))
             print("backtest gate: REJECTED ({0}) -> keeping live params".format(
                 verdict_note), flush=True)
-            params = _live_params()
+            params = _keep_hours_keep_live(params)
             result["rejected_params"] = True
         result["plan_written"] = os.path.join(data_dir, "ai_plan.md")
         header = "# AI plan  ({0} UTC)".format(
@@ -988,12 +1004,32 @@ def _live_params():
     }
 
 
-def _validate_params(candidate):
-    """بوابة الاختبار الخلفي — لا مخاطرة على اقتراح غير مُثبت.
+def _keep_hours_keep_live(params):
+    """عند الرفض: نُبقي معاملات الإشارة كما هي، ونترك ساعات AI.
 
-    تُرجع (مقبول؟, مقاييس_المرشح, مقاييس_الأساس, سبب).
-    basal = المعاملات الحيّة (خط الأساس). أي عجز في العيّنة أو الأفضلية
-    ⇒ رفضٌ واحتفاظ بما هو قائم.
+    الساعات وحدها يمكن التحقق منها الآن لأن إحصاءاتها مبنيّة على نتائج
+    حقيقية؛ أمّا العتبة/الهدف/الوقف فتحتاج بيانات الإشارة الحقيقية.
+    """
+    kept = _live_params()
+    bh = _parse_blocked_hours((params or {}).get("blocked_hours"))
+    if bh:
+        kept["blocked_hours"] = bh
+    return kept
+
+
+def _validate_params(candidate):
+    """بوابة التحقق — لا مخاطرة على اقتراح غير مُثبت.
+
+    2026-10-06 — تصحيح جوهري: كان هذا الباب يستخدم `backtest` الذي يقصّ
+    الخسائر عند وقف أصغر. هذا القصّ **يختلق ربحاً**: 507 صفقة حقيقية =
+    ‎−365.91، لكنها-transformed إلى ‎+171 لمجرد إعادة كتابة 172 خسارة إلى
+    ‎−1.00 بينما متوسط الربح 1.56. والأسوأ أن `backtest` كان يقيس
+    `entry_gap`whose ارتباطه بالنتيجة **صفر**، لا الإشارة التي نتعامل بها
+    (`catch_up`).
+
+    القاعدة الآن: لا تغيير لمعاملات الإشارة قبل وجود بيانات حقيقية تحمل
+    الإشارة. السجل القديم 0/507 ⇒ أي تغيير للعتبة/الهدف/الوقف مرفوض
+    كمُخرَج بلا دليل. ساعات الحظر تُقبل لأنها تُقاس على أرقام حقيقية.
     """
     rows = _lab.load_history()
     base = _live_params()
@@ -1001,6 +1037,17 @@ def _validate_params(candidate):
         return (False, {}, {},
                 "history too small ({0} trades) - keep live params".format(
                     len(rows)))
+    cov = _lab.signal_coverage(rows)
+    if cov.get("with_signal", 0) < _lab.MIN_SIGNAL_TRADES:
+        # نحتفظ بما هو حيّ لكل ما لا يمكن قياسه honestly
+        honest = _lab.honest_eval(rows)
+        return (False, {}, {},
+                "no real signal data ({0}/{1} trades carry catch_up, need "
+                "{2}) - refusing unvalidated change; truth: net={3} "
+                "payoff={4} over {5} trades".format(
+                    cov.get("with_signal"), cov.get("rows"),
+                    _lab.MIN_SIGNAL_TRADES, honest.get("net"),
+                    honest.get("payoff"), honest.get("n")))
     try:
         cand_m = _lab.backtest(candidate, rows)
         base_m = _lab.backtest(base, rows)

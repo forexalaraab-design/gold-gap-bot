@@ -395,6 +395,10 @@ def mt5_run_cycle(state, rows, sess):
                     "pnl_net_usd": pnl_net,
                     "reason": close_reason,
                     "pnl_peak_usd": round(float(st_pos.get("pnl_peak_usd") or 0), 2),
+                    "catch_up": st_pos.get("catch_up"),
+                    "momentum": st_pos.get("momentum"),
+                    "platform_momentum": st_pos.get("platform_momentum"),
+                    "entry_spread_usd": st_pos.get("entry_spread_usd"),
                 })
                 result["action"] = "close:" + close_reason
                 result["close_pnl_usd"] = pnl_net
@@ -458,6 +462,10 @@ def mt5_run_cycle(state, rows, sess):
                         "pnl_net_usd": pnl_ext,
                         "reason": hit,
                         "pnl_peak_usd": round(float(st_pos.get("pnl_peak_usd") or 0), 2),
+                        "catch_up": st_pos.get("catch_up"),
+                        "momentum": st_pos.get("momentum"),
+                        "platform_momentum": st_pos.get("platform_momentum"),
+                        "entry_spread_usd": st_pos.get("entry_spread_usd"),
                     })
                     closing_mgr.save_perf_to_state(state)
                     result["action"] = "close:external-reconciled"
@@ -528,6 +536,11 @@ def mt5_run_cycle(state, rows, sess):
             "pnl_net_usd": pnl_ext,
             "reason": hit,
             "pnl_peak_usd": round(float(state_pos.get("pnl_peak_usd") or 0), 2),
+            # الإشارة عند الدخول — الأساس لأي تقييم مستقبلي حقيقي
+            "catch_up": state_pos.get("catch_up"),
+            "momentum": state_pos.get("momentum"),
+            "platform_momentum": state_pos.get("platform_momentum"),
+            "entry_spread_usd": state_pos.get("entry_spread_usd"),
         })
         closing_mgr.save_perf_to_state(state)
         result["action"] = "close:external-reconciled"
@@ -647,6 +660,17 @@ def mt5_run_cycle(state, rows, sess):
             "take_profit": round(tp, 4),
             "sltp_set": True,
             "label": label,
+            # 2026-10-06: نحفظ الإشارة الحقيقية عند الدخول. بدونها لا
+            # يمكن إعادة تشغيل أي اختبار على الإشارة التي نتعامل بها فعلاً
+            # (catch_up) — فكان الاختبار التاريخي يقيس entry_gap وهو
+            # ارتباطه بالصفر مع النتيجة. من الآن كل صفقة تُغلق تحمل
+            # إشارتها ⇒ تُبنى قاعدة بيانات حقيقية تُقاس عليها.
+            "catch_up": round(float(catch_up), 3),
+            "momentum": round(float(result.get("momentum") or 0.0), 3),
+            "platform_momentum": round(
+                float(result.get("platform_momentum") or 0.0), 3),
+            "entry_spread_usd": round(
+                float(_detected_spread_usd(result) or 0.0), 2),
         }
         state["cooldown_until"] = 0
         closing_mgr.trade_count_today += 1

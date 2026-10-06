@@ -858,6 +858,10 @@ def _record_close(state, rec):
                     "ts_open", "ts_close", "side", "entry_gap", "close_gap",
                     "entry_price", "close_price", "pnl_units", "pnl_usd",
                     "fees_usd", "pnl_net_usd", "reason",
+                    # 2026-10-06: الإشارة الحقيقية عند الدخول. بدونها لا
+                    # يمكن قياس ما إذا كانت الإشارة تتنبّأ بالنتيجة إطلاقاً.
+                    "catch_up", "momentum", "platform_momentum",
+                    "entry_spread_usd", "pnl_peak_usd",
                 ])
             w.writerow([
                 rec.get("ts_open"), rec.get("ts_close"), rec.get("side"),
@@ -866,6 +870,10 @@ def _record_close(state, rec):
                 rec.get("pnl_units"), _fmt(rec.get("pnl_usd")),
                 _fmt(rec.get("fees_usd")), _fmt(rec.get("pnl_net_usd")),
                 rec.get("reason"),
+                _fmt(rec.get("catch_up")), _fmt(rec.get("momentum")),
+                _fmt(rec.get("platform_momentum")),
+                _fmt(rec.get("entry_spread_usd")),
+                _fmt(rec.get("pnl_peak_usd")),
             ])
     except Exception as exc:
         print("trades.csv write failed:", exc)

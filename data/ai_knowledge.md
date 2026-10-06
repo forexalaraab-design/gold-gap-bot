@@ -24,3 +24,5 @@
 - [2026-10-06 01:37] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.2,momentum_min=1.2,profit_target_usd=4.0 -> no real signal data (0/507 trades carry catch_up, need 40) - refusing unvalidated change; truth: net=-365.91 payoff=0.438 over 507 trades
 - [2026-10-06 02:39] REVIEW pass1=None | critic=FLAW: Increasing the profit target to $4.50 without evidence of improved win rates or average wins is likely to further decrease trade frequency and exacerbate losses.   OVERFIT_RISK: This change appears to be a lone out
 - [2026-10-06 02:39] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.2,momentum_min=1.2,profit_target_usd=4.5 -> history too small (0 trades) - keep live params
+- [2026-10-06 03:40] REVIEW pass1=None | critic=FLAW: Reducing momentum_min to increase trade frequency without any signal coverage is likely to exacerbate losses due to lower quality trades.   OVERFIT_RISK: This decision appears to be a lone outlier, as it contradict
+- [2026-10-06 03:40] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.2,momentum_min=1.0,profit_target_usd=4.5 -> history too small (0 trades) - keep live params

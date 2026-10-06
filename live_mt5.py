@@ -207,7 +207,9 @@ def _entry_decision(state, result, stats):
     if not can_open:
         reason = (
             "pause_open" if config.PAUSE_OPEN else
-            "session_blocked" if not quality_session_now else
+            # التسمية مقصودة دقيقة: quality_hour = ساعات AI المستبعدة،
+            # out_session = النافذة الثابتة 16-22 ⇒ تشخيص أوضح في السجل.
+            "quality_hour_blocked" if not quality_session_now else
             "out_session" if not in_session_now else
             "high_impact_news" if news_blocked else
             "same_side_loss" if same_side_blocked else

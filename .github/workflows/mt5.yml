@@ -179,12 +179,29 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          $no = git add data/ 2>&1; if ($LASTEXITCODE -ne 0) { Write-Host "data/ ignored or empty: $no"; exit 0 }
-          $none = git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) { Write-Host "no changes"; exit 0 }
-          git commit -m "data: mt5 log update ($(Get-Date -Format o))"
-          git push
-          if ($LASTEXITCODE -ne 0) { git pull --rebase --autostash origin main; git push }
+          # 2026-10-06: checkout يعطي detached HEAD ⇒ `git push` يفشل دائماً
+          # بـ "not currently on a branch"، وبعدها يدخل rebase متعارض على
+          # ملفات data/ فيموت الـ run. الآن: فرع صريح + إعادة محاولة ذكية
+          # تُرجِّح بياناتنا (الأحدث) عند التعارض مع commits البوت الأخرى.
+          git checkout -B main
+          function Save-State([int]$attempt) {
+            git add data/ 2>&1 | Out-Null
+            git diff --cached --quiet
+            if ($LASTEXITCODE -eq 0) { Write-Host "no data changes (attempt $attempt)"; return $true }
+            git commit -m "data: mt5 log update ($(Get-Date -Format o))" | Out-Null
+            git push origin HEAD:main
+            if ($LASTEXITCODE -eq 0) { Write-Host "pushed data (attempt $attempt)"; return $true }
+            Copy-Item -Recurse -Force data "$env:RUNNER_TEMP\data_backup_$attempt"
+            git fetch origin main
+            git reset --hard origin/main
+            Copy-Item -Recurse -Force "$env:RUNNER_TEMP\data_backup_$attempt\*" data\
+            return $false
+          }
+          $ok = Save-State 1
+          if (-not $ok) { $ok = Save-State 2 }
+          if (-not $ok) { $ok = Save-State 3 }
+          if (-not $ok) { Write-Host "::warning::persist failed after 3 attempts"; exit 0 }
+          Write-Host "persist OK"
 
       - name: Self-dispatch (keep mt5 chain alive)
         if: always()

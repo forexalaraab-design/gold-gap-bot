@@ -56,3 +56,5 @@
 - [2026-10-06 17:42] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=0.8,momentum_min=0.6,profit_target_usd=2.4 -> history too small (0 trades) - keep live params
 - [2026-10-06 18:42] REVIEW pass1=None | critic=FLAW: Reducing the profit target to improve the payoff ratio does not address the underlying issue of a low win rate and negative expectancy.   OVERFIT_RISK: The decision appears to be a lone outlier, as it does not alig
 - [2026-10-06 18:42] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=0.8,momentum_min=0.6,profit_target_usd=2.0 -> history too small (0 trades) - keep live params
+- [2026-10-06 19:42] REVIEW pass1=None | critic=FLAW: Lowering the profit target to $1.80 in a strategy with a negative expectancy will likely increase the frequency of losing trades without addressing the underlying performance issues.   OVERFIT_RISK: The decision ap
+- [2026-10-06 19:42] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=0.8,momentum_min=0.6,profit_target_usd=1.8 -> history too small (0 trades) - keep live params

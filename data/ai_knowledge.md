@@ -96,3 +96,5 @@
 - [2026-10-07 13:51] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.5,momentum_min=0.6,profit_target_usd=6.0 -> history too small (2 trades) - keep live params
 - [2026-10-07 14:51] REVIEW pass1=None | critic=FLAW: Lowering the momentum_min to 0.60 without sufficient signal coverage increases the likelihood of entering trades with poor quality, exacerbating the already low win rate.   OVERFIT_RISK: The decision appears to be 
 - [2026-10-07 14:51] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.6,momentum_min=0.6,profit_target_usd=6.0 -> history too small (0 trades) - keep live params
+- [2026-10-07 19:35] REVIEW pass1=None | critic=FLAW: Increasing max_loss_usd to 1.45 without evidence of improved signal coverage risks amplifying losses in a poorly performing strategy.   OVERFIT_RISK: The proposal appears to be a lone outlier, as the signal coverag
+- [2026-10-07 19:35] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=1.4,momentum_min=0.6,profit_target_usd=6.0 -> history too small (0 trades) - keep live params

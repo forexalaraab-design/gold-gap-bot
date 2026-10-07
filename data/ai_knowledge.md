@@ -64,3 +64,5 @@
 - [2026-10-06 21:48] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=0.8,momentum_min=0.6,profit_target_usd=2.8 -> history too small (0 trades) - keep live params
 - [2026-10-06 22:49] REVIEW pass1=None | critic=FLAW: Increasing the profit target without evidence of improved market conditions risks further decreasing the win rate and exacerbating losses.   OVERFIT_RISK: This decision appears to be a lone outlier, as the current 
 - [2026-10-06 22:49] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=0.8,momentum_min=0.6,profit_target_usd=3.0 -> history too small (0 trades) - keep live params
+- [2026-10-06 23:49] REVIEW pass1=None | critic=FLAW: Increasing the profit target without addressing the negative expectancy and low win rate may further deteriorate performance and reduce trade frequency.   OVERFIT_RISK: The proposed change appears to be a lone outl
+- [2026-10-06 23:49] REJECTED blocked_hours=[1, 2, 5, 9, 14, 15],max_loss_usd=0.8,momentum_min=0.6,profit_target_usd=3.5 -> history too small (0 trades) - keep live params

@@ -1,180 +1,192 @@
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:53 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:53 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:39 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:54 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:40 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:55 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:56 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:56 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:56 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:56 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?
 
-## 2026-10-10 03:41 UTC
+## 2026-10-10 03:56 UTC
+- APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
+- realized_now: ?
+
+## 2026-10-10 03:56 UTC
+- APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
+- realized_now: ?
+
+## 2026-10-10 03:56 UTC
+- APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
+- realized_now: ?
+
+## 2026-10-10 03:56 UTC
 - APPLIED: blocked_hours=[1, 2, 5, 9, 14, 15], max_loss_usd=1.4, momentum_min=0.6, profit_target_usd=2.4
 - realized_now: ?

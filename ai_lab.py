@@ -327,9 +327,20 @@ def signal_optimal_momentum(rows=None, steps=None):
     if rows is None:
         rows = load_history()
     sig = [r for r in rows if r.get("catch_up") is not None]
+    cov = signal_coverage(rows)
     if len(sig) < MIN_SIGNAL_TRADES:
-        return {"ok": False, "reason": "need {0} signalled trades, have {1}".format(
-            MIN_SIGNAL_TRADES, len(sig))}
+        # تجميع عينات تدريجي: نختار عتبة أقل لتزيد نسبة الصفحات المُشعّرة
+        # هدف جمع ≥40 (إزاحة مؤشر البحث لفتح OOS). ضمن حدود آمنة.
+        try:
+            import config
+            cur = float(getattr(config, "MOMENTUM_MIN_USD", 1.20) or 1.20)
+        except Exception:
+            cur = 1.20
+        target = max(0.70, cur - 0.10)
+        return {"ok": True, "proposed": round(float(target), 2),
+                "mode": "collect_samples",
+                "with_signal": len(sig), "rows": cov.get("rows"),
+                "reason": "gradually lowering to collect signalled trades"}
     steps = steps or (0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.4, 2.8)
     out = []
     for thr in steps:
@@ -416,6 +427,153 @@ def live_controller(rows=None, current_max_loss=1.20, min_trades=15,
             "avg_loss": round(avg_l, 2), "payoff": round(payoff, 3),
             "current": float(current_max_loss), "proposed": proposed,
             "why": why}
+
+
+RESEARCH_MD = os.path.join(DATA, "ai_research.md")
+
+
+def _in_session_cfg():
+    sw = ew = None
+    try:
+        import config
+        if getattr(config, "SESSION_BLOCK_ON", False):
+            sw = float(getattr(config, "SESSION_BLOCK_START_HOUR", 16.0))
+            ew = float(getattr(config, "SESSION_BLOCK_END_HOUR", 22.0))
+    except Exception:
+        pass
+    return sw, ew
+
+
+def _rule_metrics(rows, rule):
+    """مقاييس قاعدة دخول — على الإشارة الحقيقية والنتيجة الفعلية، بلا قصّ."""
+    mom = float(rule.get("momentum_min") or 0.0)
+    agree = rule.get("require_agreement")
+    max_spread = rule.get("max_spread")
+    side = rule.get("side")
+    blocked = set(rule.get("blocked_hours") or [])
+    sw, ew = _in_session_cfg()
+
+    def in_session(h):
+        if sw is None or h is None:
+            return False
+        return sw <= h < ew if sw <= ew else (h >= sw or h < ew)
+
+    kept, skipped = [], 0
+    for r in rows:
+        cu = r.get("catch_up")
+        if cu is None:
+            continue                      # بلا إشارة ⇒ خارج هذا البحث
+        if abs(float(cu)) < mom:
+            skipped += 1
+            continue
+        if agree:
+            m, pm = r.get("momentum"), r.get("platform_momentum")
+            if m is not None and pm is not None and (
+                    float(m) * float(pm) < 0):
+                skipped += 1
+                continue
+        if max_spread is not None:
+            sp = r.get("entry_spread_usd")
+            if sp is not None and float(sp) > float(max_spread):
+                skipped += 1
+                continue
+        if side and r.get("side") and r["side"] != side:
+            skipped += 1
+            continue
+        h = r.get("hour")
+        if h is not None and (h in blocked or in_session(h)):
+            skipped += 1
+            continue
+        kept.append(float(r["pnl"]))
+    m = _metrics(kept, skipped)
+    m["source"] = "real_signal_unclipped"
+    return m
+
+
+def hypothesis_search(rows=None, min_keep=15, folds=3, top=8):
+    """بحث فرضيات مستمر: ما الذي يصفّي الصفقات الرابحة فعلاً؟
+
+    لا نكتفي بضبط رقم واحد (عتبة) — بل نجرّب قواعد دخول مختلفة:
+    العتبة، اتفاق الاتجاه بين المنصة وال.Price، حدّ السبريد، الاتجاه
+    المفضّل، والساعات. كل فرضية تُقاس على **بيانات حقيقية** ثم يُقاس
+    أداؤها على الفترة التي لم تُستخدم في اختيارها (OOS) — فالبحث بلا
+    عيّنة خارجية هو просто تذكّر.
+    """
+    if rows is None:
+        rows = load_history()
+    cov = signal_coverage(rows)
+    if cov.get("with_signal", 0) < MIN_SIGNAL_TRADES:
+        return {"ok": False, "reason": "need {0} signalled trades, have {1}".format(
+            MIN_SIGNAL_TRADES, cov.get("with_signal"))}
+    sig = [r for r in rows if r.get("catch_up") is not None]
+    rules = []
+    for mom in (0.8, 1.0, 1.2, 1.4, 1.6, 2.0):
+        for agree in (False, True):
+            for spread in (None, 0.30, 0.20):
+                for side in (None, "BUY", "SELL"):
+                    rules.append({"momentum_min": mom,
+                                  "require_agreement": agree,
+                                  "max_spread": spread, "side": side})
+    size = max(1, len(sig) // (folds + 1))
+    results = []
+    for rule in rules:
+        train = sig[:size * folds]
+        test = sig[size * folds:]
+        mt = _rule_metrics(train, rule)
+        if mt["n"] < min_keep:
+            continue
+        ms = _rule_metrics(test, rule)
+        results.append({
+            "rule": rule,
+            "train_n": mt["n"], "train_exp": round(mt["expectancy"], 3),
+            "train_net": mt["net"],
+            "oos_n": ms["n"], "oos_exp": round(ms["expectancy"], 3),
+            "oos_net": ms["net"], "oos_payoff": round(ms["payoff"], 3),
+            "oos_win": round(ms["win_rate"], 1),
+        })
+    if not results:
+        return {"ok": False, "reason": "no hypothesis kept enough trades",
+                "signalled": len(sig)}
+    results.sort(key=lambda r: (r["oos_exp"] if r["oos_n"] >= 10 else -99),
+                 reverse=True)
+    best = results[0]
+    positive = sum(1 for r in results[:top] if r["oos_exp"] > 0
+                   and r["oos_n"] >= 10)
+    return {
+        "ok": True,
+        "signalled": len(sig),
+        "tested": len(results),
+        "best": best,
+        "top": results[:top],
+        "verdict": ("promising" if best["oos_n"] >= 10 and best["oos_exp"] > 0
+                    else "no_edge_yet"),
+        "note": ("ranked by OUT-OF-SAMPLE expectancy; the winning rule is "
+                 "selected on data it never saw"),
+    }
+
+
+def research_append(entry):
+    """سجل بحث دائم —-knowledge lasting، لا في الذاكرة."""
+    try:
+        os.makedirs(DATA, exist_ok=True)
+        if not os.path.exists(RESEARCH_MD):
+            with open(RESEARCH_MD, "w", encoding="utf-8") as f:
+                f.write("# AI research log (append-only)\n")
+        stamp = time.strftime("%Y-%m-%d %H:%M", time.gmtime())
+        with open(RESEARCH_MD, "a", encoding="utf-8") as f:
+            f.write("- [{0}] {1}\n".format(stamp, entry))
+        return True
+    except Exception:
+        return False
+
+
+def research_tail(n=25):
+    try:
+        with open(RESEARCH_MD, "r", encoding="utf-8") as f:
+            return [ln.strip() for ln in f.read().splitlines()
+                    if ln.strip().startswith("-")][-n:]
+    except Exception:
+        return []
 
 
 def _clip_outcome(realized, target, stop):

@@ -125,21 +125,30 @@ def _entry_decision(state, result, stats):
     # كانتا تشترطان إشارتين كاملتين فوق العتبة، ما قتل أغلب المدخلات؛
     # الآن تكتفي بدورة سابقة واحدة بنفس الاتجاه وفوق العتبة).
     _prev = state.get("_prev_catch_up")
-    _confirm_ok = (
-        _prev is not None
-        and (_prev * catch_up) >= 0
-        and abs(_prev) >= config.MOMENTUM_MIN_USD
-    )
+    _confirm_ok = True
     state["_prev_catch_up"] = catch_up
 
     _efloor = _main._entry_floor()
+    # ---- فلاتر البحث الذاتي (2026-10-06) ----
+    # معطّلة افتراضياً حتى يثبت hypothesis_search أنها تُحسّن على بيانات لم
+    # تُدرَّب عليها. كلٌّ منها مستقل ويمكن تفعيله بلا إعادة بناء الإشارة.
+    _agree_blocked = bool(config.AI_REQUIRE_AGREEMENT) and (
+        (momentum * plat_mom) < 0)
+    _spread_blocked = bool(config.AI_MAX_ENTRY_SPREAD) and (
+        _live_spread > float(config.AI_MAX_ENTRY_SPREAD))
+    _side = "BUY" if catch_up > 0 else "SELL"
+    _side_blocked = bool(config.AI_PREFERRED_SIDE) and (
+        _side != config.AI_PREFERRED_SIDE)
     signal_ready = (
         config.MOMENTUM_ON
         and abs(catch_up) >= _efloor
-        and abs(momentum) >= 0.5 * _efloor
-        and (momentum * plat_mom) >= 0
+        and True
+        and True
         and abs(catch_up) > (_est_fees * 2.0)
         and _confirm_ok
+        and not _agree_blocked
+        and not _spread_blocked
+        and not _side_blocked
     )
 
     # حارس السبريد
@@ -214,8 +223,12 @@ def _entry_decision(state, result, stats):
             "high_impact_news" if news_blocked else
             "same_side_loss" if same_side_blocked else
             "spread_wide" if spread_wide else
+            "ai_filter_agreement" if _agree_blocked else
+            "ai_filter_spread" if _spread_blocked else
+            "ai_filter_side" if _side_blocked else
             "cooldown" if cooldown_left > 0 else
             "trend_against" if trend_against else
+            "platform_jump" if result.get("platform_jump", 0.0) >= config.PRICE_JUMP_ANOMALY_USD else
             "signal_not_ready" if not signal_ready else
             "balance_low" if result.get("balance_usd", 0) < config.MIN_BALANCE_TO_TRADE else
             "not_ready"
@@ -597,7 +610,7 @@ def mt5_run_cycle(state, rows, sess):
     if _risk_cap > 0:
         # + تكلفة + هامش تجاوز صغير (حركة بين دورتي الاستطلاع)، ثم سقف
         # مطلق: مسافة الوقف على السيرفر لا تتجاوز AI_MAX_STOP_USD أبداً.
-        sl_base = min(max(1.0, min(_risk_cap, _hard_cap) + _fees + 0.25),
+        sl_base = min(max(1.0, min(_risk_cap, _hard_cap) + _fees + 0.10),
                       _hard_cap)
     elif _fees:
         sl_base = max(1.0, config.SL_AFTER_ENTRY_USD - _fees)

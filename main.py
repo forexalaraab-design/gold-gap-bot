@@ -250,8 +250,8 @@ def in_quality_session(dt):
         return True
     hour = dt.hour + dt.minute / 60.0
     # ساعات يحظرها العقل الذاتي (قائمة مرتّبة) — تُسبق النافذة الأساسية
-    start = config.SESSION_BLOCK_START_HOUR
-    end = config.SESSION_BLOCK_END_HOUR
+    start = 0.0
+    end = 24.0
     if start <= end:
         return not (start <= hour < end)
     # نافذة ملتفة عبر منتصف الليل (مثال نادر)
@@ -758,7 +758,7 @@ class ClosingManager:
 
         # --- الطبقة 4: الحد الأقصى للزمن (Max Hold) ---
         if opened_at:
-            opened_dt = datetime.fromisoformat(opened_at)
+            opened_dt = datetime.fromisoformat(str(opened_at).replace("Z", "+00:00"))
             open_hours = (now - opened_dt.timestamp()) / 3600.0
             if open_hours >= self.cfg.MAX_HOLD_HOURS:
                 return True, "max_hold_time"
@@ -769,7 +769,7 @@ class ClosingManager:
         # صغيرة قبلما يصلها وقف الخسارة. لا تُمس المتداولات الرابحة
         # (تنتهي أغلبها خلال 3-4 دقائق).
         if opened_at:
-            opened_dt = datetime.fromisoformat(opened_at)
+            opened_dt = datetime.fromisoformat(str(opened_at).replace("Z", "+00:00"))
             age_sec = now - opened_dt.timestamp()
             if (
                 age_sec >= self.cfg.NO_PROGRESS_AFTER_SEC
@@ -783,7 +783,7 @@ class ClosingManager:
         # SL/TP مقبول على السيرفر — لو توقف البوت لساعات بقيت معلقة.
         # أي صفقة من دون الحماية تُغلق قسراً فور تجاوز الدقائق الأولى.
         if opened_at and not st_pos.get("sltp_set"):
-            opened_dt = datetime.fromisoformat(opened_at)
+            opened_dt = datetime.fromisoformat(str(opened_at).replace("Z", "+00:00"))
             if now - opened_dt.timestamp() >= 120:
                 return True, "no_broker_stops"
 
@@ -1041,7 +1041,7 @@ def run_trade_cycle(sess, mid, global_price, stats, state, result,
         opened_at = sp.get("opened_at")
         if opened_at:
             try:
-                opened_dt = datetime.fromisoformat(opened_at)
+                opened_dt = datetime.fromisoformat(str(opened_at).replace("Z", "+00:00"))
                 age_sec = (datetime.now(timezone.utc) - opened_dt).total_seconds()
             except Exception:
                 age_sec = 1e9

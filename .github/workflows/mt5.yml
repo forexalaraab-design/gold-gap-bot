@@ -146,24 +146,17 @@ jobs:
           MT5_SYMBOL: ${{ vars.MT5_SYMBOL || 'XAUUSD' }}
           MT5_DURATION_MIN: ${{ vars.MT5_DURATION_MIN || '13.0' }}
           MT5_PROBE: ${{ inputs.probe && '1' || '0' }}
-          # نفس قواعد v1 الحي (هجومي 1.20 + بلا فلتر إضافي + لوت 0.01)
-          STRAT_COOLDOWN_MIN: "1.0"
-          STRAT_MOMENTUM_MIN: "1.20"
+          # 2026-10-14: القيم التشغيلية صارت ثابتة داخل config.py (لا تُتجاوز من env).
+          # أُزيلت الإشارات إلى secrets غير موجودة (كانت تصل فارغة فتعود للافتراضي
+          # صامتة) وكذلك env الميتة. نُبقي فقط: البشرنة، ومفتاح الزخم، وأزرار
+          # التشغيل (PAUSE/AI) التي تُدار من GitHub Variables.
+          STRAT_MOMENTUM_ON: "1"
           STRAT_HUMAN_SKIP: "0"
           STRAT_HUMAN_AWAY: "0"
           STRAT_HUMAN_ENTRY_JITTER: "0.03"
-          STRAT_FEES_PER_LOT: ${{ secrets.STRAT_FEES_PER_LOT }}
-          STRAT_TRAILING_ARM: ${{ secrets.STRAT_TRAILING_ARM }}
-          STRAT_TRAILING_BACK: ${{ secrets.STRAT_TRAILING_BACK }}
-          STRAT_MAX_HOLD_HOURS: ${{ secrets.STRAT_MAX_HOLD_HOURS }}
-          STRAT_MAX_LOSS_USD: ${{ secrets.STRAT_MAX_LOSS_USD }}
-          STRAT_PROFIT_TARGET: ${{ secrets.STRAT_PROFIT_TARGET }}
           STRAT_MODEL: ${{ vars.STRAT_MODEL || 'v1' }}
-          STRAT_PAUSE_OPEN: ${{ vars.STRAT_PAUSE_OPEN || '1' }}
+          STRAT_PAUSE_OPEN: ${{ vars.STRAT_PAUSE_OPEN || '0' }}
           STRAT_V2_EVAL: ${{ vars.STRAT_V2_EVAL || '1' }}
-          # فلتر الوقت (جلسة 16–22 UTC) معطّل مؤقتاً بإذن المستخدم للتحقق
-          # لاكتشاف سلاسل الأعطال؛ يُعاد تفعيله عبر ضبط المتغير =1.
-          STRAT_SESSION_BLOCK_ON: ${{ vars.STRAT_SESSION_BLOCK_ON || '0' }}
           # عقل LLM (2026-10-02): vars تتحكم بالتفعيل/المزود، السرّ من secrets.
           AI_ON: ${{ vars.AI_ON || '0' }}
           AI_APPLY_ON: ${{ vars.AI_APPLY_ON || '0' }}

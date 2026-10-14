@@ -431,6 +431,8 @@ def _build_context(state):
         "signal_coverage": _lab.signal_coverage(),
         "signal_edge": _lab.signal_edge(),
         "signal_optimal_momentum": _lab.signal_optimal_momentum(),
+        "hypothesis_search": _lab.hypothesis_search(),
+        "research_log_tail": _lab.research_tail(10),
         "live_stop_controller": _lab.live_controller(
             current_max_loss=_live_params()["max_loss_usd"]),
         "walk_forward": _walk_forward_evidence(),
@@ -756,6 +758,41 @@ def run(state, data_dir="data"):
                 result["stop_controller"] = ctrl
                 print("stop auto-tune: {0} -> {1} ({2})".format(
                     _cur, _new, ctrl.get("why")), flush=True)
+        # ---- حلقة البحث: أفتح فرضية بحثها الذاتي وتجاوزت OOS ----
+        # لا تُطبَّق إلا إن حكمت على فترة لم تُدرَّب عليها فعلاً.
+        _res = ctx.get("hypothesis_search") or {}
+        _best = _res.get("best") or {}
+        _rule = _best.get("rule") or {}
+        if _res.get("ok") and _res.get("verdict") == "promising" and (
+                _best.get("oos_n", 0) >= 10 and _best.get("oos_exp", 0) > 0):
+            params = params or _live_params()
+            for _k, _cfg in (("momentum_min", "momentum_min"),
+                             ("max_entry_spread", "max_entry_spread")):
+                if _rule.get(_k) is None and _k != "momentum_min":
+                    continue
+                _v = _clamp_param(_k, _rule.get(_k))
+                if _v is not None:
+                    params[_k] = _v
+            if "require_agreement" in _rule:
+                params["require_agreement"] = bool(_rule["require_agreement"])
+            _sd = _rule.get("side")
+            if _sd in ("BUY", "SELL"):
+                params["preferred_side"] = _sd
+            result["hypothesis_applied"] = {
+                "rule": _rule,
+                "oos_n": _best.get("oos_n"),
+                "oos_exp": _best.get("oos_exp"),
+                "oos_payoff": _best.get("oos_payoff"),
+            }
+            _lab.research_append(
+                "APPLIED rule={0} oos_n={1} oos_exp={2} payoff={3}".format(
+                    _rule, _best.get("oos_n"), _best.get("oos_exp"),
+                    _best.get("oos_payoff")))
+        else:
+            _lab.research_append(
+                "search: {0} | verdict={1} | best_oos={2}".format(
+                    _res.get("reason") or "ran", _res.get("verdict"),
+                    _best.get("oos_exp")))
         result["plan_written"] = os.path.join(data_dir, "ai_plan.md")
         header = "# AI plan  ({0} UTC)".format(
             time.strftime("%Y-%m-%d %H:%M", time.gmtime()))
@@ -838,7 +875,11 @@ _PARAM_TARGETS = {
     "max_loss_usd": "MAX_LOSS_USD",
     "sl_after_entry_usd": "SL_AFTER_ENTRY_USD",
     "cooldown_minutes": "COOLDOWN_MINUTES",
+    "max_entry_spread": "AI_MAX_ENTRY_SPREAD",
 }
+# أبعاد البحث (غير رقمية) — تُخزَّن في plan ثم تُطبَّق في config.
+_BOOL_PARAMS = ("require_agreement",)
+_TEXT_PARAMS = {"preferred_side": "AI_PREFERRED_SIDE"}
 
 
 def _clamp_param(key, raw):
@@ -850,6 +891,8 @@ def _clamp_param(key, raw):
     """
     import math
     bounds = getattr(config, "AI_BOUNDS", {}).get(key)
+    if not bounds:
+        bounds = getattr(config, "AI_FILTER_BOUNDS", {}).get(key)
     if not bounds:
         return None
     try:
@@ -897,11 +940,19 @@ def _parse_param_block(text):
         block = m.group(1)
     else:
         block = text
-    allowed = set(_PARAM_TARGETS) | {"blocked_hours"}
+    allowed = set(_PARAM_TARGETS) | set(_BOOL_PARAMS) | set(_TEXT_PARAMS) | {
+        "blocked_hours"}
     for k, v in re.findall(r"([a-z_]+)\s*=\s*([0-9][0-9.,\s]*)", block, re.I):
         k = k.lower().strip()
         if k in allowed:
             out[k] = v.strip().rstrip(",")
+    # الفلاتر غير الرقمية (بولياني/نصّي): نفس الكتلة لكن بقيمة لا تبدأ برقم.
+    # 2026-10-06: كانت تسقط بصمت ⇒ لم تصل الفلاتر المولَدة إلى config إطلاقاً.
+    for k, v in re.findall(
+            r"([a-z_]+)\s*=\s*([A-Za-z][A-Za-z0-9_.]*)", block, re.I):
+        k = k.lower().strip()
+        if k in allowed and k not in out:
+            out[k] = v.strip().upper()
     return out
 
 
@@ -1020,6 +1071,12 @@ def _live_params():
         "max_loss_usd": round(float(getattr(config, "MAX_LOSS_USD", 2.0)), 2),
         "blocked_hours": sorted(
             getattr(config, "AI_BLOCKED_HOURS", None) or set()),
+        "require_agreement": bool(
+            getattr(config, "AI_REQUIRE_AGREEMENT", False)),
+        "max_entry_spread": round(float(
+            getattr(config, "AI_MAX_ENTRY_SPREAD", 0.0) or 0.0), 3),
+        "preferred_side": str(
+            getattr(config, "AI_PREFERRED_SIDE", "") or "").upper(),
     }
 
 
@@ -1056,16 +1113,60 @@ def _validate_params(candidate):
         return (False, {}, {},
                 "history too small ({0} trades) - keep live params".format(
                     len(rows)))
+    # ---- حارس واقعي: هدف أبعد من أي ربح تحقّق فعلاً مستحيل ----
+    # 2026-10-06: اقتُرح profit_target_usd=4.00 بينما أكبر ربح مرصود
+    # 1.90$ ⇒ الهدف لا يُصاب، فكل صفقة تنتهي بخروج زمني محتسب خسارة.
+    # نقيسه على آخر 100 صفقة قبل أن يُكتب في الخطة.
+    try:
+        _recent = _lab.load_recent_feed()[-100:]
+        _wins = []
+        for _r in _recent:
+            try:
+                _p = float(_r.get("pnl", _r.get("pnl_usd")))
+                if _p > 0:
+                    _wins.append(_p)
+            except (TypeError, ValueError):
+                continue
+        if _wins:
+            _cap = max(_wins) * 1.5
+            _t = candidate.get("profit_target_usd")
+            if _t is not None and float(_t) > _cap:
+                return (False, {}, {},
+                        "unreachable target {0:.2f} > 1.5x the best observed "
+                        "win {1:.2f} (cap {2:.2f}) - could never trigger".format(
+                            float(_t), max(_wins), _cap))
+    except Exception:
+        pass
     cov = _lab.signal_coverage(rows)
     if cov.get("with_signal", 0) < _lab.MIN_SIGNAL_TRADES:
         honest = _lab.honest_eval(rows)
-        return (False, {}, {},
-                "no real signal data ({0}/{1} trades carry catch_up, need "
-                "{2}) - refusing unvalidated change; truth: net={3} "
-                "payoff={4} over {5} trades".format(
-                    cov.get("with_signal"), cov.get("rows"),
-                    _lab.MIN_SIGNAL_TRADES, honest.get("net"),
-                    honest.get("payoff"), honest.get("n")))
+        # Allow controlled downward sampling for momentum_min to collect
+        # signalled trades (bounded, minimal step). This is needed to
+        # open out-of-sample hypothesis search honestly.
+        cand_mom = candidate.get("momentum_min")
+        base_mom = base.get("momentum_min")
+        allow_sampling = False
+        if cand_mom is not None and base_mom is not None:
+            try:
+                cm, bm = float(cand_mom), float(base_mom)
+                if cm <= bm and cm >= 0.70:        # bounded down-step
+                    allow_sampling = True
+            except (TypeError, ValueError):
+                pass
+        if not allow_sampling:
+            return (False, {}, {},
+                    "no real signal data ({0}/{1} trades carry catch_up, need "
+                    "{2}) - refusing unvalidated change; truth: net={3} "
+                    "payoff={4} over {5} trades".format(
+                        cov.get("with_signal"), cov.get("rows"),
+                        _lab.MIN_SIGNAL_TRADES, honest.get("net"),
+                        honest.get("payoff"), honest.get("n")))
+        # Sampling allowed (downward, bounded) to acquire signal data.
+        # Skip heavy backtest on zero-signal matchups; accept for sampling.
+        return (True, {}, {},
+                "sampling: lowering momentum_min to collect signalled trades "
+                "({0}/{1} with signal)".format(
+                    cov.get("with_signal"), cov.get("rows")))
     # البيانات حقيقية كافية ⇒ التخ-tuning الذاتي يُفتح تلقائياً بلا سؤال.
     # الاختبار الصادق: يرشّح بالإشارة الحقيقية وبلا قصّ.
     try:
@@ -1147,6 +1248,21 @@ def _journal(state, applied, skipped):
         print("journal warn: {0!r}".format(exc), flush=True)
 
 
+def _plan_is_fresh(max_age_sec=7200):
+    """الخطة تُقرأ ساعة ⇒ خطة قديمة قد تحمل اقتراحاً خطيراً منJimmy.
+
+    2026-10-06: ملف ai_plan.md عائد لإصدار قديم (profit_target_usd=4.0 غير
+    قابل للوصول) طُبِّق حرفياً لأن أحداً لم يسأل عن عمره. الآن: أقدم من ساعتين
+    ⇒ لا تُطبَّق.Forex لا تتجمد params:，只需要 تُعاد كتابتها بالدورة القادمة.
+    """
+    try:
+        path = os.path.join("data", "ai_plan.md")
+        age = time.time() - os.path.getmtime(path)
+        return age <= max_age_sec
+    except Exception:
+        return False
+
+
 def apply_self_improvement(state):
     """طھط·ط¨ظٹظ‚ طھظˆطµظٹط§طھ ط§ظ„ط¹ظ‚ظ„ ط¹ظ„ظ‰ config ظپظٹ ط§ظ„ط°ط§ظƒط±ط©طŒ طھط­طھ config.AI_BOUNDS.
 
@@ -1162,7 +1278,18 @@ def apply_self_improvement(state):
         hour_net = _read_hour_net()
         if not rec:
             return {"applied": False, "reason": "no recommendation"}
+        if not _plan_is_fresh():
+            print("self-improve: SKIPPED - ai_plan.md is stale (an old "
+                  "proposal, not this cycle's validated params)", flush=True)
+            return {"applied": False, "reason": "stale plan"}
         applied, skipped = {}, {}
+        # Validate with the same guards (prevents stale/invalid plan from applying)
+        okv, _, _, vwhy = _validate_params(rec)
+        if not okv:
+            print("self-improve: SKIPPED - validation failed: {0}".format(
+                vwhy), flush=True)
+            return {"applied": False, "reason": "validation_failed: {0}".format(
+                vwhy)[:120]}
         for key, target in _PARAM_TARGETS.items():
             if key not in rec:
                 continue
@@ -1172,6 +1299,24 @@ def apply_self_improvement(state):
                 continue
             setattr(config, target, safe)
             applied[key] = safe
+        # الفلاتر غير الرقمية: بولياني/نصّي، وتُحقَّق بقائمة مسموحة صريحة.
+        for key in _BOOL_PARAMS:
+            if key in rec:
+                cfg_key = "AI_REQUIRE_AGREEMENT" if key == "require_agreement" else None
+                if cfg_key is None:
+                    continue
+                val = str(rec[key]).strip().lower() in ("1", "true", "yes", "on")
+                setattr(config, cfg_key, val)
+                applied[key] = val
+        for key, cfg_key in _TEXT_PARAMS.items():
+            if key not in rec:
+                continue
+            val = str(rec[key] or "").strip().upper()
+            if val and val not in getattr(config, "AI_SIDES", ("BUY", "SELL")):
+                skipped[key] = rec[key]        # غير مسموح ⇒ يُرفض
+                continue
+            setattr(config, cfg_key, val)
+            applied[key] = val or "both"
         if "blocked_hours" in rec:
             bh = _apply_blocked_hours(rec["blocked_hours"], hour_net)
             if bh is not None:

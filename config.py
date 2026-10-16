@@ -262,6 +262,14 @@ MIN_BALANCE_TO_TRADE = 0.0
 # ظ†ط·ط§ظ‚ ظ…ط¹ظ‚ظˆظ„ ظ„ط³ط¹ط± XAUUSD â€” ظ†ط³طھط¨ط¹ط¯ ط§ظ„ظ…ظ„ط§ط­ط¸ط§طھ ط§ظ„طھط§ظ„ظپط© ظ…ظ† ط§ظ„ط¥ط­طµط§ط،ط§طھ
 MIN_PLATFORM_PRICE = 4000.0
 MAX_PLATFORM_PRICE = 5000.0
+# Data-quality guards (2026-10-15): the fixed range guard misses in-range
+# stale/bad ticks (live: first tick after boot = 4161 vs true 4086 -> a
+# -75$/22s phantom row in gap_history). Reject ticks deviating from the
+# robust median of recent rows, prune rows older than the window, and
+# require a minimum warmed window before any entry decision.
+PRICE_BAD_TICK_USD = _env_float("STRAT_BAD_TICK_USD", 10.0)
+PRICE_WINDOW_MAX_AGE_SEC = _env_float("STRAT_WINDOW_MAX_AGE_SEC", 600.0)
+PRICE_WINDOW_MIN_ROWS = int(_env_float("STRAT_WINDOW_MIN_ROWS", 12))
 
 # Files / state
 HISTORY_FILE = os.path.join(BASE_DIR, "data", "gap_history.csv")

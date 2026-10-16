@@ -281,6 +281,68 @@ def mt5_run_cycle(state, rows, sess):
         result["action"] = "hold:out_of_range"
         result["mid"] = round(mid, 2)
         return result
+
+    # --- حارس جودة البيانات 2026-10-15 ---
+    # تشخيص حي: صف في gap_history قفز -75$ في 22 ث لأن أول tick بعد
+    # الإقلاع قديم (4161 بينما الحقيقي 4086) ويجتاز حارس النطاق الثابت.
+    # (1) نُسقط الصفوف الأقدم من PRICE_WINDOW_MAX_AGE_SEC حتى لا يخلط
+    # الزخم بين جلستين. (2) عند بداية جلسة/إقلاع نؤكد صلاحية أول tick
+    # بإعادة قراءته بعد ثانية — اختلاف كبير => tick قديم فاسد. (3) داخل
+    # الجلسة نرفض tick يشذّ عن وسيط الصفوف الحديثة (فرق زمني صغير).
+    _now_u = _now_unix()
+    _max_age = float(getattr(config, "PRICE_WINDOW_MAX_AGE_SEC", 0) or 0.0)
+    if _max_age > 0 and rows:
+        _kept = []
+        for _r in rows:
+            try:
+                _t = datetime.fromisoformat(
+                    str(_r.get("ts", "")).replace("Z", "+00:00")).timestamp()
+            except (ValueError, TypeError):
+                continue
+            if _now_u - _t <= _max_age:
+                _kept.append(_r)
+        if len(_kept) != len(rows):
+            rows[:] = _kept
+    _bad_usd = float(getattr(config, "PRICE_BAD_TICK_USD", 0) or 0.0)
+
+    _last_t0 = 0.0
+    if rows:
+        try:
+            _last_t0 = datetime.fromisoformat(
+                str(rows[-1].get("ts", "")).replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError):
+            _last_t0 = 0.0
+
+    # (2) تأكيد أول tick بعد فجوة جلسة (boot/cache قديم)
+    if (not rows) or (_now_u - _last_t0) > 120.0:
+        time.sleep(1.0)
+        _tkb = sess.tick()
+        if _tkb:
+            _midb = (_tkb["bid"] + _tkb["ask"]) / 2.0
+            if abs(_midb - mid) > max(_bad_usd, 5.0):
+                result["action"] = "hold:bad_tick"
+                result["mid"] = round(mid, 2)
+                result["bad_tick_dev"] = round(mid - _midb, 2)
+                return result
+            mid = _midb
+            if not (config.MIN_PLATFORM_PRICE <= mid
+                    <= config.MAX_PLATFORM_PRICE):
+                result["action"] = "hold:out_of_range"
+                result["mid"] = round(mid, 2)
+                return result
+
+    # (3) داخل الجلسة: مقارنة بوسيط الصفوف الحديثة
+    if _bad_usd > 0 and rows:
+        _recent = [float(_r["platform"]) for _r in rows[-20:]
+                   if isinstance(_r.get("platform"), (int, float))]
+        if len(_recent) >= 3 and (_now_u - _last_t0) <= 90.0:
+            _srt = sorted(_recent)
+            _med = _srt[len(_srt) // 2]
+            if abs(mid - _med) > _bad_usd:
+                result["action"] = "hold:bad_tick"
+                result["mid"] = round(mid, 2)
+                result["bad_tick_dev"] = round(mid - _med, 2)
+                return result
     result["mid"] = mid
 
     # global price (ياهو GC=F القائد) — نفس مصدر live.py
@@ -565,6 +627,13 @@ def mt5_run_cycle(state, rows, sess):
         state, result, stats)
     if not can_open:
         result["action"] = "hold:" + (reason or "not_ready")
+        return result
+
+    # سديم النافذة 2026-10-15: لا دخول قبل تجمّع صفوف حديثة كافية — بداية
+    # الدورة كان الزخم يُحسب على صفّين أو ثلاثة فينتج catch_up وهمي من tick قديم.
+    _min_rows = int(getattr(config, "PRICE_WINDOW_MIN_ROWS", 0) or 0)
+    if _min_rows > 0 and len(rows) < _min_rows:
+        result["action"] = "hold:window_warming"
         return result
 
     # --- منع التعدد الصارم 2026-09-22: فحص الوسيط الفعلي قبل الفتح ---

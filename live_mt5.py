@@ -238,6 +238,95 @@ def _entry_decision(state, result, stats):
 
 
 # ============================================================================
+# استراتيجية جلسة الافتتاح الآسيوي (2026-10-18)
+# الشراء عند إغلاق لندن/نيويورك (~20:00 UTC) والخروج عند فتح آسيا
+# (~07:00 UTC). منطق بديل كامل (لا زخم/لا لحاق) يُستعمل فقط حين
+# config.SESSION_STRATEGY_ON — لا يمسّ مسار cTrader ولا مسار v1.
+# ============================================================================
+
+def _session_entry_decision(state, result, now_dt):
+    """قرار فتح صفقة الليل: شراء فقط، مرة واحدة لكل تاريخ جلسة.
+
+    تُرجع (can_open, reason, side, catch_up) — catch_up=0 لأن لا إشارة
+    زخم في هذا المسار (الطرف هو الاتجاه اليومي الليلي فقط).
+    """
+    if config.PAUSE_OPEN:
+        return False, "pause_open", "BUY", 0.0
+    if result.get("platform_jump", 0.0) >= config.PRICE_JUMP_ANOMALY_USD:
+        return False, "platform_jump", "BUY", 0.0
+    if state.get("position") is not None:
+        return False, "session_in_pos", "BUY", 0.0
+    wd = now_dt.weekday()
+    days = getattr(config, "SESSION_ENTRY_WEEKDAYS", {6, 0, 1, 2, 3})
+    if wd not in days:
+        return False, "session_day_skip", "BUY", 0.0
+    start = float(getattr(config, "SESSION_ENTRY_UTC_HOUR", 20))
+    win = float(getattr(config, "SESSION_ENTRY_WINDOW_MIN", 180)) / 60.0
+    h = now_dt.hour + now_dt.minute / 60.0 + now_dt.second / 3600.0
+    if not (start <= h < start + win):
+        return False, "session_wait", "BUY", 0.0
+    if state.get("session_last_entry_day") == now_dt.strftime("%Y-%m-%d"):
+        return False, "session_done", "BUY", 0.0
+    if result.get("balance_usd", 0) < config.MIN_BALANCE_TO_TRADE:
+        return False, "balance_low", "BUY", 0.0
+    _sp = _detected_spread_usd(result)
+    if config.SPREAD_GUARD_USD > 0 and _sp >= config.SPREAD_GUARD_USD:
+        return False, "spread_wide", "BUY", 0.0
+    try:
+        import ai_lab as _lab
+        news_blocked, _ev = _lab.event_blackout()
+    except Exception:
+        news_blocked, _ev = False, None
+    if news_blocked:
+        print("news blackout: {0}".format(
+            (_ev or {}).get("title", "high-impact")), flush=True)
+        return False, "high_impact_news", "BUY", 0.0
+    return True, None, "BUY", 0.0
+
+
+def _session_exit_decision(state, st_pos, mid, result, now_dt):
+    """قرار إغلاق صفقة الليل: أمان (max_loss/no_broker_stops/price_anomaly) +
+    خروج زمني عند 07:00 UTC، وإغلاق اضطراري قبل عطلة الأسبوع يوم الجمعة.
+
+    لا تريلنج ولا هدف ربح مبكر ولا giveback/no_progress — الهدف هو
+    الاحتفاظ بالمركز طوال الليل حتى فتح آسيا (جوهر الأدج).
+    """
+    side = st_pos.get("side") or "BUY"
+    entry = st_pos.get("entry_price")
+    if entry:
+        diff = mid - float(entry)
+        if side == "SELL":
+            diff = -diff
+        gross = diff * 100 / 100.0
+        fees = _main.position_fees_usd(
+            types.SimpleNamespace(commission=0.0, swap=0.0), 2,
+            result=result, state=state)
+        net = gross - fees
+        stop = float(getattr(config, "SESSION_STOP_USD", 2.0) or 2.0)
+        if net <= -abs(stop):
+            return True, "max_loss"
+    opened_at = st_pos.get("opened_at")
+    if opened_at and not st_pos.get("sltp_set"):
+        try:
+            od = datetime.fromisoformat(str(opened_at).replace("Z", "+00:00"))
+            if _now_unix() - od.timestamp() >= 120:
+                return True, "no_broker_stops"
+        except (ValueError, TypeError):
+            pass
+    jump = abs(state.get("_anomaly_jump", 0.0) or 0.0)
+    if jump >= config.PRICE_JUMP_ANOMALY_USD:
+        return True, "price_anomaly"
+    h = now_dt.hour + now_dt.minute / 60.0
+    ex = float(getattr(config, "SESSION_EXIT_UTC_HOUR", 7))
+    en = float(getattr(config, "SESSION_ENTRY_UTC_HOUR", 20))
+    if ex <= h < en:
+        return True, "session_close"
+    if now_dt.weekday() == 4 and h >= 19.0:
+        return True, "session_close"
+    return False, None
+
+
+# ============================================================================
 # دورة التداول
 # ============================================================================
 
@@ -418,10 +507,14 @@ def mt5_run_cycle(state, rows, sess):
         st_pos.setdefault("pnl_track", [])
         state["_anomaly_jump"] = result["platform_jump"]
 
-        should_close, close_reason = closing_mgr.check_close(
-            pos_ns, mid, global_price, stats, st_pos, _now_unix(),
-            state.get("money_digits") or 2,
-        )
+        if getattr(config, "SESSION_STRATEGY_ON", False):
+            should_close, close_reason = _session_exit_decision(
+                state, st_pos, mid, result, datetime.now(timezone.utc))
+        else:
+            should_close, close_reason = closing_mgr.check_close(
+                pos_ns, mid, global_price, stats, st_pos, _now_unix(),
+                state.get("money_digits") or 2,
+            )
         result["close_check"] = {"should_close": should_close,
                                  "reason": close_reason}
         if should_close and close_reason:
@@ -623,16 +716,22 @@ def mt5_run_cycle(state, rows, sess):
         result["close_reason_ext"] = hit
         return result
 
-    can_open, reason, side, catch_up, _ta = _entry_decision(
-        state, result, stats)
+    _is_session = bool(getattr(config, "SESSION_STRATEGY_ON", False))
+    if _is_session:
+        can_open, reason, side, catch_up = _session_entry_decision(
+            state, result, datetime.now(timezone.utc))
+    else:
+        can_open, reason, side, catch_up, _ta = _entry_decision(
+            state, result, stats)
     if not can_open:
         result["action"] = "hold:" + (reason or "not_ready")
         return result
 
     # سديم النافذة 2026-10-15: لا دخول قبل تجمّع صفوف حديثة كافية — بداية
     # الدورة كان الزخم يُحسب على صفّين أو ثلاثة فينتج catch_up وهمي من tick قديم.
+    # (لا ينطبق على مسار الجلسة: لا يعتمد على نافذة الزخم إطلاقاً.)
     _min_rows = int(getattr(config, "PRICE_WINDOW_MIN_ROWS", 0) or 0)
-    if _min_rows > 0 and len(rows) < _min_rows:
+    if not _is_session and _min_rows > 0 and len(rows) < _min_rows:
         result["action"] = "hold:window_warming"
         return result
 
@@ -676,7 +775,13 @@ def mt5_run_cycle(state, rows, sess):
     # sl/tp) — بخلاف cTrader الذي كان يرفضها.
     _risk_cap = float(getattr(config, "MAX_LOSS_USD", 0) or 0)
     _hard_cap = float(getattr(config, "AI_MAX_STOP_USD", 2.50) or 2.50)
-    if _risk_cap > 0:
+    if _is_session:
+        # صفقة الليل: وقف احتياطي ثابت (سيرفر+برمجي) — لا يتبع MAX_LOSS
+        # اليومي كي يبقى مساحة تنفّس طوال الليل، مع احترام سقف السلامة.
+        sl_base = min(
+            max(1.0, float(getattr(config, "SESSION_STOP_USD", 2.0) or 2.0)),
+            _hard_cap)
+    elif _risk_cap > 0:
         # + تكلفة + هامش تجاوز صغير (حركة بين دورتي الاستطلاع)، ثم سقف
         # مطلق: مسافة الوقف على السيرفر لا تتجاوز AI_MAX_STOP_USD أبداً.
         sl_base = min(max(1.0, min(_risk_cap, _hard_cap) + _fees + 0.10),
@@ -704,8 +809,12 @@ def mt5_run_cycle(state, rows, sess):
     # (لا positionId بعد) عبر _stable_jitter.
     _tp_seed = f"tp-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M')}-{int(time.time()*1000) % 997}"
     _tp_jit = _main._stable_jitter(_tp_seed, 0.04)
-    min_tp_dist = max(1.60, config.PROFIT_TARGET_USD * (1.0 + _tp_jit)) + _fees
-    tp_ext = max(min_tp_dist, 0.50 * abs(catch_up))
+    if _is_session:
+        # هدف سيرفر بعيد (شبكة أمان فقط) — الإغلاق زمني في 07:00 UTC.
+        tp_ext = max(1.0, float(getattr(config, "SESSION_TP_USD", 8.0) or 8.0))
+    else:
+        min_tp_dist = max(1.60, config.PROFIT_TARGET_USD * (1.0 + _tp_jit)) + _fees
+        tp_ext = max(min_tp_dist, 0.50 * abs(catch_up))
     if side == "SELL":
         sl = entry + sl_dist
         tp = entry - tp_ext
@@ -755,6 +864,9 @@ def mt5_run_cycle(state, rows, sess):
                 float(_detected_spread_usd(result) or 0.0), 2),
         }
         state["cooldown_until"] = 0
+        if _is_session:
+            state["session_last_entry_day"] = datetime.now(
+                timezone.utc).strftime("%Y-%m-%d")
         closing_mgr.trade_count_today += 1
         closing_mgr.save_perf_to_state(state)
         result["action"] = "open:" + side

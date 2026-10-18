@@ -156,6 +156,10 @@ jobs:
           STRAT_HUMAN_ENTRY_JITTER: "0.03"
           STRAT_MODEL: ${{ vars.STRAT_MODEL || 'v1' }}
           STRAT_PAUSE_OPEN: ${{ vars.STRAT_PAUSE_OPEN || '0' }}
+          # 2026-10-18: استراتيجية الجلسة الليلية مفعّلة افتراضياً (شراء عند
+          # 20:00 UTC، خروج 07:00 UTC). للتعطيل: اضبط Variable
+          # STRAT_SESSION_STRATEGY=0 — عندها يعود المسار القديم (الزخم).
+          STRAT_SESSION_STRATEGY: ${{ vars.STRAT_SESSION_STRATEGY || '1' }}
           STRAT_V2_EVAL: ${{ vars.STRAT_V2_EVAL || '1' }}
           # عقل LLM (2026-10-02): vars تتحكم بالتفعيل/المزود، السرّ من secrets.
           AI_ON: ${{ vars.AI_ON || '0' }}

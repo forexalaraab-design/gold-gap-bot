@@ -16,7 +16,7 @@ import json
 import os
 import types
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import config
 import gold_price
@@ -302,8 +302,8 @@ def _session_exit_decision(state, st_pos, mid, result, now_dt):
             types.SimpleNamespace(commission=0.0, swap=0.0), 2,
             result=result, state=state)
         net = gross - fees
-        stop = float(getattr(config, "SESSION_STOP_USD", 2.0) or 2.0)
-        if net <= -abs(stop):
+        stop = float(getattr(config, "SESSION_STOP_USD", 20.0) or 0.0)
+        if stop > 0 and net <= -abs(stop):
             return True, "max_loss"
     opened_at = st_pos.get("opened_at")
     if opened_at and not st_pos.get("sltp_set"):
@@ -324,6 +324,229 @@ def _session_exit_decision(state, st_pos, mid, result, now_dt):
     if now_dt.weekday() == 4 and h >= 19.0:
         return True, "session_close"
     return False, None
+
+
+# ---------------------------------------------------------------------------
+# سلة الجلسة متعددة المعادن (2026-10-18) — نفس الحافة على ذهب/فضة/يورو-ذهب/
+# أسترالي-ذهب. مسار مستقل تماماً لا يمسّ إدارة الموضع الواحد ولا cTrader.
+# ---------------------------------------------------------------------------
+
+def _session_entered_recently(sess, sym):
+    """هل فُتحت صفقة على هذا الرمز خلال آخر N ساعة؟ (من سجل الوسيط).
+
+    state غير محفوظ بين دورات السحابة، فنعتمد على ديلات MT5 الحقيقية —
+    يمنع إعادة الدخول بعد إغلاق مبكر (max_loss) في نفس الليلة.
+    """
+    try:
+        since = datetime.now(timezone.utc) - timedelta(
+            hours=float(getattr(config, "SESSION_DEDUP_LOOKBACK_HOURS", 12.0)))
+        deals = sess.history_deals_get(symbol=sym, since=since.replace(tzinfo=None))
+    except Exception:
+        return False
+    for d in (deals or []):
+        try:
+            if int(d.get("entry", -1)) == 0:  # DEAL_ENTRY_IN
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _usd_per_price(sess, sym, vol):
+    """كم دولار يتحرك الربح لكل وحدة سعر واحدة (لحجم معيّن)."""
+    p = sess.symbol_properties(sym) or {}
+    ts = float(p.get("trade_tick_size") or p.get("point") or 0.0) or 0.01
+    tv = float(p.get("trade_tick_value") or 0.0)
+    if tv <= 0:
+        return 1.0
+    return tv / ts * float(vol if vol else config.LOT)
+
+
+def _usd_to_price_dist(sess, sym, usd, vol):
+    """تحويل مبلغ دولاري إلى مسافة سعرية لهذا الرمز (وفق قيمة النقطة)."""
+    upp = _usd_per_price(sess, sym, vol)
+    if upp <= 0:
+        return float(usd)
+    return float(usd) / upp
+
+
+def mt5_run_session_basket(state, result, sess):
+    """دورة سلة الجلسة: إغلاق أمني/زمني لكل رمز + فتح مرة كل ليلة."""
+    now_dt = datetime.now(timezone.utc)
+    acc = sess.account_info() or {}
+    equity = float(acc.get("equity") or acc.get("balance") or 0.0)
+    free_margin = float(acc.get("margin_free") or equity)
+    result["balance_usd"] = equity
+    result["equity_usd"] = equity
+    state["_anomaly_jump"] = result.get("platform_jump", 0.0) or 0.0
+
+    syms = [s for s in getattr(config, "SESSION_SYMBOLS", [config.SYMBOL]) if s]
+    max_pos = int(getattr(config, "SESSION_MAX_POSITIONS", len(syms) or 1))
+    state.setdefault("session_entry_day", {})
+    acts = []
+
+    # ---------- مرحلة الإغلاق ----------
+    open_total = 0
+    for sym in syms:
+        positions = sess.positions_get(sym) or []
+        open_total += len(positions)
+        if not positions:
+            continue
+        p = positions[0]
+        opened_utc = ""
+        try:
+            opened_utc = datetime.utcfromtimestamp(
+                float(p.get("open_time") or 0) - 10800).isoformat() + "Z"
+        except (TypeError, ValueError):
+            opened_utc = utcnow_iso()
+        st = {
+            "side": "BUY" if p.get("side") == "buy" else "SELL",
+            "entry_price": p.get("open_price"),
+            "sltp_set": bool(p.get("sl")),
+            "opened_at": opened_utc,
+        }
+        tk = sess.tick(sym)
+        if tk is None:
+            continue
+        mid_s = (tk["bid"] + tk["ask"]) / 2.0
+        should, reason = _session_exit_decision(state, st, mid_s, result, now_dt)
+        result.setdefault("close_check", {})
+        result["close_check"][sym] = {"should_close": should, "reason": reason}
+        if not (should and reason):
+            continue
+        ok, msg = sess.close_position(
+            symbol=sym, side=p.get("side"), volume=config.LOT,
+            ticket=p.get("ticket"))
+        if not ok:
+            acts.append("closef:%s" % sym)
+            continue
+        upp = _usd_per_price(sess, sym, config.LOT)
+        diff = (mid_s - float(p.get("open_price") or mid_s))
+        if p.get("side") == "sell":
+            diff = -diff
+        gross = diff * upp
+        fees = abs(float(p.get("commission") or 0.0)) + \
+            abs(float(p.get("swap") or 0.0)) + \
+            (float(tk["ask"] - tk["bid"]) * upp)
+        pnl_net = round(gross - fees, 2)
+        _main._record_close(state, {
+            "ts_open": opened_utc,
+            "ts_close": utcnow_iso(),
+            "symbol": sym,
+            "side": st["side"],
+            "entry_price": p.get("open_price"),
+            "close_price": mid_s,
+            "pnl_units": pnl_net,
+            "pnl_usd": pnl_net,
+            "fees_usd": round(fees, 2),
+            "spread_usd": round(tk["ask"] - tk["bid"], 2),
+            "pnl_net_usd": pnl_net,
+            "reason": reason,
+            "catch_up": None,
+            "momentum": None,
+            "platform_momentum": None,
+        })
+        acts.append("close:%s:%s(%+.2f)" % (sym, reason, pnl_net))
+        open_total -= 1
+
+    # ---------- مرحلة الفتح ----------
+    for sym in syms:
+        can, reason = _session_entry_decision_sym(
+            state, result, now_dt, sym, sess, equity, free_margin, open_total,
+            max_pos)
+        if not can:
+            if reason not in ("session_day_skip", "session_wait",
+                              "session_done", "already_open", "pause_open",
+                              "max_positions"):
+                acts.append("hold:%s:%s" % (sym, reason))
+            continue
+        tk = sess.tick(sym)
+        if tk is None:
+            continue
+        entry = tk["ask"]
+        stop_usd = float(getattr(config, "SESSION_STOP_USD", 20.0) or 0.0)
+        tp_usd = float(getattr(config, "SESSION_TP_USD", 0.0) or 0.0)
+        sl_dist = (_usd_to_price_dist(sess, sym, stop_usd, config.LOT)
+                   if stop_usd > 0 else 0.0)
+        tp_dist = (_usd_to_price_dist(sess, sym, tp_usd, config.LOT)
+                   if tp_usd > 0 else 0.0)
+        props = sess.symbol_properties(sym) or {}
+        try:
+            min_stop = float(props.get("trade_stops_level") or 0) * \
+                float(props.get("point") or 0)
+        except (TypeError, ValueError):
+            min_stop = 0.0
+        if sl_dist > 0 and min_stop and \
+                sl_dist < (min_stop + 0.1 * float(props.get("point") or 0.01)):
+            sl_dist = min_stop + 0.1 * float(props.get("point") or 0.01)
+        sl = (entry - sl_dist) if sl_dist > 0 else None
+        tp = (entry + tp_dist) if tp_dist > 0 else None
+        label = mt5_broker._human_label()
+        react = _main._human_reaction()
+        if react > 0:
+            time.sleep(react)
+        ok, msg = sess.open_position(
+            symbol=sym, side="BUY", volume=config.LOT, sl=sl, tp=tp,
+            comment="")
+        if ok:
+            state["session_entry_day"][sym] = now_dt.strftime("%Y-%m-%d")
+            acts.append("open:%s" % sym)
+            open_total += 1
+            margin = sess.order_calc_margin(sym, config.LOT, "buy") or 0.0
+            free_margin -= margin
+        else:
+            acts.append("openf:%s:%s" % (sym, str(msg)[:40]))
+
+    result["open_positions"] = open_total
+    result["action"] = "session:" + (", ".join(acts) if acts else "hold")
+    return result
+
+
+def _session_entry_decision_sym(state, result, now_dt, sym, sess, equity,
+                                free_margin, open_total, max_pos):
+    """قرار فتح رمز واحد في السلة (شراء، مرة كل ليلة، بحارس هامش/سبريد)."""
+    if config.PAUSE_OPEN:
+        return False, "pause_open"
+    if open_total >= max_pos:
+        return False, "max_positions"
+    wd = now_dt.weekday()
+    if wd not in getattr(config, "SESSION_ENTRY_WEEKDAYS", {6, 0, 1, 2, 3}):
+        return False, "session_day_skip"
+    start = float(getattr(config, "SESSION_ENTRY_UTC_HOUR", 20))
+    win = float(getattr(config, "SESSION_ENTRY_WINDOW_MIN", 180)) / 60.0
+    h = now_dt.hour + now_dt.minute / 60.0 + now_dt.second / 3600.0
+    if not (start <= h < start + win):
+        return False, "session_wait"
+    if state.get("session_entry_day", {}).get(sym) == now_dt.strftime("%Y-%m-%d"):
+        return False, "session_done"
+    try:
+        if sess.positions_get(sym):
+            return False, "already_open"
+    except Exception:
+        return False, "pos_check_fail"
+    if _session_entered_recently(sess, sym):
+        return False, "session_done"
+    if equity < config.MIN_BALANCE_TO_TRADE:
+        return False, "balance_low"
+    tk = sess.tick(sym)
+    if tk is None:
+        return False, "no_tick"
+    mid = (tk["bid"] + tk["ask"]) / 2.0
+    if mid <= 0:
+        return False, "no_tick"
+    spread_bps = (tk["ask"] - tk["bid"]) / mid * 10000.0
+    if spread_bps >= float(getattr(config, "SESSION_MAX_SPREAD_BPS", 8.0)):
+        return False, "spread_wide(%.1fbps)" % spread_bps
+    margin = sess.order_calc_margin(sym, config.LOT, "buy")
+    if margin is None:
+        return False, "margin_unknown"
+    used = max(0.0, equity - free_margin)
+    if margin + 0.5 > free_margin:
+        return False, "margin_low"
+    level_after = equity / (used + margin) * 100.0 if (used + margin) > 0 else 999.0
+    if level_after < float(getattr(config, "SESSION_MIN_MARGIN_LEVEL", 105.0)):
+        return False, "margin_level(%.0f%%)" % level_after
+    return True, None
 
 
 # ============================================================================
@@ -479,6 +702,10 @@ def mt5_run_cycle(state, rows, sess):
     acc = sess.account_info()
     if acc:
         result["balance_usd"] = float(acc.get("equity") or acc.get("balance") or 0.0)
+
+    # ===== مسار سلة الجلسة (multisymbol) — بديل كامل عند التفعيل =====
+    if getattr(config, "SESSION_STRATEGY_ON", False):
+        return mt5_run_session_basket(state, result, sess)
 
     # --- موضع الوسيط الفعلي (MT5 يقوّى) ---
     broker_pos = None

@@ -157,6 +157,28 @@ def tick(symbol=None):
             "time_msc": t.time_msc}
 
 
+def order_calc_margin(symbol, volume, side="buy"):
+    """الهامش المطلوب لفتح حجم معين (بالعملة) — لحارس سلة الجلسة.
+
+    يرجع float أو None عند تعذّر الحساب (رمز/سعر غير جاهز). نستخدمه قبل
+    كل فتح في السلة كي لا نستنفد الهامش الحر ونقترب من نداء الهامش.
+    """
+    mt5 = _mt5()
+    s = symbol or config.SYMBOL
+    order_type = mt5.ORDER_TYPE_BUY if str(side).lower() in ("buy", "0") \
+        else mt5.ORDER_TYPE_SELL
+    info = mt5.symbol_info(s)
+    t = mt5.symbol_info_tick(s)
+    if info is None or t is None:
+        return None
+    price = t.ask if order_type == mt5.ORDER_TYPE_BUY else t.bid
+    try:
+        m = mt5.order_calc_margin(order_type, s, _volume_units(volume), price)
+    except Exception:
+        return None
+    return float(m) if m is not None else None
+
+
 def positions_list(pos):
     """تحويل نتائج positions_get من التيرمنال إلى dictات نظيفة (استثناء-safe)."""
     out = []

@@ -428,16 +428,38 @@ MOMENTUM_CONFIRM_MIN = 0.0
 # محايدة تمامًا (قاعدة 0) — لا يُرسَل أي أثر لهذا المنطق للبروكر.
 SESSION_STRATEGY_ON = _env_bool("STRAT_SESSION_STRATEGY", False)
 # ساعة الدخول/الخروج (UTC). الدخول 20:00، الخروج 07:00.
-SESSION_ENTRY_UTC_HOUR = int(_env_float("STRAT_SESSION_ENTRY_HOUR", 20.0))
+SESSION_ENTRY_UTC_HOUR = int(_env_float("STRAT_SESSION_ENTRY_HOUR", 19.0))
 SESSION_EXIT_UTC_HOUR = int(_env_float("STRAT_SESSION_EXIT_HOUR", 7.0))
 # نافذة الدخول (دقائق) بعد ساعة الدخول: الأحد يفتح السوق ~22:00 UTC فيلتقطه
 # نفس النافذة (20:00→23:00). تُفتح صفقة واحدة فقط لكل تاريخ جلسة.
 SESSION_ENTRY_WINDOW_MIN = int(_env_float(
     "STRAT_SESSION_ENTRY_WINDOW_MIN", 180.0))
 # الوقف الاحتياطي للصفقة (سيرفر + برمجي) بالدولار.
-SESSION_STOP_USD = _env_float("STRAT_SESSION_STOP_USD", 2.0)
-# الهدف الاحتياطي البعيد على السيرفر — لا يُقصد بلوغه (الإغلاق زمني في 07:00).
-SESSION_TP_USD = _env_float("STRAT_SESSION_TP_USD", 8.0)
+SESSION_STOP_USD = _env_float("STRAT_SESSION_STOP_USD", 20.0)
+# 0 = بلا هدف: الإغلاق زمني في 07:00 حصراً (الاختبار: TP يقتطع الحافة).
+SESSION_TP_USD = _env_float("STRAT_SESSION_TP_USD", 0.0)
 # أيام الدخول (weekday: الاثنين=0 … الأحد=6): الأحد+الاثنين+الثلاثاء+الأربعاء+
 # الخميس، نستثني الجمعة/السبت لتفادي الاحتفاظ عبر عطلة الأسبوع.
 SESSION_ENTRY_WEEKDAYS = {6, 0, 1, 2, 3}
+# سلة الرموز: نفس حافة السحب الليلي تعمّ المعادن الثمينة (كلها موجبة على
+# MT15: ذهب +6.7bps/فضة +9.3/يورو-ذهب +5.1/أسترالي-ذهب +4.9). تشغيلها معاً
+# يضاعف عدد الصفقات (≈19/أسبوع بدل 4-5) بنفس الحافة. الفضة أرخص هامشاً.
+# (البلاتين مرفوض: سبريد ~40bps يلتهم الحافة.)
+SESSION_SYMBOLS = [
+    _s.strip() for _s in str(
+        os.environ.get("STRAT_SESSION_SYMBOLS",
+                       "XAUUSD") or "").split(",")
+    if _s.strip()
+]
+# أقصى عدد صفقات متزامنة في السلة (حماية الهامش). عدد الرموز سقف طبيعي.
+SESSION_MAX_POSITIONS = int(_env_float(
+    "STRAT_SESSION_MAX_POS", float(len(SESSION_SYMBOLS) or 1)))
+# حدّ السبريد النسبي للدخول (bps) — يحمي من الرموز غالية السبريد (بلاتين).
+SESSION_MAX_SPREAD_BPS = _env_float("STRAT_SESSION_MAX_SPREAD_BPS", 8.0)
+# أدنى مستوى هامش مسموح بعد فتح صفقة جديدة (%). يمنع الاقتراب من نداء
+# الهامش (الوسيط: نداء عند 90%، إيقاف عند 20%).
+SESSION_MIN_MARGIN_LEVEL = _env_float("STRAT_SESSION_MIN_MARGIN_LEVEL", 105.0)
+# فتح صفقة واحدة لكل رمز في الليلة — نكتشفها من سجل صفقات الوسيط (آخر 12س)
+# لأن state غير محفوظ بين دورات السحابة (data/*.json مستثنى من git).
+SESSION_DEDUP_LOOKBACK_HOURS = _env_float(
+    "STRAT_SESSION_DEDUP_HOURS", 12.0)

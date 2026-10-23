@@ -157,6 +157,33 @@ def tick(symbol=None):
             "time_msc": t.time_msc}
 
 
+def rates(symbol=None, timeframe="D1", count=260):
+    """آخر N شمعة لرمز (قائمة dicts: time/open/high/low/close) أو [].
+
+    تُستخدم لمؤشر المتوسط 200 يوم في مسار ليل المؤشرات. تُسقط شمعة اليوم
+    غير المكتملة عند حساب المتوسط (المستدعي يقرر).
+    """
+    mt5 = _mt5()
+    s = symbol or config.SYMBOL
+    tf = getattr(mt5, "TIMEFRAME_" + str(timeframe).upper(), mt5.TIMEFRAME_D1)
+    try:
+        mt5.symbol_select(s, True)
+        r = mt5.copy_rates_from_pos(s, tf, 0, int(count))
+    except Exception:
+        r = None
+    if r is None:
+        return []
+    out = []
+    for b in r:
+        try:
+            out.append({"time": int(b["time"]), "open": float(b["open"]),
+                        "high": float(b["high"]), "low": float(b["low"]),
+                        "close": float(b["close"])})
+        except (TypeError, ValueError, KeyError):
+            continue
+    return out
+
+
 def order_calc_margin(symbol, volume, side="buy"):
     """الهامش المطلوب لفتح حجم معين (بالعملة) — لحارس سلة الجلسة.
 

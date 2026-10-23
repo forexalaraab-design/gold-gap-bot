@@ -463,3 +463,30 @@ SESSION_MIN_MARGIN_LEVEL = _env_float("STRAT_SESSION_MIN_MARGIN_LEVEL", 105.0)
 # لأن state غير محفوظ بين دورات السحابة (data/*.json مستثنى من git).
 SESSION_DEDUP_LOOKBACK_HOURS = _env_float(
     "STRAT_SESSION_DEDUP_HOURS", 12.0)
+
+# ============================================================================
+# استراتيجية ليل المؤشرات (2026-10-23) — NAS100
+# شراء عند إغلاق بورصة نيويورك (16:00 ET) وخروج عند فتحها (09:30 ET)، فقط
+# حين يكون المؤشر فوق متوسطه 200 يوم. بحث 40 أداة × 20 سنة (2005-2026)
+# بالتكاليف الحقيقية: Sharpe 0.72، موجب 19/22 سنة، أقصى تراجع -13.8%،
+# أسوأ يوم -$19.94 بلوت 0.02. بديل كامل لمسار الذهب (له الأولوية في الدورة).
+# (اللوت ثابت 0.02 — لا يُقرأ من env؛ قاعدة «0.01 فقط» تخصّ XAUUSD وحده.)
+# الخصوصية (قاعدة 0): الملصق بشري والتعليق فارغ — لا أثر للمنطق للبروكر.
+INDEX_OVERNIGHT_ON = _env_bool("STRAT_INDEX_OVERNIGHT", True)
+INDEX_OVERNIGHT_SYMBOL = str(
+    os.environ.get("STRAT_INDEX_SYMBOL", "NAS100") or "NAS100").strip()
+INDEX_OVERNIGHT_LOT = 0.02
+INDEX_OVERNIGHT_MA = int(_env_float("STRAT_INDEX_MA", 200.0))
+# توقيت نيويورك (ET): إغلاق النقد 16:00، فتح النقد 09:30 (يُحوَّل UTC tلقائياً
+# عبر zoneinfo فيتتبع التوقيت الصيفي).
+INDEX_OVERNIGHT_ENTRY_ET = 16.0
+INDEX_OVERNIGHT_EXIT_ET = 9.5
+# نافذة الدخول بعد 16:00 ET — الدورة كل ~15 دقيقة فتلتقط أول نداء.
+INDEX_OVERNIGHT_ENTRY_WINDOW_MIN = int(_env_float(
+    "STRAT_INDEX_ENTRY_WINDOW_MIN", 45.0))
+# وقف كارثي فقط (لا يمسّ الأيام العادية: أسوأ يوم تاريخي -$19.94).
+INDEX_OVERNIGHT_STOP_USD = _env_float("STRAT_INDEX_STOP_USD", 40.0)
+# حارس سبريد (bps) — NAS100 سبريده ~0.3bp؛ نتساهل حتى 10bp وقت الإغلاق.
+INDEX_OVERNIGHT_MAX_SPREAD_BPS = _env_float(
+    "STRAT_INDEX_MAX_SPREAD_BPS", 10.0)
+INDEX_OVERNIGHT_DEDUP_HOURS = _env_float("STRAT_INDEX_DEDUP_HOURS", 20.0)

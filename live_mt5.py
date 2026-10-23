@@ -550,6 +550,216 @@ def _session_entry_decision_sym(state, result, now_dt, sym, sess, equity,
 
 
 # ============================================================================
+# استراتيجية ليل المؤشرات (2026-10-23) — NAS100
+# شراء عند إغلاق نيويورك (16:00 ET) وخروج عند فتحها (09:30 ET)، فقط حين
+# يكون المؤشر فوق متوسطه 200 يوم. مسار مستقل تماماً عن الذهب/الجلسة.
+# الدليل: 40 أداة × 20 سنة — NAS100 Sharpe 0.72، موجب 19/22 سنة،
+# أقصى تراجع -13.8%، أسوأ يوم -$19.94 (لوت 0.02، تكاليف MT5 الحقيقية).
+# ============================================================================
+
+def _et_now(now_dt):
+    """UTC → توقيت نيويورك (يتتبع التوقيت الصيفي عبر zoneinfo)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return now_dt.astimezone(ZoneInfo("America/New_York"))
+    except Exception:
+        offset = 4 if 3 <= now_dt.month <= 10 else 5
+        return now_dt - timedelta(hours=offset)
+
+
+def _index_ma_ok(sess, sym, ma_days):
+    """هل إغلاق أمس > متوسط آخر 200 يوم؟ (يُسقط شمعة اليوم غير المكتملة)."""
+    bars = sess.rates(sym, "D1", max(int(ma_days) + 10, 60))
+    if not bars or len(bars) < 2:
+        return False, "index:ma_no_data"
+    closes = [b["close"] for b in bars[:-1]]
+    if len(closes) < ma_days:
+        return False, "index:ma_short"
+    ma = sum(closes[-ma_days:]) / float(ma_days)
+    if closes[-1] > ma:
+        return True, "index:ma_above"
+    return False, "index:ma_below"
+
+
+def _index_entered_recently(sess, sym):
+    """هل فُتحت صفقة على الرمز خلال آخر N ساعة؟ (من سجل الوسيط الحقيقي)."""
+    try:
+        since = datetime.now(timezone.utc) - timedelta(
+            hours=float(getattr(config, "INDEX_OVERNIGHT_DEDUP_HOURS", 20.0)))
+        deals = sess.history_deals_get(symbol=sym, since=since.replace(tzinfo=None))
+    except Exception:
+        return False
+    for d in (deals or []):
+        try:
+            if int(d.get("entry", -1)) == 0:  # DEAL_ENTRY_IN
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def mt5_run_index_overnight(state, result, sess):
+    """دورة NAS100 الليلية: إغلاق زمني/أمني ثم فتح واحد عند 16:00 ET."""
+    now_dt = datetime.now(timezone.utc)
+    et = _et_now(now_dt)
+    et_h = et.hour + et.minute / 60.0 + et.second / 3600.0
+    sym = getattr(config, "INDEX_OVERNIGHT_SYMBOL", "NAS100")
+    lot = float(getattr(config, "INDEX_OVERNIGHT_LOT", 0.02))
+    ma_days = int(getattr(config, "INDEX_OVERNIGHT_MA", 200))
+    entry_et = float(getattr(config, "INDEX_OVERNIGHT_ENTRY_ET", 16.0))
+    exit_et = float(getattr(config, "INDEX_OVERNIGHT_EXIT_ET", 9.5))
+    win = float(getattr(config, "INDEX_OVERNIGHT_ENTRY_WINDOW_MIN", 45.0)) / 60.0
+    stop_usd = float(getattr(config, "INDEX_OVERNIGHT_STOP_USD", 40.0) or 0.0)
+
+    acc = sess.account_info() or {}
+    equity = float(acc.get("equity") or acc.get("balance") or 0.0)
+    free_margin = float(acc.get("margin_free") or equity)
+    result["balance_usd"] = equity
+    result["equity_usd"] = equity
+    state["_anomaly_jump"] = result.get("platform_jump", 0.0) or 0.0
+
+    try:
+        positions = sess.positions_get(sym) or []
+    except Exception:
+        positions = []
+
+    # ---------------------------- مرحلة الإغلاق ----------------------------
+    if positions:
+        p = positions[0]
+        tk = sess.tick(sym)
+        if tk is None:
+            result["action"] = "index:no_tick"
+            result["open_positions"] = len(positions)
+            return result
+        mid = (tk["bid"] + tk["ask"]) / 2.0
+        should, reason = False, None
+        # خروج زمني: من فتح النقد (09:30 ET) حتى ما قبل إغلاقه (16:00 ET)
+        if exit_et <= et_h < entry_et:
+            should, reason = True, "index_close"
+        # حارس خسارة كارثية
+        if not should and stop_usd > 0:
+            upp = _usd_per_price(sess, sym, lot)
+            diff = mid - float(p.get("open_price") or mid)
+            if p.get("side") == "sell":
+                diff = -diff
+            if diff * upp <= -abs(stop_usd):
+                should, reason = True, "index_stop"
+        # حارس شذوذ السعر
+        if not should:
+            jump = abs(state.get("_anomaly_jump", 0.0) or 0.0)
+            if jump >= config.PRICE_JUMP_ANOMALY_USD:
+                should, reason = True, "price_anomaly"
+        if should and reason:
+            ok, msg = sess.close_position(
+                symbol=sym, side=p.get("side"), volume=lot,
+                ticket=p.get("ticket"))
+            if ok:
+                upp = _usd_per_price(sess, sym, lot)
+                diff = mid - float(p.get("open_price") or mid)
+                if p.get("side") == "sell":
+                    diff = -diff
+                gross = diff * upp
+                fees = abs(float(p.get("commission") or 0.0)) + \
+                    abs(float(p.get("swap") or 0.0))
+                pnl = round(gross - fees, 2)
+                _main._record_close(state, {
+                    "ts_open": datetime.fromtimestamp(
+                        float(p.get("open_time") or 0) - 10800,
+                        timezone.utc).replace(microsecond=0).isoformat(),
+                    "ts_close": utcnow_iso(),
+                    "symbol": sym,
+                    "side": "BUY" if p.get("side") == "buy" else "SELL",
+                    "entry_price": p.get("open_price"),
+                    "close_price": mid,
+                    "pnl_units": pnl,
+                    "pnl_usd": pnl,
+                    "fees_usd": round(fees, 2),
+                    "spread_usd": round(tk["ask"] - tk["bid"], 2),
+                    "pnl_net_usd": pnl,
+                    "reason": reason,
+                    "catch_up": None,
+                    "momentum": None,
+                    "platform_momentum": None,
+                })
+                result["action"] = "index:close_%s(%+.2f)" % (reason, pnl)
+            else:
+                result["action"] = "index:closef:%s" % str(msg)[:40]
+        else:
+            result["action"] = "index:hold"
+        result["open_positions"] = len(sess.positions_get(sym) or [])
+        return result
+
+    # ----------------------------- مرحلة الفتح -----------------------------
+    if config.PAUSE_OPEN:
+        result["action"] = "index:pause_open"
+        return result
+    if et.weekday() >= 5:
+        result["action"] = "index:weekend"
+        return result
+    if not (entry_et <= et_h < entry_et + win):
+        result["action"] = "index:wait"
+        return result
+    if _index_entered_recently(sess, sym):
+        result["action"] = "index:done"
+        return result
+    ok_ma, ma_reason = _index_ma_ok(sess, sym, ma_days)
+    if not ok_ma:
+        result["action"] = ma_reason
+        return result
+    tk = sess.tick(sym)
+    if tk is None:
+        result["action"] = "index:no_tick"
+        return result
+    mid = (tk["bid"] + tk["ask"]) / 2.0
+    if mid <= 0:
+        result["action"] = "index:no_tick"
+        return result
+    spread_bps = (tk["ask"] - tk["bid"]) / mid * 10000.0
+    max_bps = float(getattr(config, "INDEX_OVERNIGHT_MAX_SPREAD_BPS", 10.0))
+    if max_bps > 0 and spread_bps >= max_bps:
+        result["action"] = "index:spread_wide(%.1fbps)" % spread_bps
+        return result
+    margin = sess.order_calc_margin(sym, lot, "buy")
+    if margin is None:
+        result["action"] = "index:margin_unknown"
+        return result
+    used = max(0.0, equity - free_margin)
+    if margin + 0.5 > free_margin:
+        result["action"] = "index:margin_low"
+        return result
+    level_after = equity / (used + margin) * 100.0 if (used + margin) > 0 else 999.0
+    if level_after < 105.0:
+        result["action"] = "index:margin_level(%.0f%%)" % level_after
+        return result
+
+    entry = tk["ask"]
+    sl = None
+    if stop_usd > 0:
+        sl_dist = _usd_to_price_dist(sess, sym, stop_usd, lot)
+        props = sess.symbol_properties(sym) or {}
+        try:
+            min_stop = float(props.get("trade_stops_level") or 0) * \
+                float(props.get("point") or 0)
+        except (TypeError, ValueError):
+            min_stop = 0.0
+        if min_stop and sl_dist < min_stop:
+            sl_dist = min_stop
+        sl = entry - sl_dist
+    react = _main._human_reaction()
+    if react > 0:
+        time.sleep(react)
+    ok, msg = sess.open_position(
+        symbol=sym, side="BUY", volume=lot, sl=sl, tp=None, comment="")
+    if ok:
+        result["action"] = "index:open:%s" % sym
+        result["open_positions"] = 1
+    else:
+        result["action"] = "index:openf:%s" % str(msg)[:40]
+        result["open_positions"] = 0
+    return result
+
+
+# ============================================================================
 # دورة التداول
 # ============================================================================
 
@@ -702,6 +912,19 @@ def mt5_run_cycle(state, rows, sess):
     acc = sess.account_info()
     if acc:
         result["balance_usd"] = float(acc.get("equity") or acc.get("balance") or 0.0)
+
+    # ===== مسار ليل المؤشرات (NAS100) — له الأولوية على مسار الجلسة =====
+    # إن وُجدت صفقة قديمة على رمز آخر (بقايا الذهب) نمرّرها للمسار القديم
+    # كي تُدار ولا نتركها معلّقة بلا إغلاق زمني.
+    if getattr(config, "INDEX_OVERNIGHT_ON", False):
+        _idx_sym = getattr(config, "INDEX_OVERNIGHT_SYMBOL", "NAS100")
+        try:
+            _other_pos = [p for p in (sess.positions_get() or [])
+                          if str(p.get("symbol")) != str(_idx_sym)]
+        except Exception:
+            _other_pos = []
+        if not _other_pos:
+            return mt5_run_index_overnight(state, result, sess)
 
     # ===== مسار سلة الجلسة (multisymbol) — بديل كامل عند التفعيل =====
     if getattr(config, "SESSION_STRATEGY_ON", False):

@@ -767,6 +767,20 @@ def mt5_run_cycle(state, rows, sess):
     """دورة واحدة: إغلاق+فتح — متزامنة، ترجع result dict."""
     result = {"ts": utcnow_iso()}
 
+    # ===== مسار ليل المؤشرات (NAS100) — له الأولوية وقبل حراس أسعار الذهب =====
+    # حراس النطاق/الأسعار أدناه تخصّ XAUUSD فقط (MID في [MIN,MAX]) وكانت
+    # تُسقط الدورة قبل الوصول للمؤشر. إن وُجدت صفقة قديمة على رمز آخر
+    # (بقايا الذهب) نمرّرها للمسار القديم كي تُدار بدل تركها معلّقة.
+    if getattr(config, "INDEX_OVERNIGHT_ON", False):
+        _idx_sym = getattr(config, "INDEX_OVERNIGHT_SYMBOL", "NAS100")
+        try:
+            _other_pos = [p for p in (sess.positions_get() or [])
+                          if str(p.get("symbol")) != str(_idx_sym)]
+        except Exception:
+            _other_pos = []
+        if not _other_pos:
+            return mt5_run_index_overnight(state, result, sess)
+
     # --- حلقة التطوير الذاتي (AI_ON): توصية العقل على الـ entry threshold ---
     # تُطبَّق في الذاكرة على config فقط (لا ملفات/commit)، وبصد قيم شاذة،
     # وفي حدود مفاتيح AI_APPLY_ON / AI_MOMENTUM_MIN_{MIN,MAX}.
@@ -912,19 +926,6 @@ def mt5_run_cycle(state, rows, sess):
     acc = sess.account_info()
     if acc:
         result["balance_usd"] = float(acc.get("equity") or acc.get("balance") or 0.0)
-
-    # ===== مسار ليل المؤشرات (NAS100) — له الأولوية على مسار الجلسة =====
-    # إن وُجدت صفقة قديمة على رمز آخر (بقايا الذهب) نمرّرها للمسار القديم
-    # كي تُدار ولا نتركها معلّقة بلا إغلاق زمني.
-    if getattr(config, "INDEX_OVERNIGHT_ON", False):
-        _idx_sym = getattr(config, "INDEX_OVERNIGHT_SYMBOL", "NAS100")
-        try:
-            _other_pos = [p for p in (sess.positions_get() or [])
-                          if str(p.get("symbol")) != str(_idx_sym)]
-        except Exception:
-            _other_pos = []
-        if not _other_pos:
-            return mt5_run_index_overnight(state, result, sess)
 
     # ===== مسار سلة الجلسة (multisymbol) — بديل كامل عند التفعيل =====
     if getattr(config, "SESSION_STRATEGY_ON", False):

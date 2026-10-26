@@ -168,6 +168,9 @@ class CtraderSession:
         self.client.startService()
         conn = self.client.whenConnected(failAfterFailures=1)
         yield conn.addTimeout(config.CONNECT_TIMEOUT, reactor)
+        # Force account identity from config so we never depend on the
+        # server response alone.
+        self.account_id = getattr(config, "CTID_ACCOUNT_ID", None)
         defer.returnValue(host)
 
     # ── auth 3-step ────────────────────────────────────────────────────

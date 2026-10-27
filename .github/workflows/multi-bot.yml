@@ -72,7 +72,7 @@ jobs:
           MULTI_BROKER: mt5
           MULTI_SCAN_HOUR: "8"
           MULTI_SCAN_MINUTE: "0"
-          MULTI_MIN_CONFIDENCE: "0.70"
+          MULTI_MIN_CONFIDENCE: "0.30"
           MULTI_MAX_TRADES: "3"
           MULTI_RISK_PCT: "0.01"
           MULTI_AI_ON: "0"

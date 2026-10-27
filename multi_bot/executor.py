@@ -68,6 +68,15 @@ def open_position(symbol, side, lots, sl, tp):
     if tick is None:
         return None, f"tick not found: {sym}"
     price = tick.ask if side == "BUY" else tick.bid
+
+    # Validate SL/TP direction before sending
+    if side == "BUY":
+        if float(sl) >= price:
+            sl, tp = tp, sl  # swap if SL is above entry for BUY
+    elif side == "SELL":
+        if float(sl) <= price:
+            sl, tp = tp, sl  # swap if SL is below entry for SELL
+
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": sym,

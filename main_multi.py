@@ -9,7 +9,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-import config as _cfg
+from multi_bot import config as _cfg
 from multi_bot import config as mconfig
 from multi_bot.calendar import fetch_events, get_events_for_symbol, has_high_impact_near
 from multi_bot.sentiment import get_symbol_sentiment

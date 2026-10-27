@@ -23,9 +23,10 @@ MAX_TRADES_PER_DAY = int(os.environ.get("MULTI_MAX_TRADES", "3"))
 # ===== مخاطرة =====
 RISK_PER_TRADE = float(os.environ.get("MULTI_RISK_PCT", "0.01"))
 MAX_DAILY_LOSS = float(os.environ.get("MULTI_MAX_DAILY_LOSS", "0.03"))
-SL_ATR_MULT = float(os.environ.get("MULTI_SL_ATR", "1.5"))
-TP_ATR_MULT = float(os.environ.get("MULTI_TP_ATR", "2.5"))
-MIN_RR = float(os.environ.get("MULTI_MIN_RR", "1.5"))
+SL_ATR_MULT = float(os.environ.get("MULTI_SL_ATR", "0.5"))
+TP_ATR_MULT = float(os.environ.get("MULTI_TP_ATR", "1.0"))
+MIN_RR = float(os.environ.get("MULTI_MIN_RR", "1.0"))
+HOLD_HOURS = int(os.environ.get("MULTI_HOLD_HOURS", "8"))
 
 # ===== مصادر البيانات =====
 FOREX_FACTORY_URL = os.environ.get(

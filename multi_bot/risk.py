@@ -34,6 +34,18 @@ def calculate_sl_tp(side, entry_price, highs, lows, closes):
     else:
         sl_dist = config.SL_ATR_MULT * atr
         tp_dist = config.TP_ATR_MULT * atr
+    # Cap SL/TP to reasonable ranges to avoid broker rejection
+    if entry_price > 100:
+        max_sl = entry_price * 0.02
+        max_tp = entry_price * 0.04
+    elif entry_price > 10:
+        max_sl = entry_price * 0.01
+        max_tp = entry_price * 0.02
+    else:
+        max_sl = entry_price * 0.005
+        max_tp = entry_price * 0.01
+    sl_dist = min(sl_dist, max_sl)
+    tp_dist = min(tp_dist, max_tp)
     if side == "BUY":
         sl = entry_price - sl_dist
         tp = entry_price + tp_dist

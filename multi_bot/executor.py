@@ -22,9 +22,10 @@ def initialize():
     mt5 = _mt5()
     if mt5 is None:
         return False, "MetaTrader5 not installed"
-    if not config.MT5_PATH and not os.path.exists(config.MT5_PATH):
-        return False, f"MT5 path not found: {config.MT5_PATH}"
-    ok = mt5.initialize(config.MT5_PATH, login=config.MT5_LOGIN, password=config.MT5_PASSWORD, server=config.MT5_SERVER)
+    path = getattr(config, "MT5_PATH", "") or os.environ.get("MT5_TERMINAL_PATH", "")
+    if not path or not os.path.exists(path):
+        return False, f"MT5 path not found: {path}"
+    ok = mt5.initialize(path, login=config.MT5_LOGIN, password=config.MT5_PASSWORD, server=config.MT5_SERVER)
     if not ok:
         return False, f"MT5 init failed: {mt5.last_error()}"
     return True, "connected"

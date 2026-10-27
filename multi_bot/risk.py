@@ -28,31 +28,25 @@ def atr_from_true_range(highs, lows, closes, period=14):
 
 def calculate_sl_tp(side, entry_price, highs, lows, closes):
     atr = atr_from_true_range(highs, lows, closes)
-    if atr is None or math.isnan(atr) or atr <= 0:
-        sl_dist = config.SL_ATR_MULT * 1.0
-        tp_dist = config.TP_ATR_MULT * 1.0
-    else:
-        sl_dist = config.SL_ATR_MULT * atr
-        tp_dist = config.TP_ATR_MULT * atr
-    # Cap SL/TP to reasonable ranges to avoid broker rejection
-    if entry_price > 100:
-        max_sl = entry_price * 0.02
-        max_tp = entry_price * 0.04
-    elif entry_price > 10:
-        max_sl = entry_price * 0.01
-        max_tp = entry_price * 0.02
-    else:
-        max_sl = entry_price * 0.005
-        max_tp = entry_price * 0.01
-    sl_dist = min(sl_dist, max_sl)
-    tp_dist = min(tp_dist, max_tp)
+    if entry_price > 3000:  # XAUUSD
+        sl_pct = 0.0005
+        tp_pct = 0.0010
+    elif entry_price > 1000:  # NAS100
+        sl_pct = 0.0005
+        tp_pct = 0.0010
+    elif entry_price > 100:  # USDJPY
+        sl_pct = 0.0005
+        tp_pct = 0.0010
+    else:  # EURUSD, GBPUSD, etc.
+        sl_pct = 0.0008
+        tp_pct = 0.0016
     if side == "BUY":
-        sl = entry_price - sl_dist
-        tp = entry_price + tp_dist
+        sl = entry_price * (1 - sl_pct)
+        tp = entry_price * (1 + tp_pct)
     else:
-        sl = entry_price + sl_dist
-        tp = entry_price - tp_dist
-    rr = tp_dist / sl_dist if sl_dist > 0 else 0.0
+        sl = entry_price * (1 + sl_pct)
+        tp = entry_price * (1 - tp_pct)
+    rr = (tp - entry_price) / (entry_price - sl) if (entry_price - sl) > 0 else 0.0
     if rr < config.MIN_RR:
         return None, None
     return sl, tp

@@ -49,12 +49,16 @@ def calculate_sl_tp(side, entry_price, highs, lows, closes):
 def position_size(balance, entry_price, sl_price, symbol):
     try:
         risk_per_trade = balance * config.RISK_PER_TRADE
-        pip_value = 1.0
-        if symbol.upper().endswith("JPY"):
-            pip_value = 0.01
-        elif symbol.upper() == "XAUUSD":
-            pip_value = 1.0
-        sl_pips = abs(entry_price - sl_price) / pip_value
+        sym = symbol.upper()
+        if sym.endswith("JPY"):
+            pip_size = 0.01
+        elif sym == "XAUUSD":
+            pip_size = 0.01
+        elif sym == "NAS100":
+            pip_size = 1.0
+        else:
+            pip_size = 0.0001
+        sl_pips = abs(entry_price - sl_price) / pip_size
         if sl_pips <= 0:
             return 0
         lots = risk_per_trade / (sl_pips * 1000)

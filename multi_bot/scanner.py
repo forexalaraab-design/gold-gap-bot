@@ -60,19 +60,50 @@ def _technical_score(symbol, yahoo):
             return 0.0, "neutral", []
         reasons = []
         score = 0.0
-        if price > yahoo.get("ma50") and price > yahoo.get("ma200"):
-            score += 0.4
-            reasons.append("above_ma")
-        elif price < yahoo.get("ma50") and price < yahoo.get("ma200"):
-            score -= 0.4
-            reasons.append("below_ma")
+
+        # Fallback: compute MAs from closes if Yahoo metadata is missing
+        ma50 = yahoo.get("ma50")
+        ma200 = yahoo.get("ma200")
+        if ma50 is None and len(closes) >= 50:
+            ma50 = sum(closes[-50:]) / 50.0
+        if ma200 is None and len(closes) >= 200:
+            ma200 = sum(closes[-200:]) / 200.0
+
+        if ma50 is not None and ma200 is not None:
+            if price > ma50 and price > ma200:
+                score += 0.4
+                reasons.append("above_ma")
+            elif price < ma50 and price < ma200:
+                score -= 0.4
+                reasons.append("below_ma")
+        elif ma50 is not None:
+            if price > ma50:
+                score += 0.2
+                reasons.append("above_ma50")
+            else:
+                score -= 0.2
+                reasons.append("below_ma50")
+
         recent = closes[-10:]
-        if recent[-1] > max(recent[:-1]):
-            score += 0.2
-            reasons.append("breakout")
-        if recent[-1] < min(recent[:-1]):
-            score -= 0.2
-            reasons.append("breakdown")
+        if len(recent) >= 2:
+            if recent[-1] > max(recent[:-1]):
+                score += 0.2
+                reasons.append("breakout")
+            if recent[-1] < min(recent[:-1]):
+                score -= 0.2
+                reasons.append("breakdown")
+
+            # Momentum fallback: use last 3-bar slope when no breakout
+            if "breakout" not in reasons and "breakdown" not in reasons:
+                if len(closes) >= 3:
+                    slope = closes[-1] - closes[-3]
+                    if slope > 0:
+                        score += 0.15
+                        reasons.append("up_slope")
+                    elif slope < 0:
+                        score -= 0.15
+                        reasons.append("down_slope")
+
         side = "BUY" if score > 0.1 else "SELL" if score < -0.1 else "neutral"
         return max(-1.0, min(1.0, score)), side, reasons
     except Exception:
@@ -101,10 +132,9 @@ def score_opportunity(symbol):
                 impact = 0.15
             events_score = impact
         total = (
-            tech_score * 0.35
+            tech_score * 0.60
             + sent_score * 0.20
             + analyst_score * 0.20
-            + events_score * 0.25
         )
         total = max(-1.0, min(1.0, total))
         if abs(total) < config.MIN_CONFIDENCE:

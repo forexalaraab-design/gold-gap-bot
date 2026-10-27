@@ -44,18 +44,35 @@ def open_position(symbol, side, lots, sl, tp):
     if mt5 is None:
         return None, "no mt5"
     sym = (config.MT5_SYMBOL_SUFFIX + symbol).upper()
+    try:
+        mt5.symbol_select(sym, True)
+    except Exception:
+        pass
     info = mt5.symbol_info(sym)
     if info is None:
+        try:
+            mt5.symbol_select(sym, True)
+        except Exception:
+            pass
+        info = mt5.symbol_info(sym)
+    if info is None:
         return None, f"symbol not found: {sym}"
-    if not info.visible:
-        mt5.symbol_select(sym, True)
+    if hasattr(info, "visible") and not info.visible:
+        try:
+            mt5.symbol_select(sym, True)
+        except Exception:
+            pass
     order_type = mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL
+    tick = mt5.symbol_info_tick(sym)
+    if tick is None:
+        return None, f"tick not found: {sym}"
+    price = tick.ask if side == "BUY" else tick.bid
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": sym,
         "volume": float(lots),
         "type": order_type,
-        "price": mt5.symbol_info_tick(sym).ask if side == "BUY" else mt5.symbol_info_tick(sym).bid,
+        "price": price,
         "sl": float(sl),
         "tp": float(tp),
         "deviation": 10,

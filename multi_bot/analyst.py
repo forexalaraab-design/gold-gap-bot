@@ -41,8 +41,11 @@ def get_cot_bias():
 def get_yahoo_summary(symbol):
     try:
         sym = symbol.upper()
+        mapped = getattr(config, "YAHOO_SYMBOL_MAP", {}).get(sym)
         if sym == "XAUUSD":
             sym = "GC=F"
+        elif mapped:
+            sym = mapped
         else:
             sym = sym + "=X"
         url = config.YAHOO_CHART_URL.replace("{symbol}", sym)

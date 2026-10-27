@@ -14,9 +14,23 @@ from multi_bot import config
 
 RSS_SOURCES = [
     "https://feeds.bbci.co.uk/news/business/rss.xml",
-    "https://feeds.reuters.com/reuters/businessNews",
-    "https://www.forexlive.com/feeds/news",
+    "https://www.dailyfx.com/feeds/market-news",
+    "https://www.fxstreet.com/rss/news",
+    "https://www.investing.com/rss/news.rss",
+    "https://rss.app/feeds/RssNews.xml?feedId=1035",
 ]
+
+FOREX_GOLD_KEYWORDS = {
+    "XAUUSD": ["gold", "xau", "xauusd", "precious metals", "bullion", "fed", "dollar", "usd", "yield", "inflation"],
+    "NAS100": ["nasdaq", "^ndx", "nas100", "tech stocks", "s&p 500", "spx", "technology", "nvidia", "apple", "microsoft"],
+    "EURUSD": ["eur/usd", "eurusd", "euro", "ecb", "eurozone", "germany", "france", "italy"],
+    "GBPUSD": ["gbp/usd", "gbpusd", "pound", "sterling", "boe", "uk", "britain", "bank of england"],
+    "USDJPY": ["usd/jpy", "usdjpy", "yen", "boj", "japan", "tokyo"],
+    "USDCHF": ["usd/chf", "usdchf", "franc", "snb", "swiss"],
+    "AUDUSD": ["aud/usd", "audusd", "aussie", "rba", "australia", "commodity"],
+    "NZDUSD": ["nzd/usd", "nzdusd", "kiwi", "rbnz", "new zealand"],
+    "USDCAD": ["usd/cad", "usdcad", "loonie", "boc", "canada", "oil"],
+}
 
 
 def _fetch_rss(url, timeout=20):
@@ -53,13 +67,9 @@ def _simple_sentiment(text):
 
 def get_symbol_sentiment(symbol, hours=24):
     try:
-        ccy = symbol[:3].upper()
-        ccy2 = symbol[3:6].upper()
+        patterns = FOREX_GOLD_KEYWORDS.get(symbol.upper(), [symbol.upper()])
     except Exception:
         return 0.0, []
-    patterns = [ccy, ccy2, symbol]
-    if symbol == "XAUUSD":
-        patterns = ["gold", "xau", "xauusd"]
 
     texts = []
     items = []

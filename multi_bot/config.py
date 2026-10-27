@@ -17,7 +17,7 @@ SCAN_MINUTE = int(os.environ.get("MULTI_SCAN_MINUTE", "0"))
 HOLD_HOURS = int(os.environ.get("MULTI_HOLD_HOURS", "24"))
 
 # ===== thresholds =====
-MIN_CONFIDENCE = float(os.environ.get("MULTI_MIN_CONFIDENCE", "0.70"))
+MIN_CONFIDENCE = float(os.environ.get("MULTI_MIN_CONFIDENCE", "0.30"))
 MAX_TRADES_PER_DAY = int(os.environ.get("MULTI_MAX_TRADES", "3"))
 
 # ===== مخاطرة =====

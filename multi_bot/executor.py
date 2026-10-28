@@ -7,7 +7,7 @@ import time
 import json
 from datetime import datetime, timezone
 
-from multi_bot import config
+from multi_bot import config, guard
 
 
 def _mt5():
@@ -18,17 +18,65 @@ def _mt5():
         return None
 
 
-def initialize():
+def initialize(retries=6, delay=8.0):
+    """
+    2026-10-29: اتصال مقاوم للسحابة — إعادة محاولة + تسجيل دخول صريح + تشخيص.
+    التيرمنال في الـ runner يُقلع للتو، فأول `initialize` قد ينجح قبل أن يتصل.
+    """
     mt5 = _mt5()
     if mt5 is None:
         return False, "MetaTrader5 not installed"
     path = getattr(config, "MT5_PATH", "") or os.environ.get("MT5_TERMINAL_PATH", "")
-    if not path or not os.path.exists(path):
-        return False, f"MT5 path not found: {path}"
-    ok = mt5.initialize(path, login=config.MT5_LOGIN, password=config.MT5_PASSWORD, server=config.MT5_SERVER)
-    if not ok:
-        return False, f"MT5 init failed: {mt5.last_error()}"
-    return True, "connected"
+    have_path = bool(path and os.path.exists(path))
+    last = "no attempt"
+    for attempt in range(1, int(retries) + 1):
+        try:
+            info = mt5.terminal_info()
+            if info is None:
+                if have_path:
+                    ok = mt5.initialize(path, login=config.MT5_LOGIN,
+                                        password=config.MT5_PASSWORD, server=config.MT5_SERVER)
+                else:
+                    ok = mt5.initialize()
+                if not ok:
+                    last = f"initialize failed: {mt5.last_error()}"
+                    print(f"[mt5] attempt {attempt}: {last}", flush=True)
+                    time.sleep(delay)
+                    continue
+            info = mt5.terminal_info()
+            if info is None:
+                last = "terminal_info None"
+                time.sleep(delay)
+                continue
+            if not getattr(info, "connected", False):
+                last = "terminal not connected"
+                if config.MT5_LOGIN:
+                    try:
+                        mt5.login(config.MT5_LOGIN, config.MT5_PASSWORD, config.MT5_SERVER)
+                    except Exception as exc:
+                        last = f"login error: {type(exc).__name__}"
+                print(f"[mt5] attempt {attempt}: {last}", flush=True)
+                time.sleep(delay)
+                continue
+            acc = mt5.account_info()
+            if acc is None:
+                last = "account_info None (not logged in)"
+                if config.MT5_LOGIN:
+                    try:
+                        mt5.login(config.MT5_LOGIN, config.MT5_PASSWORD, config.MT5_SERVER)
+                    except Exception as exc:
+                        last = f"login error: {type(exc).__name__}"
+                time.sleep(delay)
+                continue
+            print(f"[mt5] connected attempt={attempt} path={path or 'default'} "
+                  f"login={getattr(acc, 'login', '?')} server={getattr(acc, 'server', '?')} "
+                  f"equity={getattr(acc, 'equity', 0):.2f}", flush=True)
+            return True, "connected"
+        except Exception as exc:
+            last = f"{type(exc).__name__}: {exc}"
+            print(f"[mt5] attempt {attempt}: {last}", flush=True)
+            time.sleep(delay)
+    return False, last
 
 
 def shutdown():
@@ -46,12 +94,14 @@ def open_position(symbol, side, lots, sl, tp):
         return None, "no mt5"
     sym = (config.MT5_SYMBOL_SUFFIX + symbol).upper()
 
-    # Prevent multiple positions on the same symbol
-    positions = mt5.positions_get()
-    if positions:
-        for pos in positions:
-            if pos.symbol.upper() == sym:
-                return None, f"already_open:{sym}"
+    # 2026-10-29: حارس **على مستوى الحساب كله** من حقيقة الوسيط.
+    # القديم كان يفحص الرمز نفسه عبر positions_get() على تيرمنال يُقلع للتو
+    # فيرجع فارغاً ⇒ 129 صفقة مفتوحة في وقت واحد.
+    if float(lots) > config.MAX_LOT:
+        return None, f"lot_cap:{config.MAX_LOT}"
+    blocked, why = guard.account_exposure()
+    if blocked:
+        return None, f"blocked:{why}"
 
     try:
         mt5.symbol_select(sym, True)

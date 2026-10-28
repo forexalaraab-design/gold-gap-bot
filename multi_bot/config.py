@@ -69,6 +69,7 @@ STATE_FILE = os.path.join(DATA_DIR, "multi_bot_state.json")
 OPPORTUNITIES_FILE = os.path.join(DATA_DIR, "opportunities.json")
 CALENDAR_CACHE_FILE = os.path.join(DATA_DIR, "calendar_cache.json")
 TRADES_FILE = os.path.join(DATA_DIR, "multi_trades.csv")
+SCAN_REASONS_FILE = os.path.join(DATA_DIR, "scan_reasons.json")
 
 # ===== ساعات التداول =====
 #eur: London/NY overlap generally better
@@ -77,6 +78,26 @@ HIGH_IMPACT_BLOCK_MINUTES = int(os.environ.get("MULTI_HIGH_IMPACT_BLOCK", "30"))
 # ===== حدود حماية =====
 MAX_SPREAD_USD = float(os.environ.get("MULTI_MAX_SPREAD_USD", "3.0"))
 MIN_VOLUME = int(os.environ.get("MULTI_MIN_VOLUME", "1"))
+
+# ===== بوابة التنفيذ (2026-10-29) — الافتراضي: لا أوامر إطلاقاً =====
+# MULTI_EXECUTE=1 هو الشرط الأول، ولا يكفي وحده: بوابة رأس المال أدناه.
+EXECUTE_ENABLED = os.environ.get("MULTI_EXECUTE", "0") == "1"
+MIN_EQUITY_USD = float(os.environ.get("MULTI_MIN_EQUITY", "300"))
+
+# ===== سقف الحجم — ثابت في الكود، لا يُتجاوز من env =====
+MAX_LOT = 0.01
+
+# ===== مفتاح الإيقاف =====
+DAILY_LOSS_FRAC = float(os.environ.get("MULTI_DAILY_LOSS_FRAC", "0.03"))
+MONTHLY_LOSS_FRAC = float(os.environ.get("MULTI_MONTHLY_LOSS_FRAC", "0.10"))
+MAX_CONSECUTIVE_LOSSES = int(os.environ.get("MULTI_MAX_CONSEC_LOSSES", "2"))
+
+# ===== حقائق الوسيط =====
+BROKER_DEDUP_HOURS = int(os.environ.get("MULTI_BROKER_DEDUP_HOURS", "20"))
+STABILIZE_SEC = float(os.environ.get("MULTI_STABILIZE_SEC", "3"))
+
+# ===== بيانات MT5 =====
+MT5_BARS = int(os.environ.get("MULTI_MT5_BARS", "220"))
 
 # ===== تique jitter / humanize =====
 ENTRY_JITTER_FRAC = float(os.environ.get("MULTI_ENTRY_JITTER", "0.0002"))

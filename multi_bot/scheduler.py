@@ -46,6 +46,36 @@ def can_trade_today():
     return True
 
 
+def execution_gate():
+    """
+    (مسموح؟, السبب). بوابة واحدة تُقرأ في كل جولة، مرتّبة من الأخطر للأقل:
+    1) مفتاح التشغيل (env) — افتراضي: مطفأ.
+    2) بوابة رأس المال — لا تنفيذ تحت 300$.
+    3) مفتاح الإيقاف — خسارة يومية/شهرية/سلسلة خسائر، من الوسيط لا من ملف.
+    4) الحد اليومي المحلي.
+    5) التعرّض — صفقة واحدة على مستوى الحساب.
+    """
+    import time
+    from multi_bot import guard
+
+    if not config.EXECUTE_ENABLED:
+        return False, "execution_disabled"
+    equity = guard.equity()
+    if equity < config.MIN_EQUITY_USD:
+        return False, f"capital_gate:{equity:.2f}<{config.MIN_EQUITY_USD:.0f}"
+    blocked, why, _detail = guard.kill_switch()
+    if blocked:
+        return False, why
+    if not can_trade_today():
+        return False, "daily_limit"
+    # مهلة استقرار: تيرمنال يُقلع للتو قد يعطي قراءة فارغة كاذبة
+    time.sleep(max(0.0, float(config.STABILIZE_SEC)))
+    blocked, why = guard.account_exposure()
+    if blocked:
+        return False, why
+    return True, "ok"
+
+
 def record_trade(trade, pnl=0.0):
     state = _load_state()
     state.setdefault("trades", [])

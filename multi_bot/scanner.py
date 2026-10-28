@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 """
 multi_bot/scanner.py — فحص كل الأزواج وتقييم الفرص
+
+2026-10-29: المصدر الأساسي أصبح MT5 (market_data)، وكل رفض يُسجَّل بسببه
+بدل `except: pass`. الدوال العامة محفوظة التوقيع (`_fetch_yahoo`,
+`_technical_score`, `score_opportunity`, `scan_all_symbols`).
 """
 import json
 import os
-import random
 import urllib.request
 from datetime import datetime, timezone
 
-from multi_bot import config
+from multi_bot import config, guard, market_data
 from multi_bot.calendar import get_events_for_symbol, has_high_impact_near
 from multi_bot.sentiment import get_symbol_sentiment
 from multi_bot.analyst import analyst_consensus
@@ -16,6 +19,7 @@ from multi_bot.risk import calculate_sl_tp, position_size, jitter_price, jitter_
 
 
 def _fetch_yahoo(symbol):
+    """احتياطي محلي فقط — Yahoo محجوب على مراكز البيانات."""
     try:
         sym = symbol.upper()
         mapped = getattr(config, "YAHOO_SYMBOL_MAP", {}).get(sym)
@@ -32,7 +36,6 @@ def _fetch_yahoo(symbol):
         data = json.loads(raw)
         result = data.get("chart", {}).get("result", [{}])[0]
         meta = result.get("meta", {})
-        timestamps = result.get("timestamp", [])
         quotes = result.get("indicators", {}).get("quote", [{}])[0]
         highs = quotes.get("high", [])
         lows = quotes.get("low", [])
@@ -45,9 +48,16 @@ def _fetch_yahoo(symbol):
             "closes": [x for x in closes if x is not None],
             "ma50": meta.get("fiftyDayAverage"),
             "ma200": meta.get("twoHundredDayAverage"),
+            "source": "yahoo",
         }
     except Exception:
-        return {"price": None, "highs": [], "lows": [], "closes": [], "ma50": None, "ma200": None}
+        return {"price": None, "highs": [], "lows": [], "closes": [],
+                "ma50": None, "ma200": None, "source": "yahoo_failed"}
+
+
+def _fetch_prices(symbol):
+    """(بيانات, سبب). MT5 أولاً، وياهو احتياطي."""
+    return market_data.fetch(symbol, yahoo_fallback=_fetch_yahoo)
 
 
 def _technical_score(symbol, yahoo):
@@ -57,11 +67,10 @@ def _technical_score(symbol, yahoo):
         highs = yahoo.get("highs", [])
         lows = yahoo.get("lows", [])
         if price is None or len(closes) < 20:
-            return 0.0, "neutral", []
+            return 0.0, "neutral", ["no_price"]
         reasons = []
         score = 0.0
 
-        # Fallback: compute MAs from closes if Yahoo metadata is missing
         ma50 = yahoo.get("ma50")
         ma200 = yahoo.get("ma200")
         if ma50 is None and len(closes) >= 50:
@@ -93,7 +102,6 @@ def _technical_score(symbol, yahoo):
                 score -= 0.2
                 reasons.append("breakdown")
 
-            # Momentum fallback: use last 3-bar slope when no breakout
             if "breakout" not in reasons and "breakdown" not in reasons:
                 if len(closes) >= 3:
                     slope = closes[-1] - closes[-3]
@@ -104,7 +112,6 @@ def _technical_score(symbol, yahoo):
                         score -= 0.15
                         reasons.append("down_slope")
 
-        # Determine side based on score and recent price direction
         recent_change = closes[-1] - closes[-5] if len(closes) >= 5 else 0
         if score > 0.1 and recent_change >= 0:
             side = "BUY"
@@ -117,65 +124,79 @@ def _technical_score(symbol, yahoo):
         else:
             side = "neutral"
         return max(-1.0, min(1.0, score)), side, reasons
-    except Exception:
-        return 0.0, "neutral", []
+    except Exception as exc:
+        return 0.0, "neutral", [f"tech_error:{type(exc).__name__}"]
 
 
-def score_opportunity(symbol):
+def score_opportunity(symbol, diag=None):
+    """
+    فرصة أو None. `diag` (اختياري) يُملأ بالسبب — لا رفض صامت بعد اليوم.
+    """
+    def _drop(reason, **extra):
+        if diag is not None:
+            diag.update({"symbol": symbol, "reason": reason, **extra})
+        return None
+
     try:
         if has_high_impact_near(symbol, within_minutes=config.HIGH_IMPACT_BLOCK_MINUTES):
-            return None
-        yahoo = _fetch_yahoo(symbol)
-        if yahoo.get("price") is None:
-            return None
-        tech_score, tech_side, tech_reasons = _technical_score(symbol, yahoo)
-        sent_score, sent_items = get_symbol_sentiment(symbol)
+            return _drop("high_impact_window")
+
+        data, source = _fetch_prices(symbol)
+        if diag is not None:
+            diag["source"] = source
+        if data.get("price") is None:
+            return _drop(f"no_price:{source}")
+
+        tech_score, tech_side, tech_reasons = _technical_score(symbol, data)
+        sent_score, _sent_items = get_symbol_sentiment(symbol)
         analyst = analyst_consensus(symbol)
         analyst_score = analyst.get("score", 0.0)
         events = get_events_for_symbol(symbol, hours_ahead=24)
-        events_score = 0.0
-        if events:
-            top = events[0]
-            impact = 0.0
-            if "high" in (top.get("impact") or "").lower():
-                impact = 0.3
-            elif "medium" in (top.get("impact") or "").lower():
-                impact = 0.15
-            events_score = impact
-        total = (
-            tech_score * 0.60
-            + sent_score * 0.20
-            + analyst_score * 0.20
-        )
+
+        total = tech_score * 0.60 + sent_score * 0.20 + analyst_score * 0.20
         total = max(-1.0, min(1.0, total))
+        if diag is not None:
+            diag.update({
+                "tech": round(float(tech_score), 3),
+                "sent": round(float(sent_score), 3),
+                "analyst": round(float(analyst_score), 3),
+                "total": round(float(total), 3),
+                "tech_reasons": tech_reasons,
+            })
         if abs(total) < config.MIN_CONFIDENCE:
-            return None
+            return _drop("below_threshold")
+
         side = tech_side
         if side == "neutral":
             side = "BUY" if total > 0 else "SELL"
-        entry = float(yahoo["price"])
-        sl, tp = calculate_sl_tp(side, entry, yahoo.get("highs", []), yahoo.get("lows", []), yahoo.get("closes", []), symbol=symbol)
+
+        entry = float(data["price"])
+        sl, tp = calculate_sl_tp(side, entry, data.get("highs", []),
+                                 data.get("lows", []), data.get("closes", []),
+                                 symbol=symbol)
         if sl is None or tp is None:
-            return None
-        # Ensure SL/TP are on correct side for the direction
+            return _drop("no_sl_tp")
         if side == "BUY" and not (sl < entry < tp):
-            return None
+            return _drop("bad_stops_buy")
         if side == "SELL" and not (sl > entry > tp):
-            return None
+            return _drop("bad_stops_sell")
+
+        balance = guard.equity()
+        if balance <= 0:
+            try:
+                with open(config.STATE_FILE, "r", encoding="utf-8") as f:
+                    balance = float(json.load(f).get("balance", 0.0))
+            except Exception:
+                balance = 0.0
+        if balance <= 0:
+            return _drop("no_account_equity")
+
         entry = jitter_price(entry, config.ENTRY_JITTER_FRAC)
         sl, tp = jitter_sl_tp(sl, tp)
-        balance = 10000.0
-        try:
-            state_path = config.STATE_FILE
-            if os.path.exists(state_path):
-                with open(state_path, "r", encoding="utf-8") as f:
-                    st = json.load(f)
-                balance = float(st.get("balance", 10000.0))
-        except Exception:
-            balance = 10000.0
-        lots = position_size(balance, entry, sl, symbol)
+        lots = min(config.MAX_LOT, position_size(balance, entry, sl, symbol))
         if lots < 0.01:
-            return None
+            return _drop("lots_below_min", balance=round(balance, 2))
+
         return {
             "symbol": symbol,
             "score": round(float(total), 4),
@@ -184,32 +205,55 @@ def score_opportunity(symbol):
             "sl": round(float(sl), 5),
             "tp": round(float(tp), 5),
             "lots": round(float(lots), 2),
+            "source": source,
             "reasons": tech_reasons + [f"sent={sent_score:.2f}", f"analyst={analyst_score:.2f}"],
-            "events": [{"title": e.get("title"), "impact": e.get("impact"), "time": str(e.get("_dt"))} for e in events[:3]],
+            "events": [{"title": e.get("title"), "impact": e.get("impact"),
+                        "time": str(e.get("_dt"))} for e in events[:3]],
         }
-    except Exception:
-        return None
+    except Exception as exc:
+        return _drop(f"exception:{type(exc).__name__}")
 
 
-def scan_all_symbols():
+def scan_all_symbols_detailed():
+    """(فرص, أسباب). كل رمز يُسجَّل: فرصة أو سبب رفضه."""
     opportunities = []
+    reasons = {}
     for symbol in config.SYMBOLS:
-        opp = score_opportunity(symbol)
+        diag = {}
+        opp = score_opportunity(symbol, diag=diag)
+        reasons[symbol] = diag
         if opp:
             opportunities.append(opp)
     opportunities.sort(key=lambda x: abs(x["score"]), reverse=True)
-    return opportunities[: config.MAX_TRADES_PER_DAY]
+    return opportunities[: config.MAX_TRADES_PER_DAY], reasons
+
+
+def scan_all_symbols():
+    """التوقيع القديم محفوظ — القائمة فقط."""
+    return scan_all_symbols_detailed()[0]
+
+
+def _write_json(path, payload):
+    try:
+        config.ensure_data_dir()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 def save_opportunities(opportunities):
-    try:
-        config.ensure_data_dir()
-        out = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "count": len(opportunities),
-            "opportunities": opportunities,
-        }
-        with open(config.OPPORTUNITIES_FILE, "w", encoding="utf-8") as f:
-            json.dump(out, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    _write_json(config.OPPORTUNITIES_FILE, {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "count": len(opportunities),
+        "opportunities": opportunities,
+    })
+
+
+def save_scan_reasons(reasons):
+    """سجل الأسباب — يجعل الصمت مرئياً (كان `0 opportunities` بلا تفسير)."""
+    _write_json(config.SCAN_REASONS_FILE, {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "symbols": len(reasons),
+        "reasons": reasons,
+    })

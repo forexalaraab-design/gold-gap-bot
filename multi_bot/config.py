@@ -17,8 +17,8 @@ SCAN_MINUTE = int(os.environ.get("MULTI_SCAN_MINUTE", "0"))
 HOLD_HOURS = int(os.environ.get("MULTI_HOLD_HOURS", "24"))
 
 # ===== thresholds =====
-MIN_CONFIDENCE = float(os.environ.get("MULTI_MIN_CONFIDENCE", "0.30"))
-MAX_TRADES_PER_DAY = int(os.environ.get("MULTI_MAX_TRADES", "3"))
+MIN_CONFIDENCE = float(os.environ.get("MULTI_MIN_CONFIDENCE", "0.50"))
+MAX_TRADES_PER_DAY = int(os.environ.get("MULTI_MAX_TRADES", "1"))
 
 # ===== مخاطرة =====
 RISK_PER_TRADE = float(os.environ.get("MULTI_RISK_PCT", "0.01"))
@@ -80,7 +80,7 @@ MIN_VOLUME = int(os.environ.get("MULTI_MIN_VOLUME", "1"))
 
 # ===== تique jitter / humanize =====
 ENTRY_JITTER_FRAC = float(os.environ.get("MULTI_ENTRY_JITTER", "0.0002"))
-SL_TP_JITTER_USD = float(os.environ.get("MULTI_SL_TP_JITTER", "0.5"))
+SL_TP_JITTER_USD = float(os.environ.get("MULTI_SL_TP_JITTER", "0.05"))
 
 
 def ensure_data_dir():

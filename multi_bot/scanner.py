@@ -104,7 +104,18 @@ def _technical_score(symbol, yahoo):
                         score -= 0.15
                         reasons.append("down_slope")
 
-        side = "BUY" if score > 0.1 else "SELL" if score < -0.1 else "neutral"
+        # Determine side based on score and recent price direction
+        recent_change = closes[-1] - closes[-5] if len(closes) >= 5 else 0
+        if score > 0.1 and recent_change >= 0:
+            side = "BUY"
+        elif score < -0.1 and recent_change <= 0:
+            side = "SELL"
+        elif score > 0.1:
+            side = "BUY"
+        elif score < -0.1:
+            side = "SELL"
+        else:
+            side = "neutral"
         return max(-1.0, min(1.0, score)), side, reasons
     except Exception:
         return 0.0, "neutral", []
@@ -143,8 +154,13 @@ def score_opportunity(symbol):
         if side == "neutral":
             side = "BUY" if total > 0 else "SELL"
         entry = float(yahoo["price"])
-        sl, tp = calculate_sl_tp(side, entry, yahoo.get("highs", []), yahoo.get("lows", []), yahoo.get("closes", []))
+        sl, tp = calculate_sl_tp(side, entry, yahoo.get("highs", []), yahoo.get("lows", []), yahoo.get("closes", []), symbol=symbol)
         if sl is None or tp is None:
+            return None
+        # Ensure SL/TP are on correct side for the direction
+        if side == "BUY" and not (sl < entry < tp):
+            return None
+        if side == "SELL" and not (sl > entry > tp):
             return None
         entry = jitter_price(entry, config.ENTRY_JITTER_FRAC)
         sl, tp = jitter_sl_tp(sl, tp)

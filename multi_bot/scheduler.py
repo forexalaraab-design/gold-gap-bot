@@ -68,6 +68,8 @@ def execution_gate():
         return False, why
     if not can_trade_today():
         return False, "daily_limit"
+    if not guard.history_synced():
+        return False, "guard_history_unsynced"
     # مهلة استقرار: تيرمنال يُقلع للتو قد يعطي قراءة فارغة كاذبة
     time.sleep(max(0.0, float(config.STABILIZE_SEC)))
     blocked, why = guard.account_exposure()

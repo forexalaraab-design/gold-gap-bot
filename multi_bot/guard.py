@@ -15,6 +15,9 @@ from multi_bot import config
 _ENTRY_IN = 0
 _ENTRY_OUT = (1, 2, 3)   # OUT, INOUT, OUT_BY
 
+# حالة مزامنة السجل — تُقرأ في البوابة (fail-closed)
+_HISTORY = {"synced": False, "detail": "not_warmed"}
+
 
 def _mt5():
     try:
@@ -26,6 +29,52 @@ def _mt5():
 
 def normalize(symbol):
     return (config.MT5_SYMBOL_SUFFIX + symbol).upper()
+
+
+# ---------------------------------------------------------------- warmup
+def history_synced():
+    return bool(_HISTORY.get("synced"))
+
+
+def history_detail():
+    return _HISTORY.get("detail", "")
+
+
+def warmup_history(days=30, timeout=45.0, delay=3.0):
+    """
+    ينتظر مزامنة سجل الديلات بعد إقلاع التيرمنال.
+
+    2026-10-29 (سحابة): عند 23:07:23 قرأ العدّ صفراً، وعند 23:07:35 صار
+    day_pnl=-111.8 — أي أن السجل كان **فارغاً كذباً** في الثانية الأولى.
+    هذا بالضبط صنف العطل الذي فتح 129 صفقة (قراءة فارغة = سماح).
+    فبعد مهلة معقولة: إما ظهرت ديلات (مُزامَن) أو حكمنا بأن الحساب فارغ حقاً.
+    """
+    import time
+
+    mt5 = _mt5()
+    if mt5 is None:
+        _HISTORY.update({"synced": False, "detail": "no_mt5"})
+        return False, "no_mt5"
+    now = datetime.datetime.utcnow()
+    frm = now - datetime.timedelta(days=int(days))
+    deadline = time.time() + float(timeout)
+    n = 0
+    started = time.time()
+    while True:
+        try:
+            deals = mt5.history_deals_get(frm, now + datetime.timedelta(hours=6)) or []
+            n = len(deals)
+        except Exception:
+            n = 0
+        if n > 0:
+            detail = f"deals_{days}d={n} after {time.time() - started:.0f}s"
+            _HISTORY.update({"synced": True, "detail": detail})
+            return True, detail
+        if time.time() >= deadline:
+            detail = f"deals_{days}d=0 after {time.time() - started:.0f}s (empty account?)"
+            _HISTORY.update({"synced": True, "detail": detail})
+            return True, detail
+        time.sleep(delay)
 
 
 # ---------------------------------------------------------------- positions
@@ -80,6 +129,9 @@ def account_exposure():
     if leftover:
         syms = sorted({s for s in leftover.values() if s})
         return True, "broker_deal:" + ",".join(syms)
+    # fail-closed: سجل لم يُزامَن بعد ⇒ لا نصدّق "لا صفقات"
+    if not history_synced():
+        return True, "guard_history_unsynced"
     return False, ""
 
 
@@ -127,6 +179,32 @@ def realized_pnl(since):
 def day_pnl():
     now = datetime.datetime.utcnow()
     return realized_pnl(datetime.datetime(now.year, now.month, now.day))
+
+
+def day_deal_stats():
+    """
+    تشخيص سجل ديلات اليوم — يفرّق بين "لا صفقات" و"تاريخ مبتور".
+    تيرمنال السحابة يُقلع للتو، وسجل الديلات قد يكون ناقصاً قبل المزامنة.
+    """
+    mt5 = _mt5()
+    if mt5 is None:
+        return {}
+    now = datetime.datetime.utcnow()
+    start = datetime.datetime(now.year, now.month, now.day)
+    try:
+        deals = mt5.history_deals_get(start, now + datetime.timedelta(hours=6)) or []
+    except Exception as exc:
+        return {"error": type(exc).__name__}
+    entries = sum(1 for d in deals if getattr(d, "entry", None) == _ENTRY_IN)
+    exits = sum(1 for d in deals if getattr(d, "entry", None) in _ENTRY_OUT)
+    times = [int(getattr(d, "time", 0) or 0) for d in deals]
+    return {
+        "deals": len(deals),
+        "entries": entries,
+        "exits": exits,
+        "first_ts": min(times) if times else 0,
+        "last_ts": max(times) if times else 0,
+    }
 
 
 def trades_opened_today():

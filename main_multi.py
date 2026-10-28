@@ -86,8 +86,14 @@ def main():
         shutdown()
         sys.exit(2)
     log("MT5 connected | "
-        f"equity={guard.equity():.2f} positions={len(guard.live_positions())} "
-        f"opened_today={guard.trades_opened_today()}")
+        f"equity={guard.equity():.2f} positions={len(guard.live_positions())}")
+    synced, detail = guard.warmup_history()
+    log(f"history warmup: synced={synced} {detail}")
+    # 2026-10-29: بعد التسخين فقط تُصدَّق الأرقام (السجل كان فارغاً كذباً في الثانية الأولى)
+    log("broker truth | "
+        f"opened_today={guard.trades_opened_today()} "
+        f"deals_today={guard.day_deal_stats()} "
+        f"equity={guard.equity():.2f} positions={len(guard.live_positions())}")
 
     opportunities = run_scan()
     executed = run_execute(opportunities)

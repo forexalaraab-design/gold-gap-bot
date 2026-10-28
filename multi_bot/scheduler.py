@@ -6,7 +6,7 @@ import json
 import os
 from datetime import datetime, timezone, timedelta
 
-from multi_bot import config
+from multi_bot import config, guard
 
 
 def _load_state():
@@ -39,7 +39,7 @@ def can_trade_today():
         state["daily_pnl"] = 0.0
         _save_state(state)
         return True
-    if len(state.get("trades", [])) >= config.MAX_TRADES_PER_DAY:
+    if max(len(state.get("trades", [])), guard.trades_opened_today()) >= config.MAX_TRADES_PER_DAY:
         return False
     if state.get("daily_pnl", 0.0) <= -config.MAX_DAILY_LOSS:
         return False

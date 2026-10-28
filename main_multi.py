@@ -80,11 +80,14 @@ def run_execute(opportunities):
 def main():
     log(f"started at {utcnow_iso()}")
     ok, msg = initialize()
-    if ok:
-        log("MT5 connected | "
-            f"equity={guard.equity():.2f} positions={len(guard.live_positions())}")
-    else:
-        log(f"MT5 unavailable: {msg} — scanning with fallback source only")
+    if not ok:
+        log(f"FATAL: MT5 unavailable — {msg}")
+        print("::error::MT5 unavailable in cloud — aborting run", flush=True)
+        shutdown()
+        sys.exit(2)
+    log("MT5 connected | "
+        f"equity={guard.equity():.2f} positions={len(guard.live_positions())} "
+        f"opened_today={guard.trades_opened_today()}")
 
     opportunities = run_scan()
     executed = run_execute(opportunities)

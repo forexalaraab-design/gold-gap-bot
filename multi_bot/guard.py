@@ -129,6 +129,29 @@ def day_pnl():
     return realized_pnl(datetime.datetime(now.year, now.month, now.day))
 
 
+def trades_opened_today():
+    """عدد الصفقات المفتوحة اليوم — من الوسيط، لأن ملف الحالة لا يُحفظ في السحابة."""
+    mt5 = _mt5()
+    if mt5 is None:
+        return 0
+    now = datetime.datetime.utcnow()
+    start = datetime.datetime(now.year, now.month, now.day)
+    try:
+        deals = mt5.history_deals_get(start, now + datetime.timedelta(hours=6)) or []
+    except Exception:
+        return 0
+    n = 0
+    for d in deals:
+        if getattr(d, "entry", None) != _ENTRY_IN:
+            continue
+        if getattr(d, "type", None) not in (0, 1):   # BUY / SELL فقط (لا إيداعات)
+            continue
+        if not (getattr(d, "symbol", "") or ""):
+            continue
+        n += 1
+    return n
+
+
 def month_pnl():
     now = datetime.datetime.utcnow()
     return realized_pnl(datetime.datetime(now.year, now.month, 1))

@@ -148,10 +148,15 @@ jobs:
           if (-not $ok) { Write-Host "::warning::persist failed after 3 attempts"; exit 0 }
           Write-Host "persist OK"
 
-      - name: Self-dispatch (keep chain alive)
+      - name: Upload run logs (4-week evidence)
         if: always()
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
-        run: |
-          Write-Host "self-dispatch REMOVED 2026-10-29 - cron only (chain caused ~100s re-runs)"
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-run-${{ github.run_number }}
+          path: |
+            data/scan_reasons.json
+            data/opportunities.json
+            data/multi_trades.csv
+            data/multi_state.json
+          if-no-files-found: warn
+          retention-days: 14

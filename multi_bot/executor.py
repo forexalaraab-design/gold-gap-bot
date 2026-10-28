@@ -45,6 +45,14 @@ def open_position(symbol, side, lots, sl, tp):
     if mt5 is None:
         return None, "no mt5"
     sym = (config.MT5_SYMBOL_SUFFIX + symbol).upper()
+
+    # Prevent multiple positions on the same symbol
+    positions = mt5.positions_get()
+    if positions:
+        for pos in positions:
+            if pos.symbol.upper() == sym:
+                return None, f"already_open:{sym}"
+
     try:
         mt5.symbol_select(sym, True)
     except Exception:

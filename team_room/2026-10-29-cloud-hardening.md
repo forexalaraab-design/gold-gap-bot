@@ -57,7 +57,39 @@
 
 ---
 
-## 6) التحقق
+## 6) بند طارئ اكتُشف أثناء التحقق — القراءة الفارغة الكاذبة
+
+**الدليل من السحابة (تشغيل `40784907519`):**
+```
+23:07:23  [multi] MT5 connected | equity=91.56 positions=0 opened_today=0
+23:07:35  [multi] safety: blocked kill_daily {'day_pnl': -111.8, ...}
+```
+نفس الدالة، نفس النافذة — **صفر** ثم **−111.8** بعد 12 ثانية. أي أن
+`history_deals_get` ترجع **فارغة كذباً** في الثواني الأولى بعد إقلاع
+التيرمنال. وهذا بالحرف **نفس صنف العطل** الذي فتح 129 صفقة: قراءة فارغة
+تُفسَّر "لا تعرّض" ⇒ سماح.
+
+**الإصلاح (fail-closed):**
+- `guard.warmup_history(days=30, timeout=45s)` — ينتظر ظهور ديلات؛ ثم
+  يسجّل التفصيل. بعد المهلة: حكم "حساب فارغ حقاً" لا "غير معروف".
+- `guard.history_synced()` + `account_exposure()` تُعيد
+  `guard_history_unsynced` إذا لم يُزامَن السجل.
+- `execution_gate()` يرفض التنفيذ عند سجل غير مُزامَن.
+
+**التحقق في السحابة (تشغيل `40785375438`):**
+```
+[multi] history warmup: synced=True deals_30d=4175 after 3s
+[multi] broker truth | opened_today=179 deals_today={'deals': 358, 'entries': 179, 'exits': 179} equity=91.56 positions=0
+[multi] scan done: 1 opportunities | rejects: {'passed': 3, 'below_threshold': 6}
+[multi] execution blocked: execution_disabled
+[multi] safety: blocked kill_daily {'day_pnl': -111.8, 'month_pnl': -266.93}
+```
+الرقم انتقل من **0** إلى **179** — أي أن عطل القراءة الفارغة أُغلق بدليل،
+لا بادّعاء.
+
+---
+
+## 7) التحقق المحلي
 
 ```
 [mt5] connected attempt=1 path=default login=490512 server=FusionMarkets-Demo equity=91.56
@@ -75,8 +107,8 @@
 - بوابتان عملتا: `execution_disabled` ثم `kill_daily`.
 
 ## ما تغيّر فعلياً
-- [x] `multi_bot/guard.py` — `trades_opened_today()`
-- [x] `multi_bot/scheduler.py` — `max(local, broker)` + import guard
-- [x] `main_multi.py` — `exit 2` عند فشل MT5 + `opened_today` في السجل
-- [x] `.github/workflows/multi-bot.yml` — artifact بدل self-dispatch
+- [x] `multi_bot/guard.py` — `trades_opened_today()` · `day_deal_stats()` · `warmup_history()` · `history_synced()`
+- [x] `multi_bot/scheduler.py` — `max(local, broker)` + `guard_history_unsynced`
+- [x] `main_multi.py` — `exit 2` عند فشل MT5 + تسخين السجل + سطر "broker truth"
+- [x] `.github/workflows/multi-bot.yml` — artifact (14 يوماً) بدل self-dispatch
 - [ ] **مال/تنفيذ: لا شيء**

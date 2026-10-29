@@ -2,7 +2,10 @@ name: Multi-Pair Daily Bot — Cloud MT5
 
 on:
   schedule:
-    - cron: "0 6,12,18 * * *"   # 3 جولات يومياً — بلا سلسلة self-dispatch
+    # 2026-10-29: GitHub cron best-effort — تأخير مقيس 44 دقيقة وإسقاط كامل
+    # لتشغيل 06:00. المستودع عام (دقائق مجانية) فرفعنا المحاولات إلى 12/يوم
+    # لامتصاص الإسقاط. التنفيذ مطفأ، فلا أثر على المخاطرة.
+    - cron: "0 */2 * * *"
   workflow_dispatch:
 
 permissions:

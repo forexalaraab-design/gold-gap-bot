@@ -77,9 +77,27 @@
 
 ---
 
-## 7) ما تغيّر فعلياً
+## 7) بند ثانٍ: الجدولة نفسها لا تصل
+
+**من `gh run list --event schedule`:**
+```
+2026-10-29 12:44Z  success     <- cron 12:00 (تأخير 44 دقيقة)
+2026-10-30 06:00Z  —           <- لم يصل إطلاقاً
+2026-10-28 17:48Z  cancelled
+2026-10-28 10:16Z  cancelled
+2026-10-28 03:42Z  cancelled
+```
+cron على GitHub **best-effort**: تأخير مقيس 44 دقيقة، وإسقاط كامل لمحاولة.
+ثلاث محاولات/يوم تعني عملياً محاولة أو محاولتين.
+
+**القرار:** `0 */2 * * *` (12 محاولة/يوم). المستودع **عام** ⇒ الدقائق مجانية؛
+والتنفيذ مطفأ ⇒ لا أثر على المخاطرة. الهدف أن يوجد دائماً تشغيل حديث.
+
+---
+
+## 8) ما تغيّر فعلياً
 - [x] `multi_bot/executor.py` — `_prepare()` (شيفرة واحدة للمسارين) + `check_order()`
 - [x] `multi_bot/config.py` — `DRY_RUN` (افتراضي `1`) + `DRY_RUN_FILE`
 - [x] `main_multi.py` — `_dry_run()` بعد البوابة، لا `order_send` فيه
-- [x] `.github/workflows/multi-bot.yml` — `MULTI_DRY_RUN=1`
+- [x] `.github/workflows/multi-bot.yml` — `MULTI_DRY_RUN=1` + `data/dry_run.json` + cron كل ساعتين
 - [ ] **مال/تنفيذ: لا شيء** — البوابة كما هي

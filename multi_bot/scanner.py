@@ -15,7 +15,8 @@ from multi_bot import config, guard, market_data
 from multi_bot.calendar import get_events_for_symbol, has_high_impact_near
 from multi_bot.sentiment import get_symbol_sentiment
 from multi_bot.analyst import analyst_consensus
-from multi_bot.risk import calculate_sl_tp, position_size, jitter_price, jitter_sl_tp
+from multi_bot.risk import (calculate_sl_tp, position_size, jitter_price, jitter_sl_tp,
+                            risk_usd)
 
 
 def _fetch_yahoo(symbol):
@@ -192,10 +193,21 @@ def score_opportunity(symbol, diag=None):
             return _drop("no_account_equity")
 
         entry = jitter_price(entry, config.ENTRY_JITTER_FRAC)
-        sl, tp = jitter_sl_tp(sl, tp)
+        sl, tp = jitter_sl_tp(sl, tp, ref=entry)
         lots = min(config.MAX_LOT, position_size(balance, entry, sl, symbol))
         if lots < 0.01:
             return _drop("lots_below_min", balance=round(balance, 2))
+
+        # 2026-10-29: بوّابة المخاطرة النسبية — بديل بوابة 300$ المسطّحة.
+        # خطر الصفقة الواحدة عند الوقف ≤ MAX_RISK_PCT_PER_TRADE من الحقوق.
+        loss = risk_usd(symbol, entry, sl, lots)
+        budget = config.MAX_RISK_PCT_PER_TRADE * balance
+        if loss is None:
+            return _drop("risk_unknown", balance=round(balance, 2))
+        if loss > budget:
+            return _drop("risk_over_budget",
+                         risk_usd=round(loss, 2), budget=round(budget, 2),
+                         pct=round(100.0 * loss / balance, 1))
 
         return {
             "symbol": symbol,
@@ -205,6 +217,7 @@ def score_opportunity(symbol, diag=None):
             "sl": round(float(sl), 5),
             "tp": round(float(tp), 5),
             "lots": round(float(lots), 2),
+            "risk_usd": round(float(loss), 2),
             "source": source,
             "reasons": tech_reasons + [f"sent={sent_score:.2f}", f"analyst={analyst_score:.2f}"],
             "events": [{"title": e.get("title"), "impact": e.get("impact"),

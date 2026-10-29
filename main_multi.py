@@ -47,7 +47,7 @@ def run_scan():
     for opp in opportunities:
         log(f"  {opp['symbol']} {opp['side']} score={opp['score']:.2f} "
             f"entry={opp['entry']} sl={opp['sl']} tp={opp['tp']} "
-            f"lots={opp['lots']} src={opp.get('source')}")
+            f"lots={opp['lots']} risk=${opp.get('risk_usd')} src={opp.get('source')}")
     return opportunities
 
 

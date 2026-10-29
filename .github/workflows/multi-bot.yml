@@ -79,9 +79,10 @@ jobs:
           MULTI_MAX_TRADES: "1"
           MULTI_RISK_PCT: "0.01"
           MULTI_AI_ON: "0"
-          # 2026-10-29: التنفيذ مطفأ افتراضياً. حتى لو فُتح، بوابة 300$ تمنع.
-          MULTI_EXECUTE: "0"
-          MULTI_MIN_EQUITY: "300"
+          # 2026-10-29 (طلب المستخدم): بوابة 300$ أُلغيت. البديل: حدّ مخاطرة نسبي.
+          MULTI_EXECUTE: "1"
+          MULTI_MIN_EQUITY: "0"
+          MULTI_MAX_RISK_PCT: "0.05"
           # فحص جاف: يمرّر الطلب على مدقق الوسيط (order_check) ولا يرسله أبداً.
           MULTI_DRY_RUN: "1"
           PYTHONIOENCODING: utf-8

@@ -110,9 +110,47 @@ def jitter_price(price, frac=config.ENTRY_JITTER_FRAC):
         return price
 
 
-def jitter_sl_tp(sl, tp):
+def jitter_sl_tp(sl, tp, ref=None):
+    """
+    2026-10-29: التشويش صار **نسبياً** عندما يُمرَّر `ref` (سعر الدخول).
+    العطل السابق: `SL_TP_JITTER_USD=0.05` إزاحة سعرية مطلقة — مقبولة للذهب
+    ($0.05) ومدمّرة للفوركس (0.05 على 1.1160 = 500 نقطة). النتيجة المقيسة:
+    وقف EURUSD خرج 293 نقطة بدل 49، والذهب $51.78 خطراً على حساب $91.56.
+    """
     try:
-        j = config.SL_TP_JITTER_USD * (__import__("random").random() - 0.5) * 2.0
-        return sl + j, tp - j
+        import random
+        if ref is not None:
+            dist = abs(float(ref) - float(sl))
+            j = dist * config.SL_TP_JITTER_FRAC * (random.random() - 0.5) * 2.0
+        else:
+            j = config.SL_TP_JITTER_USD * (random.random() - 0.5) * 2.0
+        new_sl, new_tp = sl + j, tp - j
+        # لا نسمح للتشويش أن يقلب الاتجاه
+        if ref is not None:
+            if float(ref) > float(sl) and not (new_sl < float(ref) < new_tp):
+                return sl, tp
+            if float(ref) < float(sl) and not (new_sl > float(ref) > new_tp):
+                return sl, tp
+        return new_sl, new_tp
     except Exception:
         return sl, tp
+
+
+def risk_usd(symbol, entry_price, sl_price, lots):
+    """
+    خسارة الصفقة عند الوقف بالدولار — من مواصفات الوسيط لا من تقدير.
+    هذه هي القيمة التي تحكم بوابة المخاطرة.
+    """
+    try:
+        import MetaTrader5 as mt5
+        sym = (config.MT5_SYMBOL_SUFFIX + symbol).upper()
+        si = mt5.symbol_info(sym)
+        if si is None:
+            mt5.symbol_select(sym, True)
+            si = mt5.symbol_info(sym)
+        if si is None or not si.trade_tick_size:
+            return None
+        per_price = float(si.trade_tick_value) / float(si.trade_tick_size)
+        return abs(float(entry_price) - float(sl_price)) * per_price * float(lots)
+    except Exception:
+        return None

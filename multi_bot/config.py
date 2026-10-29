@@ -81,9 +81,12 @@ MAX_SPREAD_USD = float(os.environ.get("MULTI_MAX_SPREAD_USD", "3.0"))
 MIN_VOLUME = int(os.environ.get("MULTI_MIN_VOLUME", "1"))
 
 # ===== بوابة التنفيذ (2026-10-29) — الافتراضي: لا أوامر إطلاقاً =====
-# MULTI_EXECUTE=1 هو الشرط الأول، ولا يكفي وحده: بوابة رأس المال أدناه.
+# MULTI_EXECUTE=1 هو الشرط الأول، ولا يكفي وحده: بوابة المخاطرة أدناه.
 EXECUTE_ENABLED = os.environ.get("MULTI_EXECUTE", "0") == "1"
-MIN_EQUITY_USD = float(os.environ.get("MULTI_MIN_EQUITY", "300"))
+# 2026-10-29 (طلب المستخدم): أُلغيت بوابة 300$ المسطّحة.
+# بديلها ليس فراغاً بل **حدّ مخاطرة نسبي**: خطر الصفقة الواحدة ≤ 5% من حقوق الملكية.
+MIN_EQUITY_USD = float(os.environ.get("MULTI_MIN_EQUITY", "0"))
+MAX_RISK_PCT_PER_TRADE = float(os.environ.get("MULTI_MAX_RISK_PCT", "0.05"))
 
 # ===== سقف الحجم — ثابت في الكود، لا يُتجاوز من env =====
 MAX_LOT = 0.01
@@ -108,6 +111,9 @@ MT5_BARS = int(os.environ.get("MULTI_MT5_BARS", "220"))
 # ===== تique jitter / humanize =====
 ENTRY_JITTER_FRAC = float(os.environ.get("MULTI_ENTRY_JITTER", "0.0002"))
 SL_TP_JITTER_USD = float(os.environ.get("MULTI_SL_TP_JITTER", "0.05"))
+# 2026-10-29: تشويش **نسبي** لمسافة الوقف — التشويش بالدولار كان يفتح وقف
+# EURUSD 500 نقطة (0.05 على سعر 1.1160) ويضاعف الخسارة عند الوقف.
+SL_TP_JITTER_FRAC = float(os.environ.get("MULTI_SL_TP_JITTER_FRAC", "0.05"))
 
 
 def ensure_data_dir():

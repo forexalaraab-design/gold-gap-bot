@@ -189,6 +189,15 @@ def open_position(symbol, side, lots, sl, tp):
     sym = request["symbol"]
     sl, tp = request["sl"], request["tp"]
 
+    # 2026-10-29: طبقة ثانية للمخاطرة عند التنفيذ (الفحص في scanner قد يسبق حركة سعر)
+    from multi_bot.risk import risk_usd
+    loss = risk_usd(symbol, request["price"], sl, lots)
+    budget = config.MAX_RISK_PCT_PER_TRADE * max(guard.equity(), 0.0)
+    if loss is None:
+        return None, "risk_unknown"
+    if loss > budget:
+        return None, f"risk_over_budget:{loss:.2f}>{budget:.2f}"
+
     result = mt5.order_send(request)
     if result is None:
         return None, f"order_send failed: {mt5.last_error()}"

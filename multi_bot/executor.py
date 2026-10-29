@@ -88,53 +88,33 @@ def shutdown():
             pass
 
 
-def open_position(symbol, side, lots, sl, tp):
+def _prepare(symbol, side, lots, sl, tp):
+    """
+    يبني الطلب **بنفس الشيفرة** المستخدمة في التنفيذ الحقيقي، بلا إرسال.
+    الفصل مقصود: الفحص الجاف يجب أن يُثبت المسار الحقيقي لا مساراً موازياً.
+    """
     mt5 = _mt5()
     if mt5 is None:
         return None, "no mt5"
     sym = (config.MT5_SYMBOL_SUFFIX + symbol).upper()
-
-    # 2026-10-29: حارس **على مستوى الحساب كله** من حقيقة الوسيط.
-    # القديم كان يفحص الرمز نفسه عبر positions_get() على تيرمنال يُقلع للتو
-    # فيرجع فارغاً ⇒ 129 صفقة مفتوحة في وقت واحد.
-    if float(lots) > config.MAX_LOT:
-        return None, f"lot_cap:{config.MAX_LOT}"
-    blocked, why = guard.account_exposure()
-    if blocked:
-        return None, f"blocked:{why}"
-
     try:
         mt5.symbol_select(sym, True)
     except Exception:
         pass
     info = mt5.symbol_info(sym)
     if info is None:
-        try:
-            mt5.symbol_select(sym, True)
-        except Exception:
-            pass
-        info = mt5.symbol_info(sym)
-    if info is None:
         return None, f"symbol not found: {sym}"
-    if hasattr(info, "visible") and not info.visible:
-        try:
-            mt5.symbol_select(sym, True)
-        except Exception:
-            pass
     order_type = mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL
     tick = mt5.symbol_info_tick(sym)
     if tick is None:
         return None, f"tick not found: {sym}"
     price = tick.ask if side == "BUY" else tick.bid
-
-    # Validate SL/TP direction before sending
     if side == "BUY":
         if float(sl) >= price:
-            sl, tp = tp, sl  # swap if SL is above entry for BUY
+            sl, tp = tp, sl
     elif side == "SELL":
         if float(sl) <= price:
-            sl, tp = tp, sl  # swap if SL is below entry for SELL
-
+            sl, tp = tp, sl
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": sym,
@@ -148,6 +128,67 @@ def open_position(symbol, side, lots, sl, tp):
         "comment": "",
         "type_time": mt5.ORDER_TIME_GTC,
     }
+    return {"mt5": mt5, "request": request, "info": info}, "ok"
+
+
+def check_order(symbol, side, lots, sl, tp):
+    """
+    فحص جاف: يُرسل الطلب إلى **مدقق الوسيط** (`order_check`) ولا يُنفّذه أبداً.
+    لا يوجد `order_send` في هذه الدالة — بلا استثناء.
+    """
+    prepared, why = _prepare(symbol, side, lots, sl, tp)
+    if prepared is None:
+        return "prepare_failed", {"error": why}
+    mt5, request, info = prepared["mt5"], prepared["request"], prepared["info"]
+    if float(lots) > config.MAX_LOT:
+        return "lot_cap", {"error": f"{lots}>{config.MAX_LOT}"}
+    detail = {
+        "symbol": request["symbol"],
+        "price": request["price"],
+        "sl": request["sl"],
+        "tp": request["tp"],
+        "volume": request["volume"],
+        "digits": getattr(info, "digits", None),
+        "stops_level": getattr(info, "trade_stops_level", None),
+    }
+    try:
+        res = mt5.order_check(request)
+    except Exception as exc:
+        detail["error"] = type(exc).__name__
+        return "check_error", detail
+    if res is None:
+        detail["error"] = str(mt5.last_error())
+        return "check_none", detail
+    detail.update({
+        "retcode": int(getattr(res, "retcode", -1)),
+        "comment": getattr(res, "comment", ""),
+        "margin": round(float(getattr(res, "margin", 0.0) or 0.0), 2),
+        "margin_free": round(float(getattr(res, "margin_free", 0.0) or 0.0), 2),
+        "margin_level": round(float(getattr(res, "margin_level", 0.0) or 0.0), 2),
+    })
+    return ("accepted" if int(detail["retcode"]) == 0 else "rejected"), detail
+
+
+def open_position(symbol, side, lots, sl, tp):
+    mt5 = _mt5()
+    if mt5 is None:
+        return None, "no mt5"
+    # 2026-10-29: حارس **على مستوى الحساب كله** من حقيقة الوسيط.
+    # القديم كان يفحص الرمز نفسه عبر positions_get() على تيرمنال يُقلع للتو
+    # فيرجع فارغاً ⇒ 129 صفقة مفتوحة في وقت واحد.
+    if float(lots) > config.MAX_LOT:
+        return None, f"lot_cap:{config.MAX_LOT}"
+    blocked, why = guard.account_exposure()
+    if blocked:
+        return None, f"blocked:{why}"
+
+    prepared, why = _prepare(symbol, side, lots, sl, tp)
+    if prepared is None:
+        return None, why
+    mt5, request = prepared["mt5"], prepared["request"]
+    sym = request["symbol"]
+    sl, tp = request["sl"], request["tp"]
+
     result = mt5.order_send(request)
     if result is None:
         return None, f"order_send failed: {mt5.last_error()}"

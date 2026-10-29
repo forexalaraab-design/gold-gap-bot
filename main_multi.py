@@ -18,7 +18,7 @@ from multi_bot import config as mconfig
 from multi_bot import guard
 from multi_bot.calendar import fetch_events
 from multi_bot.scanner import scan_all_symbols_detailed, save_opportunities, save_scan_reasons
-from multi_bot.executor import initialize, shutdown, open_position, save_trade
+from multi_bot.executor import initialize, shutdown, open_position, save_trade, check_order
 from multi_bot.scheduler import execution_gate, record_trade
 
 
@@ -58,7 +58,14 @@ def run_execute(opportunities):
     ok, why = execution_gate()
     if not ok:
         log(f"execution blocked: {why}")
-        return []
+    if ok and not mconfig.DRY_RUN:
+        return _execute_real(opportunities)
+    if mconfig.DRY_RUN:
+        _dry_run(opportunities, blocked_reason="" if ok else why)
+    return []
+
+
+def _execute_real(opportunities):
     executed = []
     for opp in opportunities:
         symbol, side, lots = opp["symbol"], opp["side"], opp["lots"]
@@ -75,6 +82,33 @@ def run_execute(opportunities):
         else:
             log(f"OPEN FAILED {symbol} {side}: {msg}")
     return executed
+
+
+def _dry_run(opportunities, blocked_reason=""):
+    """
+    فحص جاف: نفس الطلب يمرّ على مدقق الوسيط `order_check` ثم يتوقف.
+    لا يوجد `order_send` في هذا المسار — لذلك لا يمكن أن يفتح صفقة ولو أُخطئ.
+    """
+    log("dry-run: checking orders against broker validator (nothing is sent)")
+    records = []
+    for opp in opportunities:
+        verdict, detail = check_order(opp["symbol"], opp["side"], opp["lots"],
+                                      opp["sl"], opp["tp"])
+        detail.update({"side": opp["side"], "score": opp.get("score"),
+                       "verdict": verdict, "blocked_by": blocked_reason})
+        records.append(detail)
+        log(f"  DRY-RUN {opp['symbol']} {opp['side']} lots={opp['lots']} "
+            f"price={detail.get('price')} sl={detail.get('sl')} tp={detail.get('tp')} "
+            f"-> {verdict} retcode={detail.get('retcode')} {detail.get('comment', '')} "
+            f"margin={detail.get('margin')} free={detail.get('margin_free')}")
+    try:
+        mconfig.ensure_data_dir()
+        with open(mconfig.DRY_RUN_FILE, "w", encoding="utf-8") as f:
+            json.dump({"ts": utcnow_iso(), "count": len(records), "checks": records},
+                      f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        log(f"dry-run save skipped: {type(exc).__name__}")
+    return records
 
 
 def main():

@@ -79,6 +79,8 @@ jobs:
           # 2026-10-29: التنفيذ مطفأ افتراضياً. حتى لو فُتح، بوابة 300$ تمنع.
           MULTI_EXECUTE: "0"
           MULTI_MIN_EQUITY: "300"
+          # فحص جاف: يمرّر الطلب على مدقق الوسيط (order_check) ولا يرسله أبداً.
+          MULTI_DRY_RUN: "1"
           PYTHONIOENCODING: utf-8
           PYTHONUNBUFFERED: "1"
         run: |
@@ -156,6 +158,7 @@ jobs:
           path: |
             data/scan_reasons.json
             data/opportunities.json
+            data/dry_run.json
             data/multi_trades.csv
             data/multi_state.json
           if-no-files-found: warn

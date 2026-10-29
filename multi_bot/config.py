@@ -70,6 +70,7 @@ OPPORTUNITIES_FILE = os.path.join(DATA_DIR, "opportunities.json")
 CALENDAR_CACHE_FILE = os.path.join(DATA_DIR, "calendar_cache.json")
 TRADES_FILE = os.path.join(DATA_DIR, "multi_trades.csv")
 SCAN_REASONS_FILE = os.path.join(DATA_DIR, "scan_reasons.json")
+DRY_RUN_FILE = os.path.join(DATA_DIR, "dry_run.json")
 
 # ===== ساعات التداول =====
 #eur: London/NY overlap generally better
@@ -95,6 +96,11 @@ MAX_CONSECUTIVE_LOSSES = int(os.environ.get("MULTI_MAX_CONSEC_LOSSES", "2"))
 # ===== حقائق الوسيط =====
 BROKER_DEDUP_HOURS = int(os.environ.get("MULTI_BROKER_DEDUP_HOURS", "20"))
 STABILIZE_SEC = float(os.environ.get("MULTI_STABILIZE_SEC", "3"))
+
+# ===== الفحص الجاف (2026-10-29) =====
+# يبني الطلب ويمرره على مدقق الوسيط `order_check` ثم يتوقف — لا `order_send` أبداً.
+# غايته إثبات أن مسار التنفيذ صالح للوسيط بلا أي مخاطرة.
+DRY_RUN = os.environ.get("MULTI_DRY_RUN", "1") == "1"
 
 # ===== بيانات MT5 =====
 MT5_BARS = int(os.environ.get("MULTI_MT5_BARS", "220"))

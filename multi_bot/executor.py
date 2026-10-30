@@ -178,9 +178,6 @@ def open_position(symbol, side, lots, sl, tp):
     # فيرجع فارغاً ⇒ 129 صفقة مفتوحة في وقت واحد.
     if float(lots) > config.MAX_LOT:
         return None, f"lot_cap:{config.MAX_LOT}"
-    blocked, why = guard.account_exposure()
-    if blocked:
-        return None, f"blocked:{why}"
 
     prepared, why = _prepare(symbol, side, lots, sl, tp)
     if prepared is None:
@@ -197,6 +194,11 @@ def open_position(symbol, side, lots, sl, tp):
         return None, "risk_unknown"
     if loss > budget:
         return None, f"risk_over_budget:{loss:.2f}>{budget:.2f}"
+
+    # 2026-10-30: عدد الصفقات بلا حدّ، لكن **إجمالي المخاطرة** محدود.
+    blocked, why = guard.exposure_gate(symbol, add_risk_usd=loss)
+    if blocked:
+        return None, f"blocked:{why}"
 
     result = mt5.order_send(request)
     if result is None:

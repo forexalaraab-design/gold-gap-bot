@@ -18,7 +18,10 @@ HOLD_HOURS = int(os.environ.get("MULTI_HOLD_HOURS", "24"))
 
 # ===== thresholds =====
 MIN_CONFIDENCE = float(os.environ.get("MULTI_MIN_CONFIDENCE", "0.50"))
-MAX_TRADES_PER_DAY = int(os.environ.get("MULTI_MAX_TRADES", "1"))
+# 2026-10-30 (طلب المستخدم): لا حدّ لعدد الصفقات — 0 = بلا حدّ.
+# الحدّ لم يُلغَ، بل انتقل إلى المخاطرة: MAX_TOTAL_RISK_PCT.
+MAX_TRADES_PER_DAY = int(os.environ.get("MULTI_MAX_TRADES", "0"))
+MAX_TOTAL_RISK_PCT = float(os.environ.get("MULTI_MAX_TOTAL_RISK", "0.10"))
 
 # ===== مخاطرة =====
 RISK_PER_TRADE = float(os.environ.get("MULTI_RISK_PCT", "0.01"))
@@ -92,8 +95,10 @@ MAX_RISK_PCT_PER_TRADE = float(os.environ.get("MULTI_MAX_RISK_PCT", "0.05"))
 MAX_LOT = 0.01
 
 # ===== مفتاح الإيقاف =====
-DAILY_LOSS_FRAC = float(os.environ.get("MULTI_DAILY_LOSS_FRAC", "0.03"))
-MONTHLY_LOSS_FRAC = float(os.environ.get("MULTI_MONTHLY_LOSS_FRAC", "0.10"))
+# 2026-10-30: السلّم صار متسقاً مع خطر الصفقة (5%): حدّ يومي 10% = خسارتان،
+# وشهري 20%. كان 3% أي أن **أول خسارة تُقفل اليوم** فيصير "بلا حدّ للصفقات" بلا معنى.
+DAILY_LOSS_FRAC = float(os.environ.get("MULTI_DAILY_LOSS_FRAC", "0.10"))
+MONTHLY_LOSS_FRAC = float(os.environ.get("MULTI_MONTHLY_LOSS_FRAC", "0.20"))
 MAX_CONSECUTIVE_LOSSES = int(os.environ.get("MULTI_MAX_CONSEC_LOSSES", "2"))
 
 # ===== حقائق الوسيط =====

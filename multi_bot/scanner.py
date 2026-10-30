@@ -238,7 +238,8 @@ def scan_all_symbols_detailed():
         if opp:
             opportunities.append(opp)
     opportunities.sort(key=lambda x: abs(x["score"]), reverse=True)
-    return opportunities[: config.MAX_TRADES_PER_DAY], reasons
+    limit = int(config.MAX_TRADES_PER_DAY)
+    return (opportunities[:limit] if limit > 0 else opportunities), reasons
 
 
 def scan_all_symbols():

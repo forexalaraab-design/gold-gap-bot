@@ -39,7 +39,8 @@ def can_trade_today():
         state["daily_pnl"] = 0.0
         _save_state(state)
         return True
-    if max(len(state.get("trades", [])), guard.trades_opened_today()) >= config.MAX_TRADES_PER_DAY:
+    limit = int(config.MAX_TRADES_PER_DAY)
+    if limit > 0 and max(len(state.get("trades", [])), guard.trades_opened_today()) >= limit:
         return False
     if state.get("daily_pnl", 0.0) <= -config.MAX_DAILY_LOSS:
         return False
@@ -72,7 +73,7 @@ def execution_gate():
         return False, "guard_history_unsynced"
     # مهلة استقرار: تيرمنال يُقلع للتو قد يعطي قراءة فارغة كاذبة
     time.sleep(max(0.0, float(config.STABILIZE_SEC)))
-    blocked, why = guard.account_exposure()
+    blocked, why = guard.exposure_gate()
     if blocked:
         return False, why
     return True, "ok"

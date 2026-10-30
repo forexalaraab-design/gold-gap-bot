@@ -128,6 +128,11 @@ def main():
         f"opened_today={guard.trades_opened_today()} "
         f"deals_today={guard.day_deal_stats()} "
         f"equity={guard.equity():.2f} positions={len(guard.live_positions())}")
+    risk_now = guard.open_risk_usd()
+    budget = mconfig.MAX_TOTAL_RISK_PCT * max(guard.equity(), 0.0)
+    log(f"risk budget | open=${risk_now} of ${budget:.2f} "
+        f"({mconfig.MAX_TOTAL_RISK_PCT*100:.0f}% of equity) "
+        f"trades_per_day={'unlimited' if mconfig.MAX_TRADES_PER_DAY <= 0 else mconfig.MAX_TRADES_PER_DAY}")
 
     opportunities = run_scan()
     executed = run_execute(opportunities)

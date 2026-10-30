@@ -116,23 +116,88 @@ def open_position_ids(hours=None):
     return {p: s for p, s in opened.items() if p not in closed}
 
 
-def account_exposure():
-    """(محجوب؟, السبب). fail-closed: أي شك = محجوب."""
+def _per_price(symbol):
+    """دولار لكل وحدة سعر للوت واحد — من مواصفات الوسيط."""
+    mt5 = _mt5()
+    if mt5 is None:
+        return None
+    try:
+        si = mt5.symbol_info(symbol)
+        if si is None:
+            mt5.symbol_select(symbol, True)
+            si = mt5.symbol_info(symbol)
+        if si is None or not si.trade_tick_size:
+            return None
+        return float(si.trade_tick_value) / float(si.trade_tick_size)
+    except Exception:
+        return None
+
+
+def open_risk_usd(positions=None):
+    """
+    مجموع المخاطرة المفتوحة الآن بالدولار (مسافة الوقف × قيمة النقطة × الحجم).
+    None = غير معروف (صفقة بلا وقف) ⇒ fail-closed.
+    """
+    mt5 = _mt5()
+    if mt5 is None:
+        return None
+    pos = positions if positions is not None else live_positions()
+    total = 0.0
+    for p in pos:
+        sl = float(getattr(p, "sl", 0.0) or 0.0)
+        if sl <= 0:
+            return None
+        per = _per_price(getattr(p, "symbol", ""))
+        if per is None:
+            return None
+        total += abs(float(p.price_open) - sl) * per * float(p.volume)
+    return round(total, 2)
+
+
+def exposure_gate(symbol=None, add_risk_usd=0.0):
+    """
+    (محجوب؟, السبب). الحدّ لم يُلغَ — انتقل من **عدد الصفقات** إلى **إجمالي
+    المخاطرة** (2026-10-30، طلب المستخدم: لا حدّ لعدد الصفقات).
+
+    1) كل رمز صفقة واحدة (لا 57 USDCHF).
+    2) مجموع خطر المفتوح + الجديدة ≤ MAX_TOTAL_RISK_PCT من الحقوق.
+    3) تعارض بين `positions_get` وسجل الديلات ⇒ محجوب (حالة غير موثوقة).
+    """
     mt5 = _mt5()
     if mt5 is None:
         return True, "guard_no_mt5"
-    pos = live_positions()
-    if pos:
-        syms = sorted({getattr(p, "symbol", "?") for p in pos})
-        return True, "broker_position:" + ",".join(syms)
-    leftover = open_position_ids()
-    if leftover:
-        syms = sorted({s for s in leftover.values() if s})
-        return True, "broker_deal:" + ",".join(syms)
-    # fail-closed: سجل لم يُزامَن بعد ⇒ لا نصدّق "لا صفقات"
     if not history_synced():
         return True, "guard_history_unsynced"
+
+    pos = live_positions()
+    if symbol:
+        want = normalize(symbol)
+        for p in pos:
+            if (getattr(p, "symbol", "") or "").upper() == want:
+                return True, f"same_symbol:{want}"
+
+    risk = open_risk_usd(pos)
+    if risk is None:
+        return True, "open_risk_unknown"
+    budget = config.MAX_TOTAL_RISK_PCT * equity()
+    if budget <= 0:
+        return True, "risk_budget_zero"
+    if risk + float(add_risk_usd) > budget:
+        return True, (f"risk_budget:{risk + float(add_risk_usd):.2f}"
+                      f">{budget:.2f} open={risk:.2f} add={float(add_risk_usd):.2f}")
+
+    # صفقة مسجلة في الديلات لكنها غير ظاهرة في positions ⇒ حالة غير موثوقة
+    leftover = open_position_ids()
+    live_ids = {int(getattr(p, "ticket", 0) or 0) for p in pos}
+    orphan = [pid for pid in leftover if pid not in live_ids]
+    if orphan:
+        return True, f"broker_deal_orphan:{len(orphan)}"
     return False, ""
+
+
+def account_exposure():
+    """التوقيع القديم محفوظ — بلا رمز وبلا مخاطرة مضافة."""
+    return exposure_gate()
 
 
 # ---------------------------------------------------------------- account

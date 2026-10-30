@@ -76,7 +76,9 @@ jobs:
           MULTI_SCAN_HOUR: "8"
           MULTI_SCAN_MINUTE: "0"
           MULTI_MIN_CONFIDENCE: "0.30"
-          MULTI_MAX_TRADES: "1"
+          # 2026-10-30 (طلب المستخدم): لا حدّ لعدد الصفقات. الحدّ على المخاطرة.
+          MULTI_MAX_TRADES: "0"
+          MULTI_MAX_TOTAL_RISK: "0.10"
           MULTI_RISK_PCT: "0.01"
           MULTI_AI_ON: "0"
           # 2026-10-29 (طلب المستخدم): بوابة 300$ أُلغيت. البديل: حدّ مخاطرة نسبي.

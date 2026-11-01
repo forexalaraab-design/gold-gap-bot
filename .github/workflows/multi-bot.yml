@@ -127,7 +127,7 @@ jobs:
             }
             Start-Sleep -Seconds 25
           } else {
-            Write-Host "no MT5_TERMINAL_PATH â€” relying on initialize default"
+            Write-Host "no MT5_TERMINAL_PATH - relying on initialize default"
           }
           python main_multi.py
 
@@ -169,4 +169,5 @@ jobs:
             data/multi_state.json
           if-no-files-found: warn
           retention-days: 14
+
 

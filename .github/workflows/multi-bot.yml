@@ -1,10 +1,10 @@
-name: Multi-Pair Daily Bot — Cloud MT5
+﻿name: Multi-Pair Daily Bot â€” Cloud MT5
 
 on:
   schedule:
-    # 2026-10-29: GitHub cron best-effort — تأخير مقيس 44 دقيقة وإسقاط كامل
-    # لتشغيل 06:00. المستودع عام (دقائق مجانية) فرفعنا المحاولات إلى 12/يوم
-    # لامتصاص الإسقاط. التنفيذ مطفأ، فلا أثر على المخاطرة.
+    # 2026-10-29: GitHub cron best-effort â€” طھط£ط®ظٹط± ظ…ظ‚ظٹط³ 44 ط¯ظ‚ظٹظ‚ط© ظˆط¥ط³ظ‚ط§ط· ظƒط§ظ…ظ„
+    # ظ„طھط´ط؛ظٹظ„ 06:00. ط§ظ„ظ…ط³طھظˆط¯ط¹ ط¹ط§ظ… (ط¯ظ‚ط§ط¦ظ‚ ظ…ط¬ط§ظ†ظٹط©) ظپط±ظپط¹ظ†ط§ ط§ظ„ظ…ط­ط§ظˆظ„ط§طھ ط¥ظ„ظ‰ 12/ظٹظˆظ…
+    # ظ„ط§ظ…طھطµط§طµ ط§ظ„ط¥ط³ظ‚ط§ط·. ط§ظ„طھظ†ظپظٹط° ظ…ط·ظپط£طŒ ظپظ„ط§ ط£ط«ط± ط¹ظ„ظ‰ ط§ظ„ظ…ط®ط§ط·ط±ط©.
     - cron: "0 */2 * * *"
   workflow_dispatch:
 
@@ -76,17 +76,17 @@ jobs:
           MULTI_SCAN_HOUR: "8"
           MULTI_SCAN_MINUTE: "0"
           MULTI_MIN_CONFIDENCE: "0.30"
-          # 2026-10-30 (طلب المستخدم): لا حدّ لعدد الصفقات. الحدّ على المخاطرة.
+          # 2026-10-30 (ط·ظ„ط¨ ط§ظ„ظ…ط³طھط®ط¯ظ…): ظ„ط§ ط­ط¯ظ‘ ظ„ط¹ط¯ط¯ ط§ظ„طµظپظ‚ط§طھ. ط§ظ„ط­ط¯ظ‘ ط¹ظ„ظ‰ ط§ظ„ظ…ط®ط§ط·ط±ط©.
           MULTI_MAX_TRADES: "0"
           MULTI_MAX_TOTAL_RISK: "0.10"
           MULTI_RISK_PCT: "0.01"
           MULTI_AI_ON: "0"
-          # 2026-10-29 (طلب المستخدم): بوابة 300$ أُلغيت. البديل: حدّ مخاطرة نسبي.
+          # 2026-10-29 (ط·ظ„ط¨ ط§ظ„ظ…ط³طھط®ط¯ظ…): ط¨ظˆط§ط¨ط© 300$ ط£ظڈظ„ط؛ظٹطھ. ط§ظ„ط¨ط¯ظٹظ„: ط­ط¯ظ‘ ظ…ط®ط§ط·ط±ط© ظ†ط³ط¨ظٹ.
           MULTI_EXECUTE: "1"
           MULTI_MIN_EQUITY: "0"
           MULTI_MAX_RISK_PCT: "0.05"
-          # فحص جاف: يمرّر الطلب على مدقق الوسيط (order_check) ولا يرسله أبداً.
-          MULTI_DRY_RUN: "1"
+          # ظپط­طµ ط¬ط§ظپ: ظٹظ…ط±ظ‘ط± ط§ظ„ط·ظ„ط¨ ط¹ظ„ظ‰ ظ…ط¯ظ‚ظ‚ ط§ظ„ظˆط³ظٹط· (order_check) ظˆظ„ط§ ظٹط±ط³ظ„ظ‡ ط£ط¨ط¯ط§ظ‹.
+          MULTI_DRY_RUN: "0"
           PYTHONIOENCODING: utf-8
           PYTHONUNBUFFERED: "1"
         run: |
@@ -127,7 +127,7 @@ jobs:
             }
             Start-Sleep -Seconds 25
           } else {
-            Write-Host "no MT5_TERMINAL_PATH — relying on initialize default"
+            Write-Host "no MT5_TERMINAL_PATH â€” relying on initialize default"
           }
           python main_multi.py
 
@@ -169,3 +169,4 @@ jobs:
             data/multi_state.json
           if-no-files-found: warn
           retention-days: 14
+
